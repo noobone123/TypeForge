@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import blueprint.base.Node;
+import ghidra.program.model.listing.Function;
 
 public abstract class GraphBase<T> {
 
@@ -18,7 +18,7 @@ public abstract class GraphBase<T> {
     protected boolean changed = false;
 
     /** Map from node's value to node */
-    private final Map<T, Node<T>> valueToNode = new HashMap<>();
+    private final Map<T, NodeBase<T>> valueToNode = new HashMap<>();
 
     /** Map from node's id to node's value */
     protected final Map<Integer, T> idToValueMap = new HashMap<>();
@@ -41,11 +41,16 @@ public abstract class GraphBase<T> {
      * @param value The node's value
      * @return the graph node.
      */
-    public Node<T> getNode(T value) {
+    public NodeBase<T> getNode(T value) {
         if (valueToNode.containsKey(value)) {
             return valueToNode.get(value);
         }
-        Node<T> res = new Node<>(value, node_cnt);
+
+        NodeBase<T> res = null;
+        if (value instanceof Function) {
+            res = (NodeBase<T>) new FunctionNode((Function) value, node_cnt);
+        }
+
         valueToNode.put(value, res);
         idToValueMap.put(node_cnt, value);
         valueToIdMap.put(value, node_cnt);
@@ -61,8 +66,8 @@ public abstract class GraphBase<T> {
      * @param to the destination node's value
      */
     public void addEdge(T from, T to) {
-        Node<T> src = getNode(from);
-        Node<T> dst = getNode(to);
+        NodeBase<T> src = getNode(from);
+        NodeBase<T> dst = getNode(to);
         if (src.succ.contains(to)) {
             changed = false;
             return;
@@ -78,8 +83,8 @@ public abstract class GraphBase<T> {
      * @param to the destination node's value
      */
     public void deleteEdge(T from, T to) {
-        Node<T> src = getNode(from);
-        Node<T> dst = getNode(to);
+        NodeBase<T> src = getNode(from);
+        NodeBase<T> dst = getNode(to);
 
         if (src.succ.remove(to)) {
             changed = true;
@@ -95,7 +100,7 @@ public abstract class GraphBase<T> {
      * @return Return a list of the node's successors
      */
     public List<T> getSuccs(T value) {
-        Node<T> tmp = getNode(value);
+        NodeBase<T> tmp = getNode(value);
         return new LinkedList<>(tmp.succ);
     }
 
@@ -105,7 +110,7 @@ public abstract class GraphBase<T> {
      * @return Return a list of the node's predecessors
      */
     public List<T> getPreds(T value) {
-        Node<T> tmp = getNode(value);
+        NodeBase<T> tmp = getNode(value);
         return new LinkedList<>(tmp.pred);
     }
 
@@ -139,5 +144,4 @@ public abstract class GraphBase<T> {
         }
         return false;
     }
-
 }

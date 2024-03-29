@@ -3,8 +3,7 @@ package blueprint.base;
 import java.util.HashSet;
 import java.util.Set;
 
-public class Node<T> {
-
+public abstract class NodeBase<T> {
     private final T value;
     private int id;
 
@@ -21,7 +20,7 @@ public class Node<T> {
     /**
      * Create a node from the given parameter
      */
-    public Node(T value, int id) {
+    public NodeBase(T value, int id) {
         this.value = value;
         this.id = id;
     }
