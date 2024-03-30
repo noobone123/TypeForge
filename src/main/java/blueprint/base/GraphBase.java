@@ -28,7 +28,7 @@ public abstract class GraphBase<T> {
     protected final Map<T, Integer> valueToIdMap = new HashMap<>();
 
     /** Number of nodes in the graph */
-    protected int node_cnt = 0;
+    public int node_cnt = 0;
 
     /**
      * An array of integers, where the indexes represent the id of each node and

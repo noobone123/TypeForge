@@ -1,9 +1,13 @@
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.lang.Language;
+import ghidra.program.model.listing.Function;
 
 import blueprint.base.CallGraph;
 import blueprint.utils.GlobalState;
 import blueprint.utils.Logging;
+
+import java.util.List;
+import java.util.Set;
 
 public class statistics extends GhidraScript {
     @Override
@@ -21,7 +25,28 @@ public class statistics extends GhidraScript {
             return;
         }
 
+        List<Function> functions = GlobalState.currentProgram.getListing().getGlobalFunctions("main");
+        if (functions.isEmpty()) {
+            Logging.error("No main function found");
+            return;
+        }
+        Logging.info("Number of main functions: " + functions.size());
+        Function entryFunction = functions.get(0);
 
+        // calculate the time of the analysis in seconds
+        long startTime = System.currentTimeMillis();
+        CallGraph cg = CallGraph.getCallGraph(entryFunction);
+        println(String.valueOf(cg.node_cnt));
+
+        Set<Function> main_succs = cg.getSuccs(entryFunction);
+        println("Number of successors of the main function: " + main_succs.size());
+        for (var succ : main_succs) {
+            println(succ.getName());
+        }
+
+        long endTime = System.currentTimeMillis();
+
+        Logging.info("Analysis time: " + (endTime - startTime) / 1000 + "s");
     }
 
     protected boolean prepareAnalysis() {
