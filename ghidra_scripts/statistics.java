@@ -1,4 +1,9 @@
 import ghidra.app.script.GhidraScript;
+import ghidra.program.model.lang.Language;
+
+import blueprint.base.CallGraph;
+import blueprint.utils.GlobalState;
+import blueprint.utils.Logging;
 
 public class statistics extends GhidraScript {
     @Override
@@ -7,5 +12,22 @@ public class statistics extends GhidraScript {
         println("Number of functions: " + currentProgram.getFunctionManager().getFunctionCount());
         println("Number of instructions: " + currentProgram.getListing().getNumInstructions());
         println("Number of bytes: " + currentProgram.getMemory().getSize());
+
+        // initialize the global state
+        if (!prepareAnalysis()) {
+            return;
+        }
+    }
+
+    protected boolean prepareAnalysis() {
+        GlobalState.currentProgram = this.currentProgram;
+        GlobalState.flatAPI = this;
+        Language language = this.currentProgram.getLanguage();
+
+        if (!Logging.init()) {
+            return false;
+        }
+
+        return language != null;
     }
 }
