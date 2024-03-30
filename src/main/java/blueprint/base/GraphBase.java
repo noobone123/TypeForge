@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 
 import ghidra.program.model.listing.Function;
+import org.w3c.dom.Node;
 
 public abstract class GraphBase<T> {
 
@@ -46,10 +47,7 @@ public abstract class GraphBase<T> {
             return valueToNode.get(value);
         }
 
-        NodeBase<T> res = null;
-        if (value instanceof Function) {
-            res = (NodeBase<T>) new FunctionNode((Function) value, node_cnt);
-        }
+        NodeBase<T> res = createNode(value, node_cnt);
 
         valueToNode.put(value, res);
         idToValueMap.put(node_cnt, value);
@@ -68,12 +66,12 @@ public abstract class GraphBase<T> {
     public void addEdge(T from, T to) {
         NodeBase<T> src = getNode(from);
         NodeBase<T> dst = getNode(to);
-        if (src.succ.contains(to)) {
+        if (src.succ.contains(dst)) {
             changed = false;
             return;
         }
-        src.succ.add(to);
-        dst.pred.add(from);
+        src.succ.add(dst);
+        dst.pred.add(src);
         changed = true;
     }
 
@@ -86,32 +84,58 @@ public abstract class GraphBase<T> {
         NodeBase<T> src = getNode(from);
         NodeBase<T> dst = getNode(to);
 
-        if (src.succ.remove(to)) {
+        if (src.succ.remove(dst)) {
             changed = true;
         }
-        if (dst.pred.remove(from)) {
+        if (dst.pred.remove(src)) {
             changed = true;
         }
+    }
+
+    /**
+     * Return a list of the value's successors
+     * @param value the node value
+     * @return Return a list of the value's successors
+     */
+    public Set<T> getSuccs(T value) {
+        NodeBase<T> tmp = getNode(value);
+        Set<T> res = new HashSet<>();
+        for (NodeBase<T> node : tmp.succ) {
+            res.add(node.value);
+        }
+        return res;
     }
 
     /**
      * Return a list of the node's successors
-     * @param value the node value
+     * @param node the node
      * @return Return a list of the node's successors
      */
-    public List<T> getSuccs(T value) {
+    public Set<NodeBase<T>> getSuccNodes(NodeBase<T> node) {
+        return node.succ;
+    }
+
+    /**
+     * Return a list of the value's predecessors
+     * @param value the node value
+     * @return Return a list of the value's predecessors
+     */
+    public Set<T> getPreds(T value) {
         NodeBase<T> tmp = getNode(value);
-        return new LinkedList<>(tmp.succ);
+        Set<T> res = new HashSet<>();
+        for (NodeBase<T> node : tmp.pred) {
+            res.add(node.value);
+        }
+        return res;
     }
 
     /**
      * Return a list of the node's predecessors
-     * @param value the node value
+     * @param node the node
      * @return Return a list of the node's predecessors
      */
-    public List<T> getPreds(T value) {
-        NodeBase<T> tmp = getNode(value);
-        return new LinkedList<>(tmp.pred);
+    public Set<NodeBase<T>> getPredNodes(NodeBase<T> node) {
+        return node.pred;
     }
 
     /**
@@ -121,17 +145,19 @@ public abstract class GraphBase<T> {
      * @return True if it has a path from src to dst
      */
     public boolean hasPath(T from, T to) {
-        if (valueToNode.get(from) == null || valueToNode.get(to) == null) {
+        NodeBase<T> src = getNode(from);
+        NodeBase<T> dst = getNode(to);
+        if (src == null || dst == null) {
             return false;
         }
 
-        LinkedList<T> workList = new LinkedList<>();
-        Set<T> visited = new HashSet<>();
-        workList.add(from);
-        visited.add(to);
+        LinkedList<NodeBase<T>> workList = new LinkedList<>();
+        Set<NodeBase<T>> visited = new HashSet<>();
+        workList.add(src);
+        visited.add(dst);
         while (!workList.isEmpty()) {
-            T now = workList.remove();
-            for (T succ : getSuccs(now)) {
+            var cur = workList.remove();
+            for (var succ : getSuccNodes(cur)) {
                 if (succ == to) {
                     return true;
                 }
@@ -144,4 +170,12 @@ public abstract class GraphBase<T> {
         }
         return false;
     }
+
+
+    /**
+     * Create a graph node with the given value.
+     * @param value the node's value
+     * @return the graph node
+     */
+    protected abstract NodeBase<T> createNode(T value, int node_id);
 }

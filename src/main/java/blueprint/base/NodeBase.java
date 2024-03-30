@@ -4,22 +4,16 @@ import java.util.HashSet;
 import java.util.Set;
 
 public abstract class NodeBase<T> {
-    private final T value;
-    private int id;
+    protected final T value;
+    protected int id;
 
-    /**
-     * The pred of this node
-     */
-    public final Set<T> pred = new HashSet<>();
+    /** The pred of this node */
+    public final Set<NodeBase<T>> pred = new HashSet<>();
 
-    /**
-     * The succ of this node
-     */
-    public final Set<T> succ = new HashSet<>();
+    /** The succ of this node */
+    public final Set<NodeBase<T>> succ = new HashSet<>();
 
-    /**
-     * Create a node from the given parameter
-     */
+    /** Create a node from the given parameter */
     public NodeBase(T value, int id) {
         this.value = value;
         this.id = id;

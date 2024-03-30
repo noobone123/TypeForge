@@ -27,6 +27,7 @@ public class CallGraph extends GraphBase<Function> {
      */
     public static List<CallGraph> getWPCallGraph() {
         // TODO: Implement this method
+        throw new UnsupportedOperationException("Not implemented yet");
     }
 
     /**
@@ -69,4 +70,8 @@ public class CallGraph extends GraphBase<Function> {
         }
     }
 
+    @Override
+    protected NodeBase<Function> createNode(Function value, int node_id) {
+        return new FunctionNode(value, node_id);
+    }
 }
