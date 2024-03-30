@@ -2,16 +2,12 @@
 <Configuration status="WARN">
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout disableAnsi="false" pattern="%highlight{[%-5level - %logger{36}]}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=white, TRACE=blue} %msg%n%throwable
-"/>
+            <PatternLayout disableAnsi="false" pattern="%highlight{[%-5level] - %msg%n%throwable}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=white, TRACE=blue}"/>
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="BinAbsInspector" level="info" additivity="false">>
+        <Logger name="BluePrint" level="info" additivity="false">>
             <AppenderRef ref="Console"/>
-        </Logger>
-        <Logger name="CWE" level="warn" additivity="false">>
-            <AppenderRef ref="Console" />
         </Logger>
         <Root level="error">
             <AppenderRef ref="Console"/>

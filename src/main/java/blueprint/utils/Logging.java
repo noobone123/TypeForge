@@ -18,14 +18,7 @@ public class Logging {
 
     private static final String DEFAULT_LOGGER_NAME = "BluePrint";
     private static final String DEFAULT_CONFIG_FILE_PATH = "/log4j2_default.xml";
-    private static final String DEBUG_CONFIG_FILE_PATH = "/log4j2_debug.xml";
-    private static final String JSON_CONFIG_FILE_PATH = "/log4j2_json.xml";
-    private static final String DEBUG_TAG = "[DEBUG] ";
-    private static final String INFO_TAG = "[INFO] ";
-    private static final String WARN_TAG = "[WARN] ";
-
     private static Logger defaultLogger;
-    private static Logger cweLogger;
 
     /**
      * Initialize the logging module.

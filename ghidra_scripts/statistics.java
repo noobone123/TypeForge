@@ -17,17 +17,23 @@ public class statistics extends GhidraScript {
             return;
         }
 
-        // initialize the global state
         if (!prepareAnalysis()) {
             return;
         }
+
+
     }
 
     protected boolean prepareAnalysis() {
         GlobalState.currentProgram = this.currentProgram;
         GlobalState.flatAPI = this;
         Language language = this.currentProgram.getLanguage();
-
-        return language != null;
+        if (language == null) {
+            Logging.error("Language not found");
+            return false;
+        } else {
+            Logging.info("Language: " + language.getLanguageID());
+            return true;
+        }
     }
 }
