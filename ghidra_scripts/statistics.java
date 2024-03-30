@@ -13,6 +13,10 @@ public class statistics extends GhidraScript {
         println("Number of instructions: " + currentProgram.getListing().getNumInstructions());
         println("Number of bytes: " + currentProgram.getMemory().getSize());
 
+        if(!Logging.init()) {
+            return;
+        }
+
         // initialize the global state
         if (!prepareAnalysis()) {
             return;
@@ -23,10 +27,6 @@ public class statistics extends GhidraScript {
         GlobalState.currentProgram = this.currentProgram;
         GlobalState.flatAPI = this;
         Language language = this.currentProgram.getLanguage();
-
-        if (!Logging.init()) {
-            return false;
-        }
 
         return language != null;
     }
