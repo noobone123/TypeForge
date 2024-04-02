@@ -8,7 +8,6 @@ import java.util.Map;
 import java.util.Set;
 
 import ghidra.program.model.listing.Function;
-import org.w3c.dom.Node;
 
 public abstract class GraphBase<T> {
 
