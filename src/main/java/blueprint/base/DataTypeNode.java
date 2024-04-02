@@ -2,11 +2,15 @@ package blueprint.base;
 
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
+import ghidra.program.model.data.Structure;
+import ghidra.program.model.data.StructureDataType;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
+
+import blueprint.utils.Logging;
 
 /**
  * In Structure Dependency Graph, each node has multiple edges to other nodes.
@@ -40,5 +44,17 @@ public class DataTypeNode extends NodeBase<DataType>{
 
     public DataTypeNode(DataType value, int id) {
         super(value, id);
+        Logging.info("Creating DataTypeNode with value: " + value.getName());
+
+        if (value instanceof Structure st) {
+            fillFieldMap(st);
+        }
+
+    }
+
+    private void fillFieldMap(Structure st) {
+        for (var dtc : st.getDefinedComponents()) {
+            fieldMap.put(dtc.getOffset(), dtc);
+        }
     }
 }

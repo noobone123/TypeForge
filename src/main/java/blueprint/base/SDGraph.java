@@ -1,14 +1,13 @@
 package blueprint.base;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
+import java.util.*;
 
 import blueprint.utils.GlobalState;
 
 import blueprint.utils.Logging;
-import ghidra.program.model.data.DataType;
-import ghidra.program.model.data.Structure;
+import ghidra.program.model.data.*;
+import ghidra.program.model.data.Enum;
+import groovy.util.logging.Log;
 
 /**
  * Structure Dependency Graph
@@ -43,11 +42,96 @@ public class SDGraph extends GraphBase<DataType> {
             Logging.error("The root data type is not a structure");
             return;
         }
-        Logging.info("This Structure has " + st.getNumDefinedComponents() + " defined components");
-        for (var component : st.getDefinedComponents()) {
-            Logging.info("Component: " + component.getDataType().toString() + " - " + component.getFieldName());
-        }
 
+        buildAll(st);
+    }
+
+    /**
+     * Build the SDGraph for the given root, build recursively.
+     */
+    private void buildAll(Structure root) {
+        LinkedList<DataTypeNode> workList = new LinkedList<>();
+        HashSet<DataTypeNode> visited = new HashSet<>();
+
+        DataTypeNode rootNode = (DataTypeNode) getNode(root);
+
+        workList.add(rootNode);
+        while (!workList.isEmpty()) {
+            DataTypeNode cur = workList.poll();
+            if (cur.value instanceof Structure st) {
+                handleStructureNode(cur, st, workList, visited);
+            } else if (cur.value instanceof Array array) {
+                throw new UnsupportedOperationException("Array is not supported yet");
+            } else if (cur.value instanceof Union union) {
+                throw new UnsupportedOperationException("Union is not supported yet");
+            } else {
+                throw new UnsupportedOperationException("Unsupported data type");
+            }
+        }
+    }
+
+
+    /**
+     * Traverse the fields of structure node and try to build the SDGraph.
+     * @param node the object of DataTypeNode
+     * @param st the structure DataType
+     * @param workList the worklist for building the SDGraph
+     */
+    private void handleStructureNode(DataTypeNode node, Structure st,
+                                     LinkedList<DataTypeNode> workList,
+                                     HashSet<DataTypeNode> visited)
+    {
+        for (var dtc : st.getDefinedComponents()) {
+            DataType fieldDT = dtc.getDataType();
+
+            if (fieldDT instanceof BuiltInDataType) {
+                continue;
+
+            } else if (fieldDT instanceof Pointer ptr) {
+                // TODO: consider to handle multiple pointers?
+                DataType pointedDT = ptr.getDataType();
+                if (pointedDT instanceof Structure pointedST) {
+                    Logging.info("Reference: " + fieldDT + " offset: " + dtc.getOffset());
+                    DataTypeNode dstNode = (DataTypeNode) getNode(pointedST);
+                    addEdge(node, dstNode, EdgeType.REFERENCE, dtc.getOffset());
+                    if (!visited.contains(dstNode)) {
+                        workList.add(dstNode);
+                        visited.add(dstNode);
+                    }
+                }
+                // TODO: handle other types of pointer
+
+            } else if (fieldDT instanceof Array) {
+                continue;
+
+            } else if (fieldDT instanceof Structure fst) {
+                DataTypeNode dstNode = (DataTypeNode) getNode(fst);
+                Logging.info("Nested: " + fst.getName() + " offset: " + dtc.getOffset());
+                addEdge(node, dstNode, EdgeType.NESTED, dtc.getOffset());
+                if (!visited.contains(dstNode)) {
+                    workList.add(dstNode);
+                    visited.add(dstNode);
+                }
+
+            } else if (fieldDT instanceof Union) {
+                continue;
+
+            } else if (fieldDT instanceof FunctionDefinition) {
+                continue;
+
+            } else if (fieldDT instanceof Enum) {
+                continue;
+
+            } else if (fieldDT instanceof TypeDef) {
+                continue;
+
+            } else if (fieldDT instanceof BitFieldDataType) {
+                continue;
+
+            } else {
+                Logging.error("Unsupported data type: " + fieldDT);
+            }
+        }
     }
 
     public enum EdgeType {
@@ -66,24 +150,25 @@ public class SDGraph extends GraphBase<DataType> {
 
     /**
      * Add an edge to the SDGraph.
-     * @param src the source data type
-     * @param dst the destination data type
+     * @param srcNode the source data type
+     * @param dstNode the destination data type
      * @param edge_type the type of the edge
      * @param offset the offset of the dependency
      */
-    public void addEdge(DataType src, DataType dst, EdgeType edge_type, int offset) {
-        DataTypeNode src_node = (DataTypeNode) getNode(src);
-        DataTypeNode dst_node = (DataTypeNode) getNode(dst);
-
-        if (src_node.offsetNodeMap.containsKey(offset)) {
-            Logging.warn("The offset " + offset + " already exists in the source node");
+    public void addEdge(DataTypeNode srcNode, DataTypeNode dstNode, EdgeType edge_type, int offset) {
+        if (srcNode.offsetNodeMap.containsKey(offset)) {
+            if (srcNode.offsetNodeMap.get(offset) == dstNode) {
+                Logging.warn("The offset " + offset + " already exists in the srcNode");
+            } else {
+                Logging.error("The offset " + offset + " already exists in the srcNode, but the dstNode is different");
+            }
             return;
         }
 
-        src_node.offsetNodeMap.put(offset, dst_node);
-        src_node.offsetEdgeTypeMap.put(offset, edge_type);
-        src_node.succMap.computeIfAbsent(edge_type, k -> new HashSet<>()).add(dst_node);
-        dst_node.predMap.computeIfAbsent(edge_type, k -> new HashSet<>()).add(src_node);
+        srcNode.offsetNodeMap.put(offset, dstNode);
+        srcNode.offsetEdgeTypeMap.put(offset, edge_type);
+        srcNode.succMap.computeIfAbsent(edge_type, k -> new HashSet<>()).add(dstNode);
+        dstNode.predMap.computeIfAbsent(edge_type, k -> new HashSet<>()).add(srcNode);
     }
 
     @Override
