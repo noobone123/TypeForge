@@ -7,7 +7,6 @@ import blueprint.utils.GlobalState;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.*;
 import ghidra.program.model.data.Enum;
-import groovy.util.logging.Log;
 
 /**
  * Structure Dependency Graph
@@ -148,6 +147,30 @@ public class SDGraph extends GraphBase<DataType> {
         NESTED, REFERENCE, UNION, ARRAY, FUNC_PTR, ENUM, NORMAL
     }
 
+    public static class SDEdge {
+        public final DataTypeNode srcNode;
+        public final DataTypeNode dstNode;
+        public final EdgeType edgeType;
+        public final int offset;
+
+        public SDEdge(DataTypeNode srcNode, DataTypeNode dstNode, EdgeType edgeType, int offset) {
+            this.srcNode = srcNode;
+            this.dstNode = dstNode;
+            this.edgeType = edgeType;
+            this.offset = offset;
+        }
+
+        @Override
+        public String toString() {
+            return "SDEdge{" +
+                    "srcNode=" + srcNode +
+                    ", dstNode=" + dstNode +
+                    ", edgeType=" + edgeType +
+                    ", offset=" + offset +
+                    '}';
+        }
+    }
+
     /**
      * Add an edge to the SDGraph.
      * @param srcNode the source data type
@@ -156,19 +179,34 @@ public class SDGraph extends GraphBase<DataType> {
      * @param offset the offset of the dependency
      */
     public void addEdge(DataTypeNode srcNode, DataTypeNode dstNode, EdgeType edge_type, int offset) {
-        if (srcNode.offsetNodeMap.containsKey(offset)) {
-            if (srcNode.offsetNodeMap.get(offset) == dstNode) {
-                Logging.warn("The offset " + offset + " already exists in the srcNode");
-            } else {
+        if (srcNode.offsetToEdge.get(offset) != null) {
+            Logging.warn("The offset " + offset + " already exists in the srcNode");
+            if (srcNode.offsetToEdge.get(offset).dstNode != dstNode) {
                 Logging.error("The offset " + offset + " already exists in the srcNode, but the dstNode is different");
             }
             return;
         }
 
-        srcNode.offsetNodeMap.put(offset, dstNode);
-        srcNode.offsetEdgeTypeMap.put(offset, edge_type);
-        srcNode.succMap.computeIfAbsent(edge_type, k -> new HashSet<>()).add(dstNode);
-        dstNode.predMap.computeIfAbsent(edge_type, k -> new HashSet<>()).add(srcNode);
+        SDEdge edge = new SDEdge(srcNode, dstNode, edge_type, offset);
+        srcNode.edges.add(edge);
+        srcNode.offsetToEdge.put(offset, edge);
+    }
+
+    /**
+     * Build and get all edges from the DataTypeNode's offsetNodeMap and offsetEdgeTypeMap.
+     * @return a Set of edges
+     */
+    public Set<SDEdge> getAllEdges() {
+        Set<NodeBase<DataType>> allNodes = getAllNodes();
+        Set<SDEdge> allEdges = new HashSet<>();
+
+        for (NodeBase<DataType> node : allNodes) {
+            if (node instanceof DataTypeNode dtNode) {
+                allEdges.addAll(dtNode.edges);
+            }
+        }
+
+        return allEdges;
     }
 
     @Override

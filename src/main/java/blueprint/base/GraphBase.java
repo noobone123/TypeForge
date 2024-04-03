@@ -137,6 +137,19 @@ public abstract class GraphBase<T> {
         return node.pred;
     }
 
+
+    /**
+     * Get all nodes in the graph
+     * @return a set of all nodes in the graph
+     */
+    public Set<NodeBase<T>> getAllNodes() {
+        Set<NodeBase<T>> res = new HashSet<>();
+        for (var entry : valueToNode.entrySet()) {
+            res.add(entry.getValue());
+        }
+        return res;
+    }
+
     /**
      * Check if the graph has a path from src to dst
      * @param from The src node

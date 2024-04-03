@@ -1,16 +1,14 @@
-import blueprint.base.DataTypeNode;
 import blueprint.base.SDGraph;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.data.DataTypeManager;
 import ghidra.program.model.data.Structure;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
-import ghidra.program.model.data.DataType;
-import ghidra.program.model.data.Structure;
 
 import blueprint.base.CallGraph;
 import blueprint.utils.GlobalState;
 import blueprint.utils.Logging;
+import blueprint.utils.Helper;
 
 import java.util.Iterator;
 import java.util.List;
@@ -62,6 +60,7 @@ public class statistics extends GhidraScript {
         }
 
         SDGraph sdg = SDGraph.getSDGraph(struct);
+        Helper.dumpSDGraph(sdg, "/home/h1k0/codes/blueprint/dummy/sdgraph.dot");
 
         long endTime = System.currentTimeMillis();
 

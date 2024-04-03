@@ -1,14 +1,12 @@
 package blueprint.base;
 
+import aQute.lib.link.Link;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
 import ghidra.program.model.data.Structure;
 import ghidra.program.model.data.StructureDataType;
 
-import java.util.HashMap;
-import java.util.Map;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 import blueprint.utils.Logging;
 
@@ -30,17 +28,11 @@ public class DataTypeNode extends NodeBase<DataType>{
     /** The map from field offset to field */
     public final Map<Integer, DataTypeComponent> fieldMap = new HashMap<>();
 
-    /** The pred nodes of each edge's type */
-    public final Map<SDGraph.EdgeType, Set<DataTypeNode>> predMap = new HashMap<>();
+    /** The edges of the node */
+    public Set<SDGraph.SDEdge> edges = new HashSet<>();
 
-    /** The succ nodes of each edge's type */
-    public final Map<SDGraph.EdgeType, Set<DataTypeNode>> succMap = new HashMap<>();
-
-    /** The map from offset to node */
-    public final Map<Integer, DataTypeNode> offsetNodeMap = new HashMap<>();
-
-    /** The map from offset to edge type */
-    public final Map<Integer, SDGraph.EdgeType> offsetEdgeTypeMap = new HashMap<>();
+    /** The HashMap of offset to edge */
+    public Map<Integer, SDGraph.SDEdge> offsetToEdge = new HashMap<>();
 
     public DataTypeNode(DataType value, int id) {
         super(value, id);

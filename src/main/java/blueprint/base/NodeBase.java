@@ -4,8 +4,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public abstract class NodeBase<T> {
-    protected final T value;
-    protected int id;
+    public final T value;
+    public int id;
 
     /** The pred of this node */
     public final Set<NodeBase<T>> pred = new HashSet<>();
