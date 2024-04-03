@@ -44,7 +44,7 @@ public class Helper {
             String srcNodeID = "node" + edge.srcNode.id;
             String dstNodeID = "node" + edge.dstNode.id;
             String edgeType = edge.edgeType.toString();
-            String edgeLabel = edge.offset + " " + edgeType;
+            String edgeLabel = String.format("Offset %s: %s", Integer.toHexString(edge.offset), edgeType);
             dotBuilder.append(
                     String.format(
                             "%s -> %s [label=\"%s\"];\n",

@@ -87,7 +87,8 @@ public class SDGraph extends GraphBase<DataType> {
                 continue;
 
             } else if (fieldDT instanceof Pointer ptr) {
-                // TODO: consider to handle multiple pointers?
+                // TODO: consider to handle multiple pointers? especially for **
+                // TODO: pointer should be handled differently from other types
                 DataType pointedDT = ptr.getDataType();
                 if (pointedDT instanceof Structure pointedST) {
                     Logging.info("Reference: " + fieldDT + " offset: " + dtc.getOffset());
