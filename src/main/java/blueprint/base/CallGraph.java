@@ -1,40 +1,70 @@
 package blueprint.base;
 
-import java.util.List;
-import java.util.LinkedList;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Set;
-import java.util.HashSet;
+import blueprint.utils.GlobalState;
+import blueprint.utils.Helper;
+import blueprint.utils.Logging;
+
+import java.util.*;
 
 import ghidra.program.model.listing.Function;
+import ghidra.program.model.listing.Instruction;
 import ghidra.util.task.TaskMonitor;
+import org.h2.command.dml.Call;
+import org.python.antlr.ast.Str;
 
 public class CallGraph extends GraphBase<Function> {
 
-    /** The cache of callgraphs */
+    /** The cache of call graphs */
     private static final Map<Function, CallGraph> callGraphCache = new HashMap<>();
 
-    /** The root function of the callgraph */
-    private Function root;
+    /** The root function of the call graph */
+    public Function root;
+    public FunctionNode rootNode;
+
+    /** The number of functions which are not external and not thunk */
+    public int normalFunctionCount = 0;
 
     /**
-     * Get the whole-program's call graph.
+     * Get the Whole Program's call graph.
      * We did not resolve indirect calls here, and we consider each function
-     * without caller as a root node of a callgraph. So the whole program may
-     * contain multiple callgraphs.
-     * @return the List of callgraphs
+     * without caller as a root node of a call graph. So the whole program may
+     * contain multiple call graphs.
+     * @return the Set of CallGraph
      */
-    public static List<CallGraph> getWPCallGraph() {
-        // TODO: Implement this method
-        throw new UnsupportedOperationException("Not implemented yet");
+    public static Set<CallGraph> getWPCallGraph() {
+        Set<CallGraph> callGraphs = new HashSet<>();
+
+        for (var func : GlobalState.currentProgram.getListing().getFunctions(true)) {
+            // These functions should not be seen as root nodes of a call graph
+            if (!Helper.isNormalFunction(func) || Helper.isTrivialFunction(func)) {
+                continue;
+            }
+
+            // callGraphCache's key is the root function
+            if (callGraphCache.containsKey(func)) {
+                callGraphs.add(callGraphCache.get(func));
+            } else {
+                // If the function does not have caller, it is a root node of a call graph
+                // WARNING: ghidra's getCallingFunctions() may not work correctly, so we need to
+                //          check and complete the call graph manually.
+                if (func.getCallingFunctions(TaskMonitor.DUMMY).isEmpty() || Helper.isMainFunction(func)) {
+                    CallGraph cg = getCallGraph(func);
+                    callGraphs.add(cg);
+                }
+            }
+        }
+
+        Set<Function> newRoots = checkAndCompleteRootNodes();
+        Logging.warn("New root nodes found: " + newRoots.size());
+
+        return callGraphs;
     }
 
     /**
-     * Get the callgraph of the given function. If the CallGraph does
+     * Get the call graph of the given function. If the CallGraph does
      * not exist, a new one will be created.
-     * @param root the root function of the callgraph
-     * @return the callgraph
+     * @param root the root function of the call graph's entry
+     * @return the CallGraph
      */
     public static CallGraph getCallGraph(Function root) {
         if (callGraphCache.containsKey(root)) {
@@ -46,26 +76,89 @@ public class CallGraph extends GraphBase<Function> {
     }
 
     /**
-     * Create a callgraph with the given root function.
+     * This is a stupid function, but we have to do this.
+     * Because ghidra's `getCallingFunctions()` and `getCalledFunctions()` may not work correctly.
+     * For Example:
+     * If function B is not called by function A, but function B's ptr is used in function A, then ghidra will
+     * consider function A as a caller of function B when using `getCallingFunctions()` methods. And consider
+     * function B as a callee of function A when using `getCalledFunctions()` methods.
+     * <p>
+     * So some function can be seen as a root node, but failed to pass the check of `getCallingFunctions().isEmpty()`.
+     * We need to check and complete these root nodes.
+     *
+     * @return the set of root nodes which are checked and completed
+     */
+    public static Set<Function> checkAndCompleteRootNodes() {
+        Set<Function> unvisited = new HashSet<>();
+        Set<String> allNormalFunctionsInCG = new HashSet<>();
+        for (var cg : callGraphCache.values()) {
+            for (var node : cg.getAllNodes()) {
+                if (Helper.isNormalFunction(node.value) && !Helper.isTrivialFunction(node.value)) {
+                    allNormalFunctionsInCG.add(node.value.getName());
+                }
+            }
+        }
+
+        for (var func : GlobalState.currentProgram.getListing().getFunctions(true)) {
+            if (!Helper.isNormalFunction(func) || Helper.isTrivialFunction(func)) {
+                continue;
+            }
+            if (!allNormalFunctionsInCG.contains(func.getName())) {
+                unvisited.add(func);
+                Logging.warn("Unvisited node checked and completed: " + func.getName());
+            }
+        }
+
+        // TODO: filter out root nodes from unvisited nodes.
+        return unvisited;
+    }
+
+    /**
+     * Create a call graph with the given root function.
+     * We did not use ghidra's `getCalledFunctions()` api here to build the call graph,
+     * because they may not work correctly.
      * @param root the root function
      */
     private CallGraph(Function root) {
         this.root = root;
+        this.rootNode = (FunctionNode) getNode(root);
+        if (Helper.isNormalFunction(root)) {
+            normalFunctionCount++;
+        }
+
+        var currentProgram = GlobalState.currentProgram;
 
         LinkedList<Function> workList = new LinkedList<>();
         Set<Function> visited = new HashSet<>();
 
         workList.add(root);
         visited.add(root);
+
         while (!workList.isEmpty()) {
             Function cur = workList.remove();
-            for (Function callee : cur.getCalledFunctions(TaskMonitor.DUMMY)) {
-                if (visited.contains(callee)) {
-                    continue;
+            var funcInsts = currentProgram.getListing().getInstructions(cur.getBody(), true);
+            for (var inst : funcInsts) {
+                if (inst.getMnemonicString().equals("CALL")) {
+                    // If Call instruction is indirect that can't be resolved, flows will be empty
+                    var instFlows = inst.getFlows();
+                    if (instFlows.length >= 1) {
+                        for (var flow : instFlows) {
+                            Function calledFunc = currentProgram.getFunctionManager().getFunctionAt(flow);
+                            if (calledFunc != null) {
+                                addEdge(cur, calledFunc);
+                                if (!visited.contains(calledFunc) && Helper.isNormalFunction(calledFunc)) {
+                                    workList.add(calledFunc);
+                                    visited.add(calledFunc);
+                                    normalFunctionCount++;
+                                }
+                            } else {
+                                Logging.error("Function not found at " + flow);
+                            }
+                        }
+                    } else {
+                        Logging.debug("Indirect call at " + inst.getAddress());
+                    }
                 }
-                addEdge(cur, callee);
-                workList.add(callee);
-                visited.add(callee);
             }
         }
     }

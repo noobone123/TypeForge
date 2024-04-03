@@ -1,7 +1,4 @@
-import blueprint.base.SDGraph;
 import ghidra.app.script.GhidraScript;
-import ghidra.program.model.data.DataTypeManager;
-import ghidra.program.model.data.Structure;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
@@ -9,18 +6,14 @@ import blueprint.base.CallGraph;
 import blueprint.utils.GlobalState;
 import blueprint.utils.Logging;
 import blueprint.utils.Helper;
+import groovy.util.logging.Log;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
 public class statistics extends GhidraScript {
     @Override
     protected void run() throws Exception {
-        println("Statistics for " + currentProgram.getName());
-        println("Number of functions: " + currentProgram.getFunctionManager().getFunctionCount());
-        println("Number of instructions: " + currentProgram.getListing().getNumInstructions());
-        println("Number of bytes: " + currentProgram.getMemory().getSize());
 
         if(!Logging.init()) {
             return;
@@ -41,26 +34,26 @@ public class statistics extends GhidraScript {
         // calculate the time of the analysis in seconds
         long startTime = System.currentTimeMillis();
 
-        CallGraph cg = CallGraph.getCallGraph(entryFunction);
-        println(String.valueOf(cg.node_cnt));
+        // Function node and CallGraph statistics
+        Set<Function> meaningfulFunctions = Helper.getMeaningfulFunctions();
+        Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
 
-        Set<Function> main_succs = cg.getSuccs(entryFunction);
-        println("Number of successors of the main function: " + main_succs.size());
-        for (var succ : main_succs) {
-            println(succ.getName());
-        }
+        Set<CallGraph> callGraphs = CallGraph.getWPCallGraph();
 
-        DataTypeManager dtm = GlobalState.currentProgram.getDataTypeManager();
-        Structure struct = null;
-        for (Iterator<Structure> it = dtm.getAllStructures(); it.hasNext(); ) {
-            struct = it.next();
-            if (struct.getName().equals("server")){
-                break;
-            }
-        }
+        dumpWPCallGraphInfo(callGraphs);
 
-        SDGraph sdg = SDGraph.getSDGraph(struct);
-        Helper.dumpSDGraph(sdg, "/home/h1k0/codes/blueprint/dummy/sdgraph.dot");
+        // Structure Dependency Graph statistics
+//        DataTypeManager dtm = GlobalState.currentProgram.getDataTypeManager();
+//        Structure struct = null;
+//        for (Iterator<Structure> it = dtm.getAllStructures(); it.hasNext(); ) {
+//            struct = it.next();
+//            if (struct.getName().equals("server")){
+//                break;
+//            }
+//        }
+//
+//        SDGraph sdg = SDGraph.getSDGraph(struct);
+//        Helper.dumpSDGraph(sdg, "/home/h1k0/codes/blueprint/dummy/sdgraph.dot");
 
         long endTime = System.currentTimeMillis();
 
@@ -78,5 +71,25 @@ public class statistics extends GhidraScript {
             Logging.info("Language: " + language.getLanguageID());
             return true;
         }
+    }
+
+    private void dumpWPCallGraphInfo(Set<CallGraph> wpCG) {
+        int totalFunctionCount = 0;
+        int totalNormalFunctionCount = 0;
+        Logging.info("Number of call graphs: " + wpCG.size());
+        for (CallGraph cg : wpCG) {
+            dumpCallGraphInfo(cg);
+            totalFunctionCount += cg.getNodeCount();
+            totalNormalFunctionCount += cg.normalFunctionCount;
+        }
+        Logging.info("Total number of functions: " + totalFunctionCount);
+        Logging.info("Total number of normal functions: " + totalNormalFunctionCount);
+    }
+
+    private void dumpCallGraphInfo(CallGraph cg) {
+        Logging.info("--------------------");
+        Logging.info("Call Graph root: " + cg.root.getName());
+        Logging.info("Number of total functions: " + cg.getNodeCount());
+        Logging.info("Number of normal functions: " + cg.normalFunctionCount);
     }
 }

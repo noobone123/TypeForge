@@ -3,11 +3,8 @@ package blueprint.base;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import ghidra.program.model.listing.Function;
 
 public abstract class GraphBase<T> {
 
@@ -26,8 +23,8 @@ public abstract class GraphBase<T> {
     /** Map from node's value to node's id */
     protected final Map<T, Integer> valueToIdMap = new HashMap<>();
 
-    /** Number of nodes in the graph */
-    public int node_cnt = 0;
+    /** Node id in the graph */
+    public int node_id = 0;
 
     /**
      * An array of integers, where the indexes represent the id of each node and
@@ -46,12 +43,12 @@ public abstract class GraphBase<T> {
             return valueToNode.get(value);
         }
 
-        NodeBase<T> res = createNode(value, node_cnt);
+        NodeBase<T> res = createNode(value, node_id);
 
         valueToNode.put(value, res);
-        idToValueMap.put(node_cnt, value);
-        valueToIdMap.put(value, node_cnt);
-        node_cnt++;
+        idToValueMap.put(node_id, value);
+        valueToIdMap.put(value, node_id);
+        node_id++;
         changed = true;
         return res;
     }
@@ -181,6 +178,11 @@ public abstract class GraphBase<T> {
             }
         }
         return false;
+    }
+
+
+    public int getNodeCount() {
+        return node_id;
     }
 
 
