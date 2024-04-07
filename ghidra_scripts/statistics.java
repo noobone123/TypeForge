@@ -38,11 +38,11 @@ public class statistics extends GhidraScript {
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
         Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
 
-        CallGraph callGraphs = CallGraph.getCallGraph();
+        CallGraph cg = CallGraph.getCallGraph();
 
-        dumpCallGraphInfo(callGraphs);
+        dumpCallGraphInfo(cg);
 
-        // CallGraph.decompileAllFunctions();
+        cg.decompileAllFunctions();
 
 
         // Function's Parameter and Structure Usage statistics
@@ -91,5 +91,13 @@ public class statistics extends GhidraScript {
                 "Function node count: %d",
                 cg.functionNodes.size()
         ));
+
+        for (var root : cg.roots) {
+            Logging.info(String.format(
+                    "Root function %s has %d nodes",
+                    root.getName(),
+                    cg.rootToNodes.get(root).size()
+            ));
+        }
     }
 }

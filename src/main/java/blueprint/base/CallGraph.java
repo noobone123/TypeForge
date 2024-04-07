@@ -11,7 +11,6 @@ import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.util.task.TaskMonitor;
-import groovy.util.logging.Log;
 
 public class CallGraph extends GraphBase<Function> {
     /** The cache of decompiled high functions */
@@ -21,7 +20,7 @@ public class CallGraph extends GraphBase<Function> {
     public final Set<FunctionNode> functionNodes = new HashSet<>();
 
     /** The cache of root nodes to nodes */
-    public final Map<Function, Set<FunctionNode>> rootToNodes = new HashMap<>();
+    public final Map<Function, Set<Function>> rootToNodes = new HashMap<>();
 
     /** Possible root nodes of the call graph */
     public Set<Function> roots;
@@ -65,35 +64,36 @@ public class CallGraph extends GraphBase<Function> {
      * Decompile each function and get high function in CallGraph.
      * Finally, build the highFunctionCache.
      */
-//    public static void decompileAllFunctions() {
-//        DecompInterface ifc = FunctionHelper.setUpDecompiler(null);
-//        try {
-//            if (!ifc.openProgram(GlobalState.currentProgram)) {
-//                Logging.error("Failed to use the decompiler");
-//                return;
-//            }
-//
-//            for (var cg : callGraphCache.values()) {
-//                for (var node : cg.getAllNodes()) {
-//                    FunctionNode funcNode = (FunctionNode) node;
-//                    Function func = funcNode.value;
-//                    if (!highFunctionCache.containsKey(func)) {
-//                        DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
-//                        if (!decompileRes.decompileCompleted()) {
-//                            Logging.error("Decompile failed for function " + func.getName());
-//                        } else {
-//                            HighFunction highFunc = decompileRes.getHighFunction();
-//                            highFunctionCache.put(func, highFunc);
-//                            Logging.info("Decompile function " + func.getName());
-//                        }
-//                    }
-//                    funcNode.setHighFunction(highFunctionCache.get(func));
-//                }
-//            }
-//        } finally {
-//            ifc.dispose();
-//        }
-//    }
+    public void decompileAllFunctions() {
+        DecompInterface ifc = FunctionHelper.setUpDecompiler(null);
+        try {
+            if (!ifc.openProgram(GlobalState.currentProgram)) {
+                Logging.error("Failed to use the decompiler");
+                return;
+            }
+
+            for (var funcNode : functionNodes) {
+                Function func = funcNode.value;
+                HighFunction highFunc = null;
+                if (!highFunctionCache.containsKey(func)) {
+                    DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
+                    if (!decompileRes.decompileCompleted()) {
+                        Logging.error("Decompile failed for function " + func.getName());
+                    } else {
+                        highFunc = decompileRes.getHighFunction();
+                        highFunctionCache.put(func, highFunc);
+                        Logging.info("Decompile function " + func.getName());
+                    }
+                } else {
+                    highFunc = highFunctionCache.get(func);
+                }
+
+                funcNode.setHighFunction(highFunc);
+            }
+        } finally {
+            ifc.dispose();
+        }
+    }
 
 
     /**
@@ -135,9 +135,11 @@ public class CallGraph extends GraphBase<Function> {
                             Function calledFunc = currentProgram.getFunctionManager().getFunctionAt(flow);
                             if (calledFunc != null) {
                                 addEdge(cur, calledFunc);
-                                if (!visited.contains(calledFunc) && FunctionHelper.isMeaningfulFunction(calledFunc)) {
-                                    workList.add(calledFunc);
+                                if (!visited.contains(calledFunc)) {
                                     visited.add(calledFunc);
+                                    if (FunctionHelper.isMeaningfulFunction(calledFunc)) {
+                                        workList.add(calledFunc);
+                                    }
                                 }
                             } else {
                                 Logging.error("Function not found at " + flow);
@@ -149,6 +151,7 @@ public class CallGraph extends GraphBase<Function> {
                 }
             }
         }
+        rootToNodes.put(root, visited);
     }
 
 
