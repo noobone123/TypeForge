@@ -3,9 +3,9 @@ package blueprint.utils;
 import blueprint.base.DataTypeNode;
 import blueprint.base.SDGraph;
 import blueprint.base.NodeBase;
-import blueprint.utils.GlobalState;
-import blueprint.utils.Logging;
 
+import ghidra.app.decompiler.DecompInterface;
+import ghidra.app.decompiler.DecompileOptions;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.listing.Function;
 import ghidra.util.task.TaskMonitor;
@@ -15,10 +15,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
-import java.util.List;
 
-public class Helper {
+public class FunctionHelper {
 
     /**
      * Check if the function is the entry(main) function.
@@ -76,6 +76,23 @@ public class Helper {
         }
         return meaningfulFunctions;
     }
+
+    /**
+     * For more information about the decompiler, please refer to the official documentation:
+     * <a href="https://ghidra.re/ghidra_docs/api/ghidra/app/decompiler/DecompInterface.html">...</a>
+     * @return DecompInterface
+     */
+    public static DecompInterface setUpDecompiler(DecompileOptions options) {
+        DecompInterface ifc = new DecompInterface();
+        if (options != null) {
+            ifc.setOptions(options);
+        }
+        ifc.toggleCCode(true);
+        ifc.toggleSyntaxTree(true);
+        ifc.setSimplificationStyle("decompile");
+        return ifc;
+    }
+
 
     /**
      * Dump the SDGraph to a dot file

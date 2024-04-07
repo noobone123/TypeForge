@@ -1,21 +1,24 @@
 package blueprint.base;
 
 import blueprint.utils.GlobalState;
-import blueprint.utils.Helper;
+import blueprint.utils.FunctionHelper;
 import blueprint.utils.Logging;
 
 import java.util.*;
 
+import ghidra.app.decompiler.DecompInterface;
+import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
-import ghidra.program.model.listing.Instruction;
+import ghidra.program.model.pcode.HighFunction;
 import ghidra.util.task.TaskMonitor;
-import org.h2.command.dml.Call;
-import org.python.antlr.ast.Str;
 
 public class CallGraph extends GraphBase<Function> {
 
     /** The cache of call graphs */
     private static final Map<Function, CallGraph> callGraphCache = new HashMap<>();
+
+    /** The cache of decompiled high functions */
+    private static final Map<Function, HighFunction> highFunctionCache = new HashMap<>();
 
     /** The root function of the call graph */
     public Function root;
@@ -36,7 +39,7 @@ public class CallGraph extends GraphBase<Function> {
 
         for (var func : GlobalState.currentProgram.getListing().getFunctions(true)) {
             // These functions should not be seen as root nodes of a call graph
-            if (!Helper.isNormalFunction(func) || Helper.isTrivialFunction(func)) {
+            if (!FunctionHelper.isNormalFunction(func) || FunctionHelper.isTrivialFunction(func)) {
                 continue;
             }
 
@@ -47,13 +50,13 @@ public class CallGraph extends GraphBase<Function> {
                 // If the function does not have caller, it is a root node of a call graph
                 // WARNING: ghidra's getCallingFunctions() may not work correctly, so we need to
                 //          check and complete the call graph manually.
-                if (func.getCallingFunctions(TaskMonitor.DUMMY).isEmpty() || Helper.isMainFunction(func)) {
+                if (func.getCallingFunctions(TaskMonitor.DUMMY).isEmpty() || FunctionHelper.isMainFunction(func)) {
                     CallGraph cg = getCallGraph(func);
                     callGraphs.add(cg);
                 }
             }
         }
-        
+
         Set<Function> newRoots = checkAndCompleteRootNodes();
         Logging.warn("New root nodes found: " + newRoots.size());
         for (var root : newRoots) {
@@ -100,14 +103,14 @@ public class CallGraph extends GraphBase<Function> {
 
         for (var cg : callGraphCache.values()) {
             for (var node : cg.getAllNodes()) {
-                if (Helper.isNormalFunction(node.value) && !Helper.isTrivialFunction(node.value)) {
+                if (FunctionHelper.isNormalFunction(node.value) && !FunctionHelper.isTrivialFunction(node.value)) {
                     allNormalFunctionsInCG.add(node.value.getName());
                 }
             }
         }
 
         for (var func : GlobalState.currentProgram.getListing().getFunctions(true)) {
-            if (!Helper.isNormalFunction(func) || Helper.isTrivialFunction(func)) {
+            if (!FunctionHelper.isNormalFunction(func) || FunctionHelper.isTrivialFunction(func)) {
                 continue;
             }
             if (!allNormalFunctionsInCG.contains(func.getName())) {
@@ -147,6 +150,41 @@ public class CallGraph extends GraphBase<Function> {
     }
 
     /**
+     * Decompile each function and get high function in CallGraph.
+     * Finally, build the highFunctionCache.
+     */
+    public static void decompileAllFunctions() {
+        DecompInterface ifc = FunctionHelper.setUpDecompiler(null);
+        try {
+            if (!ifc.openProgram(GlobalState.currentProgram)) {
+                Logging.error("Failed to use the decompiler");
+                return;
+            }
+
+            for (var cg : callGraphCache.values()) {
+                for (var node : cg.getAllNodes()) {
+                    FunctionNode funcNode = (FunctionNode) node;
+                    Function func = funcNode.value;
+                    if (!highFunctionCache.containsKey(func)) {
+                        DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
+                        if (!decompileRes.decompileCompleted()) {
+                            Logging.error("Decompile failed for function " + func.getName());
+                        } else {
+                            HighFunction highFunc = decompileRes.getHighFunction();
+                            highFunctionCache.put(func, highFunc);
+                            Logging.info("Decompile function " + func.getName());
+                        }
+                    }
+                    funcNode.setHighFunction(highFunctionCache.get(func));
+                }
+            }
+        } finally {
+            ifc.dispose();
+        }
+    }
+
+
+    /**
      * Create a call graph with the given root function.
      * We did not use ghidra's `getCalledFunctions()` api here to build the call graph,
      * because they may not work correctly.
@@ -155,7 +193,7 @@ public class CallGraph extends GraphBase<Function> {
     private CallGraph(Function root) {
         this.root = root;
         this.rootNode = (FunctionNode) getNode(root);
-        if (Helper.isNormalFunction(root)) {
+        if (FunctionHelper.isNormalFunction(root)) {
             normalFunctionCount++;
         }
 
@@ -179,7 +217,7 @@ public class CallGraph extends GraphBase<Function> {
                             Function calledFunc = currentProgram.getFunctionManager().getFunctionAt(flow);
                             if (calledFunc != null) {
                                 addEdge(cur, calledFunc);
-                                if (!visited.contains(calledFunc) && Helper.isNormalFunction(calledFunc)) {
+                                if (!visited.contains(calledFunc) && FunctionHelper.isNormalFunction(calledFunc)) {
                                     workList.add(calledFunc);
                                     visited.add(calledFunc);
                                     normalFunctionCount++;

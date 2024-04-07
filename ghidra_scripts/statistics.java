@@ -5,8 +5,7 @@ import ghidra.program.model.listing.Function;
 import blueprint.base.CallGraph;
 import blueprint.utils.GlobalState;
 import blueprint.utils.Logging;
-import blueprint.utils.Helper;
-import groovy.util.logging.Log;
+import blueprint.utils.FunctionHelper;
 
 import java.util.List;
 import java.util.Set;
@@ -35,12 +34,18 @@ public class statistics extends GhidraScript {
         long startTime = System.currentTimeMillis();
 
         // Function node and CallGraph statistics
-        Set<Function> meaningfulFunctions = Helper.getMeaningfulFunctions();
+        Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
         Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
 
         Set<CallGraph> callGraphs = CallGraph.getWPCallGraph();
 
-        dumpWPCallGraphInfo(callGraphs);
+        // dumpWPCallGraphInfo(callGraphs);
+
+        CallGraph.decompileAllFunctions();
+
+        // Function's Parameter and Structure Usage statistics
+
+
 
         // Structure Dependency Graph statistics
 //        DataTypeManager dtm = GlobalState.currentProgram.getDataTypeManager();
@@ -57,7 +62,8 @@ public class statistics extends GhidraScript {
 
         long endTime = System.currentTimeMillis();
 
-        Logging.info("Analysis time: " + (endTime - startTime) / 1000 + "s");
+        // keep 2 floating points
+        Logging.info("Analysis time: " + (endTime - startTime) / 1000.00 + "s");
     }
 
     protected boolean prepareAnalysis() {
