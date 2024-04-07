@@ -53,9 +53,13 @@ public class CallGraph extends GraphBase<Function> {
                 }
             }
         }
-
+        
         Set<Function> newRoots = checkAndCompleteRootNodes();
         Logging.warn("New root nodes found: " + newRoots.size());
+        for (var root : newRoots) {
+            CallGraph cg = getCallGraph(root);
+            callGraphs.add(cg);
+        }
 
         return callGraphs;
     }
@@ -90,7 +94,10 @@ public class CallGraph extends GraphBase<Function> {
      */
     public static Set<Function> checkAndCompleteRootNodes() {
         Set<Function> unvisited = new HashSet<>();
+        Set<Function> result;
         Set<String> allNormalFunctionsInCG = new HashSet<>();
+        boolean isChecked = false;
+
         for (var cg : callGraphCache.values()) {
             for (var node : cg.getAllNodes()) {
                 if (Helper.isNormalFunction(node.value) && !Helper.isTrivialFunction(node.value)) {
@@ -105,12 +112,38 @@ public class CallGraph extends GraphBase<Function> {
             }
             if (!allNormalFunctionsInCG.contains(func.getName())) {
                 unvisited.add(func);
-                Logging.warn("Unvisited node checked and completed: " + func.getName());
             }
         }
 
-        // TODO: filter out root nodes from unvisited nodes.
-        return unvisited;
+        // Deep copy the unvisited set
+        result = new HashSet<>(unvisited);
+
+        for (var func : unvisited) {
+            isChecked = false;
+            for (var caller : func.getCallingFunctions(TaskMonitor.DUMMY)) {
+                var funcInsts = GlobalState.currentProgram.getListing().getInstructions(caller.getBody(), true);
+                for (var inst : funcInsts) {
+                    if (inst.getMnemonicString().equals("CALL")) {
+                        var instFlows = inst.getFlows();
+                        if (instFlows.length >= 1) {
+                            for (var flow : instFlows) {
+                                Function calledFunc = GlobalState.currentProgram.getFunctionManager().getFunctionAt(flow);
+                                if (calledFunc != null && calledFunc.equals(func)) {
+                                    result.remove(func);
+                                    isChecked = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                if (isChecked) {
+                    break;
+                }
+            }
+        }
+
+        return result;
     }
 
     /**
