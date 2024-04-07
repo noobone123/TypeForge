@@ -62,6 +62,10 @@ public class FunctionHelper {
         return forbiddenName.contains(func.getName());
     }
 
+    public static boolean isMeaningfulFunction(Function func) {
+        return isNormalFunction(func) && !isTrivialFunction(func);
+    }
+
     /**
      * Get all meaningful functions in the current program.
      * A meaningful function is a normal function which is not trivial.
@@ -70,12 +74,51 @@ public class FunctionHelper {
     public static Set<Function> getMeaningfulFunctions() {
         Set<Function> meaningfulFunctions = new HashSet<>();
         for (var func : GlobalState.currentProgram.getListing().getFunctions(true)) {
-            if (isNormalFunction(func) && !isTrivialFunction(func)) {
+            if (isMeaningfulFunction(func)) {
                 meaningfulFunctions.add(func);
             }
         }
         return meaningfulFunctions;
     }
+
+
+    /**
+     * This is a stupid function, but we have to do this.
+     * Because ghidra's `getCallingFunctions()` and `getCalledFunctions()` may not work correctly.
+     * For Example:
+     * If function B is not called by function A, but function B's ptr is used in function A, then ghidra will
+     * consider function A as a caller of function B when using `getCallingFunctions()` methods. And consider
+     * function B as a callee of function A when using `getCalledFunctions()` methods.
+     * <p>
+     * So some function can be seen as a root node, but failed to pass the check of `getCallingFunctions().isEmpty()`.
+     * We need to check and complete these root nodes.
+     *
+     * @return if the function has no direct caller in the whole program
+     */
+    public static boolean confirmNoDirectCaller(Function func) {
+        boolean noCaller = true;
+
+        for (var caller : func.getCallingFunctions(TaskMonitor.DUMMY)) {
+            var callerInsts = GlobalState.currentProgram.getListing().getInstructions(caller.getBody(), true);
+            for (var inst : callerInsts) {
+                if (inst.getMnemonicString().equals("CALL")) {
+                    var instFlows = inst.getFlows();
+                    if (instFlows.length >= 1) {
+                        for (var flow : instFlows) {
+                            Function calledFunc = GlobalState.currentProgram.getFunctionManager().getFunctionAt(flow);
+                            if (calledFunc != null && calledFunc.equals(func)) {
+                                noCaller = false;
+                                return noCaller;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return noCaller;
+    }
+
 
     /**
      * For more information about the decompiler, please refer to the official documentation:

@@ -6,6 +6,7 @@ import blueprint.base.CallGraph;
 import blueprint.utils.GlobalState;
 import blueprint.utils.Logging;
 import blueprint.utils.FunctionHelper;
+import groovy.util.logging.Log;
 
 import java.util.List;
 import java.util.Set;
@@ -37,11 +38,12 @@ public class statistics extends GhidraScript {
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
         Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
 
-        Set<CallGraph> callGraphs = CallGraph.getWPCallGraph();
+        CallGraph callGraphs = CallGraph.getCallGraph();
 
-        // dumpWPCallGraphInfo(callGraphs);
+        dumpCallGraphInfo(callGraphs);
 
-        CallGraph.decompileAllFunctions();
+        // CallGraph.decompileAllFunctions();
+
 
         // Function's Parameter and Structure Usage statistics
 
@@ -79,23 +81,15 @@ public class statistics extends GhidraScript {
         }
     }
 
-    private void dumpWPCallGraphInfo(Set<CallGraph> wpCG) {
-        int totalFunctionCount = 0;
-        int totalNormalFunctionCount = 0;
-        Logging.info("Number of call graphs: " + wpCG.size());
-        for (CallGraph cg : wpCG) {
-            dumpCallGraphInfo(cg);
-            totalFunctionCount += cg.getNodeCount();
-            totalNormalFunctionCount += cg.normalFunctionCount;
-        }
-        Logging.info("Total number of functions: " + totalFunctionCount);
-        Logging.info("Total number of normal functions: " + totalNormalFunctionCount);
-    }
-
     private void dumpCallGraphInfo(CallGraph cg) {
-        Logging.info("--------------------");
-        Logging.info("Call Graph root: " + cg.root.getName());
-        Logging.info("Number of total functions: " + cg.getNodeCount());
-        Logging.info("Number of normal functions: " + cg.normalFunctionCount);
+        Logging.info(String.format(
+                "Call Graph root count: %d",
+                cg.roots.size()
+        ));
+
+        Logging.info(String.format(
+                "Function node count: %d",
+                cg.functionNodes.size()
+        ));
     }
 }
