@@ -30,4 +30,10 @@ public class FunctionNode extends NodeBase<Function> {
     public HighFunction getHighFunction() {
         return this.hFunc;
     }
+
+
+    public void getParameters() {
+        var localSymbolMap = hFunc.getLocalSymbolMap();
+
+    }
 }
