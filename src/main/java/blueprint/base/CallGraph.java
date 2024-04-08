@@ -79,6 +79,7 @@ public class CallGraph extends GraphBase<Function> {
                     DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
                     if (!decompileRes.decompileCompleted()) {
                         Logging.error("Decompile failed for function " + func.getName());
+                        continue;
                     } else {
                         highFunc = decompileRes.getHighFunction();
                         highFunctionCache.put(func, highFunc);

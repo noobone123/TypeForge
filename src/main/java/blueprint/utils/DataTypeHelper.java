@@ -4,6 +4,7 @@ import blueprint.utils.GlobalState;
 
 import ghidra.program.model.data.*;
 
+import javax.xml.crypto.Data;
 import java.util.*;
 
 public class DataTypeHelper {
@@ -16,26 +17,19 @@ public class DataTypeHelper {
      */
     public static boolean isComplexTypeAware(DataType dt) {
         if (dt instanceof Pointer pointer) {
-            Logging.info("Pointer detected: " + pointer);
             return isComplexTypeAware(pointer.getDataType());
 
         } else if (dt instanceof TypeDef typedef) {
-            Logging.info("Typedef detected: " + typedef.getName());
             return isComplexTypeAware(typedef.getBaseDataType());
 
         } else {
-            if (dt instanceof Composite || dt instanceof Array) {
-                Logging.info("Complex type detected: " + dt.getName());
-                return true;
-            } else {
-                Logging.info("Simple type detected: " + dt.getName());
-                return false;
-            }
+            return dt instanceof Composite || dt instanceof Array;
         }
     }
 
     /**
      * If the data type is a pointer, typedef or array, we should get the base data type.
+     * If the data type is a composite, we should return itself.
      * @param dt the data type
      * @return the base data type
      */
@@ -54,31 +48,72 @@ public class DataTypeHelper {
         }
     }
 
+
+    /**
+     * Traverse the category and get all data types in the category.
+     * @param result the set to store the result
+     * @param category the category to traverse
+     */
+    private static void traverseTypeCategory(Set<DataType> result, Category category) {
+        List<Category> workList = new LinkedList<>();
+        Set<Category> visited = new HashSet<>();
+
+        workList.add(category);
+        while (!workList.isEmpty()) {
+            var curCategory = workList.remove(0);
+            result.addAll(Arrays.asList(curCategory.getDataTypes()));
+            if (!visited.contains(curCategory)) {
+                visited.add(curCategory);
+                workList.addAll(Arrays.asList(curCategory.getCategories()));
+            }
+        }
+    }
+
+    /**
+     * Get all built-in common types used in lib functions.
+     * @return a set of built-in common types
+     */
+    public static Set<DataType> getBuiltInLibTypes() {
+        Set <DataType> result = new HashSet<>();
+        var dtm = GlobalState.currentProgram.getDataTypeManager();
+        var rootCategory = dtm.getRootCategory();
+        for (var category : rootCategory.getCategories()) {
+            if (!category.getName().equals("DWARF")) {
+                traverseTypeCategory(result, category);
+            }
+        }
+        return result;
+    }
+
     /**
      * Get all User defined types in the current program.
-     * We think a type is user defined if it's in the DWARF category.
+     * We think a type is user defined if it's in the DWARF category and not in the
+     * ghidra's generic_clib_64 category.
      * @return a set of User defined types
      */
-    // TODO： filter out types that are used in the standard library
     public static Set<DataType> getAllUserDefinedTypes() {
-        Set<DataType> result = new HashSet<>();
+        Set<DataType> builtInLibTypes = getBuiltInLibTypes();
+        Set<String> builtInLibTypeNames = new HashSet<>();
+        for (var dt : builtInLibTypes) {
+            builtInLibTypeNames.add(dt.getName());
+        }
+
+        Set<DataType> dwarfDataTypes = new HashSet<>();
         var dtm = GlobalState.currentProgram.getDataTypeManager();
 
         var rootCategory = dtm.getRootCategory();
         for (var category : rootCategory.getCategories()) {
             if (category.getName().equals("DWARF")) {
-                List<Category> workList = new LinkedList<>();
-                Set<Category> visited = new HashSet<>();
+                traverseTypeCategory(dwarfDataTypes, category);
+            }
+        }
 
-                workList.add(category);
-                while (!workList.isEmpty()) {
-                    var curCategory = workList.remove(0);
-                    result.addAll(Arrays.asList(curCategory.getDataTypes()));
-                    if (!visited.contains(curCategory)) {
-                        visited.add(curCategory);
-                        workList.addAll(Arrays.asList(curCategory.getCategories()));
-                    }
-                }
+        Set<DataType> result = new HashSet<>();
+        for (var dt : dwarfDataTypes) {
+            if (builtInLibTypeNames.contains(getBaseDataType(dt).getName())) {
+                Logging.warn("Built-in lib type detected: " + dt.getName());
+            } else {
+                result.add(dt);
             }
         }
 
