@@ -62,6 +62,11 @@ public class FunctionHelper {
         return forbiddenName.contains(func.getName());
     }
 
+    /**
+     * Check if the function is a meaningful function.
+     * @param func the function to check
+     * @return true if the function is meaningful
+     */
     public static boolean isMeaningfulFunction(Function func) {
         return isNormalFunction(func) && !isTrivialFunction(func);
     }
