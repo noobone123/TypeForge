@@ -136,7 +136,6 @@ public class FunctionHelper {
         }
         ifc.toggleCCode(true);
         ifc.toggleSyntaxTree(true);
-        ifc.setSimplificationStyle("decompile");
         return ifc;
     }
 }

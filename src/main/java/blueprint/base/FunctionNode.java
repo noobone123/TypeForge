@@ -57,12 +57,17 @@ public class FunctionNode extends NodeBase<Function> {
 
         // Commit to database, then types and return can be found in Listing model
         // And Information can be accessed by Function.getParameters()
+        /* WARNING: `commitParamsToDatabase` method may cause some function's wrong prototype be committed to database
+                    and wrong prototype will be propagated to other functions. Cause other functions' prototype be wrong.
+                    For example: `log_error` is a function that has variable parameters, and using SSE register, it seems
+                    that ghidra performs poorly on recognizing its prototype.
         try {
             HighFunctionDBUtil.commitParamsToDatabase(hFunc, true, SourceType.DEFAULT);
             HighFunctionDBUtil.commitReturnToDatabase(hFunc, SourceType.DEFAULT);
         } catch (Exception e) {
             Logging.error("Failed to commit parameters and return to database");
         }
+        */
 
         assert value.getParameters().length == parameters.size();
     }
