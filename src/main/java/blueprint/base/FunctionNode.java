@@ -66,8 +66,7 @@ public class FunctionNode extends NodeBase<Function> {
             HighFunctionDBUtil.commitReturnToDatabase(hFunc, SourceType.DEFAULT);
         } catch (Exception e) {
             Logging.error("Failed to commit parameters and return to database");
-        }
-        */
+        }  */
 
         assert value.getParameters().length == parameters.size();
     }

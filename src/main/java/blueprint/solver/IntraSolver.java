@@ -4,6 +4,7 @@ import blueprint.base.FunctionNode;
 import blueprint.utils.Logging;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.HighVariable;
+import ghidra.program.model.pcode.PcodeBlock;
 import groovy.util.logging.Log;
 
 /**
@@ -12,9 +13,11 @@ import groovy.util.logging.Log;
 public class IntraSolver {
 
     private final FunctionNode funcNode;
+    private Context ctx;
 
     public IntraSolver(FunctionNode funcNode) {
         this.funcNode = funcNode;
+        ctx = new Context();
     }
 
     public void solve() {
@@ -24,7 +27,6 @@ public class IntraSolver {
             Logging.warn("No parameters in the function");
         }
 
-        Logging.info("Parameters Count: " + funcNode.parameters.size());
         for (var param : funcNode.parameters) {
             collectFactsOnParameter(param);
         }
@@ -32,11 +34,25 @@ public class IntraSolver {
 
     /**
      * Collect intra-procedural data-flow facts on a parameter or local variable
+     * @param highSym the HighSymbol to collect facts on
      */
     private void collectFactsOnParameter(HighSymbol highSym) {
+        // TODO: fix ghidra's function prototype error.
         HighVariable highVar = highSym.getHighVariable();
-        Logging.info("HighSymbol: " + highSym);
-        Logging.info("HighVariable: " + highVar);
+
+        // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
+        if (highVar == null) {
+            Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + highSym.getName() + " has no HighVariable");
+            return;
+        }
+
+        if (highVar.getInstances().length <= 1) {
+            return;
+        }
+
+        Logging.info("Function: " + funcNode.value.getName());
+        Logging.info("HighSymbol: " + highSym.getName());
+        Logging.info("HighVariable: " + highVar.getName());
 
         var startVarNode = highVar.getRepresentative();
         Logging.info("StartVarNode: " + startVarNode);
@@ -45,7 +61,14 @@ public class IntraSolver {
             Logging.info("Instance: " + instance);
         }
 
+        ctx.addPointerRef(startVarNode, 0);
 
+        while (!ctx.todoList.isEmpty()) {
+            var cur = ctx.todoList.removeFirst();
+            Logging.info("Current PointerRef: " + cur.varnode + " Offset: " + cur.offset);
+            PCodeVisitor visitor = new PCodeVisitor(cur.varnode, ctx);
+            visitor.run();
+        }
 
     }
 }

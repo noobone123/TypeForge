@@ -14,7 +14,7 @@ public class InterSolver {
     public void run() {
         // Testing IntraSolver, Starting from specific function
         for (FunctionNode funcNode : cg.functionNodes) {
-            if (funcNode.value.getName().equals("http_response_handler")) {
+            if (funcNode.value.getName().equals("h1_check_upgrade")) {
                 IntraSolver intraSolver = new IntraSolver(funcNode);
                 intraSolver.solve();
             }
