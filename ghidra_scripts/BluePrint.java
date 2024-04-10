@@ -1,0 +1,64 @@
+import blueprint.solver.InterSolver;
+import ghidra.app.script.GhidraScript;
+import ghidra.program.model.data.DataType;
+import ghidra.program.model.lang.Language;
+import ghidra.program.model.listing.Function;
+
+import blueprint.base.CallGraph;
+import blueprint.base.FunctionNode;
+import blueprint.utils.*;
+
+import javax.swing.*;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+public class BluePrint extends GhidraScript {
+    @Override
+    protected void run() throws Exception {
+
+        if(!Logging.init()) {
+            return;
+        }
+        if (!prepareAnalysis()) {
+            return;
+        }
+
+        List<Function> functions = Global.currentProgram.getListing().getGlobalFunctions("main");
+        if (functions.isEmpty()) {
+            Logging.error("No main function found");
+            return;
+        }
+        Logging.info("Number of main functions: " + functions.size());
+
+        long startTime = System.currentTimeMillis();
+
+        // Function node and CallGraph statistics
+        Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
+        Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
+
+        CallGraph cg = CallGraph.getCallGraph();
+        // Decompile all functions
+        cg.decompileAllFunctions();
+
+        InterSolver interSolver = new InterSolver(cg);
+        interSolver.run();
+
+        long endTime = System.currentTimeMillis();
+
+        Logging.info("Analysis time: " + (endTime - startTime) / 1000.00 + "s");
+    }
+
+    protected boolean prepareAnalysis() {
+        Global.currentProgram = this.currentProgram;
+        Global.flatAPI = this;
+        Language language = this.currentProgram.getLanguage();
+        if (language == null) {
+            Logging.error("Language not found");
+            return false;
+        } else {
+            Logging.info("Language: " + language.getLanguageID());
+            return true;
+        }
+    }
+}

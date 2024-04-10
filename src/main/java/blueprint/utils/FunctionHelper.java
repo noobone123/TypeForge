@@ -15,7 +15,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
 
 public class FunctionHelper {
@@ -78,7 +77,7 @@ public class FunctionHelper {
      */
     public static Set<Function> getMeaningfulFunctions() {
         Set<Function> meaningfulFunctions = new HashSet<>();
-        for (var func : GlobalState.currentProgram.getListing().getFunctions(true)) {
+        for (var func : Global.currentProgram.getListing().getFunctions(true)) {
             if (isMeaningfulFunction(func)) {
                 meaningfulFunctions.add(func);
             }
@@ -104,13 +103,13 @@ public class FunctionHelper {
         boolean noCaller = true;
 
         for (var caller : func.getCallingFunctions(TaskMonitor.DUMMY)) {
-            var callerInsts = GlobalState.currentProgram.getListing().getInstructions(caller.getBody(), true);
+            var callerInsts = Global.currentProgram.getListing().getInstructions(caller.getBody(), true);
             for (var inst : callerInsts) {
                 if (inst.getMnemonicString().equals("CALL")) {
                     var instFlows = inst.getFlows();
                     if (instFlows.length >= 1) {
                         for (var flow : instFlows) {
-                            Function calledFunc = GlobalState.currentProgram.getFunctionManager().getFunctionAt(flow);
+                            Function calledFunc = Global.currentProgram.getFunctionManager().getFunctionAt(flow);
                             if (calledFunc != null && calledFunc.equals(func)) {
                                 noCaller = false;
                                 return noCaller;
@@ -139,57 +138,5 @@ public class FunctionHelper {
         ifc.toggleSyntaxTree(true);
         ifc.setSimplificationStyle("decompile");
         return ifc;
-    }
-
-
-    /**
-     * Dump the SDGraph to a dot file
-     */
-    public static void dumpSDGraph(SDGraph sdg, String filename) {
-        StringBuilder dotBuilder = new StringBuilder();
-
-        Set<NodeBase<DataType>> allNodes = sdg.getAllNodes();
-        Set<SDGraph.SDEdge> allEdges = sdg.getAllEdges();
-
-        dotBuilder.append("digraph SDGraph {\n");
-
-        // traverse all nodes
-        for (var node : allNodes) {
-            if (node instanceof DataTypeNode dtn) {
-                String nodeID = "node" + dtn.id;
-                String nodeLabel = dtn.value.getName();
-                dotBuilder.append(
-                        String.format(
-                                "%s [label=\"%s\"];\n",
-                                nodeID,
-                                nodeLabel
-                        )
-                );
-            }
-        }
-
-        // traverse all edges
-        for (var edge : allEdges) {
-            String srcNodeID = "node" + edge.srcNode.id;
-            String dstNodeID = "node" + edge.dstNode.id;
-            String edgeType = edge.edgeType.toString();
-            String edgeLabel = String.format("Offset %s: %s", Integer.toHexString(edge.offset), edgeType);
-            dotBuilder.append(
-                    String.format(
-                            "%s -> %s [label=\"%s\"];\n",
-                            srcNodeID,
-                            dstNodeID,
-                            edgeLabel
-                    )
-            );
-        }
-
-        dotBuilder.append("}\n");
-
-        try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filename))) {
-            writer.write(dotBuilder.toString());
-        } catch (IOException e) {
-            Logging.error("Failed to write to file: " + filename);
-        }
     }
 }

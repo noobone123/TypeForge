@@ -1,10 +1,7 @@
 package blueprint.utils;
 
-import blueprint.utils.GlobalState;
-
 import ghidra.program.model.data.*;
 
-import javax.xml.crypto.Data;
 import java.util.*;
 
 public class DataTypeHelper {
@@ -75,7 +72,7 @@ public class DataTypeHelper {
      */
     public static Set<DataType> getBuiltInLibTypes() {
         Set <DataType> result = new HashSet<>();
-        var dtm = GlobalState.currentProgram.getDataTypeManager();
+        var dtm = Global.currentProgram.getDataTypeManager();
         var rootCategory = dtm.getRootCategory();
         for (var category : rootCategory.getCategories()) {
             if (!category.getName().equals("DWARF")) {
@@ -99,7 +96,7 @@ public class DataTypeHelper {
         }
 
         Set<DataType> dwarfDataTypes = new HashSet<>();
-        var dtm = GlobalState.currentProgram.getDataTypeManager();
+        var dtm = Global.currentProgram.getDataTypeManager();
 
         var rootCategory = dtm.getRootCategory();
         for (var category : rootCategory.getCategories()) {

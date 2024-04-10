@@ -1,13 +1,10 @@
+import blueprint.utils.*;
 import ghidra.app.script.GhidraScript;
+import ghidra.program.model.data.DataType;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
-import ghidra.program.model.data.DataType;
 
 import blueprint.base.CallGraph;
-import blueprint.utils.GlobalState;
-import blueprint.utils.Logging;
-import blueprint.utils.FunctionHelper;
-import blueprint.utils.DataTypeHelper;
 
 import java.util.HashSet;
 import java.util.List;
@@ -25,7 +22,7 @@ public class statistics extends GhidraScript {
             return;
         }
 
-        List<Function> functions = GlobalState.currentProgram.getListing().getGlobalFunctions("main");
+        List<Function> functions = Global.currentProgram.getListing().getGlobalFunctions("main");
         if (functions.isEmpty()) {
             Logging.error("No main function found");
             return;
@@ -48,48 +45,48 @@ public class statistics extends GhidraScript {
         cg.decompileAllFunctions();
 
         // Function's Parameter and Structure Usage statistics
-//        int parameterCount = 0;
-//        int complexDataTypeAwareParameterCount = 0;
-//        int functionWithComplexTypeParamCounter = 0;
-//        var allUserDefinedComplexTypes = DataTypeHelper.getAllUserDefinedComplexTypes();
-//        Set<DataType> visited = new HashSet<>();
-//
-//        for (var func : cg.functionNodes) {
-//            boolean isComplexDataTypeAware = false;
-//            if (!FunctionHelper.isMeaningfulFunction(func.value)) {
-//                continue;
-//            }
-//
-//            Logging.info("Function: " + func.value.getName());
-//            for (var param : func.parameters) {
-//                var paramDataType = param.getDataType();
-//                parameterCount++;
-//                Logging.info("Parameter: " + paramDataType.getName());
-//                if (DataTypeHelper.isComplexTypeAware(paramDataType)) {
-//                    complexDataTypeAwareParameterCount++;
-//                    isComplexDataTypeAware = true;
-//                    visited.add(DataTypeHelper.getBaseDataType(paramDataType));
-//                }
-//            }
-//
-//            if (isComplexDataTypeAware) {
-//                functionWithComplexTypeParamCounter++;
-//            }
-//        }
-//
-//        Logging.info("Total number of parameters: " + parameterCount);
-//        Logging.info("Total number of complex data type aware parameters: " + complexDataTypeAwareParameterCount);
-//        Logging.info("Total number of complex data type aware functions: " + functionWithComplexTypeParamCounter);
-//        Logging.info("Total number of meaningful functions: " + meaningfulFunctions.size());
-//
-//        Logging.info("Complex data types in function's parameters: " + visited.size());
-//        Logging.info("Total number of user defined complex data types: " + allUserDefinedComplexTypes.size());
-//
-//        for (var dt : allUserDefinedComplexTypes) {
-//            if (!visited.contains(dt)) {
-//                Logging.info("Unused complex data type: " + dt.getName());
-//            }
-//        }
+        int parameterCount = 0;
+        int complexDataTypeAwareParameterCount = 0;
+        int functionWithComplexTypeParamCounter = 0;
+        var allUserDefinedComplexTypes = DataTypeHelper.getAllUserDefinedComplexTypes();
+        Set<DataType> visited = new HashSet<>();
+
+        for (var func : cg.functionNodes) {
+            boolean isComplexDataTypeAware = false;
+            if (!FunctionHelper.isMeaningfulFunction(func.value)) {
+                continue;
+            }
+
+            Logging.info("Function: " + func.value.getName());
+            for (var param : func.parameters) {
+                var paramDataType = param.getDataType();
+                parameterCount++;
+                Logging.info("Parameter: " + paramDataType.getName());
+                if (DataTypeHelper.isComplexTypeAware(paramDataType)) {
+                    complexDataTypeAwareParameterCount++;
+                    isComplexDataTypeAware = true;
+                    visited.add(DataTypeHelper.getBaseDataType(paramDataType));
+                }
+            }
+
+            if (isComplexDataTypeAware) {
+                functionWithComplexTypeParamCounter++;
+            }
+        }
+
+        Logging.info("Total number of parameters: " + parameterCount);
+        Logging.info("Total number of complex data type aware parameters: " + complexDataTypeAwareParameterCount);
+        Logging.info("Total number of complex data type aware functions: " + functionWithComplexTypeParamCounter);
+        Logging.info("Total number of meaningful functions: " + meaningfulFunctions.size());
+
+        Logging.info("Complex data types in function's parameters: " + visited.size());
+        Logging.info("Total number of user defined complex data types: " + allUserDefinedComplexTypes.size());
+
+        for (var dt : allUserDefinedComplexTypes) {
+            if (!visited.contains(dt)) {
+                Logging.info("Unused complex data type: " + dt.getName());
+            }
+        }
 
 
 
@@ -113,8 +110,8 @@ public class statistics extends GhidraScript {
     }
 
     protected boolean prepareAnalysis() {
-        GlobalState.currentProgram = this.currentProgram;
-        GlobalState.flatAPI = this;
+        Global.currentProgram = this.currentProgram;
+        Global.flatAPI = this;
         Language language = this.currentProgram.getLanguage();
         if (language == null) {
             Logging.error("Language not found");
@@ -125,7 +122,8 @@ public class statistics extends GhidraScript {
         }
     }
 
-    private void dumpCallGraphInfo(CallGraph cg) {
+
+    public static void dumpCallGraphInfo(CallGraph cg) {
         Logging.info(String.format(
                 "Call Graph root count: %d",
                 cg.roots.size()

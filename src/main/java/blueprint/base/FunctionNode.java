@@ -27,6 +27,7 @@ public class FunctionNode extends NodeBase<Function> {
         if (this.hFunc == null) {
             this.hFunc = hFunc;
             parsePrototype();
+            parseLocalVariable();
         }
     }
 
@@ -52,17 +53,7 @@ public class FunctionNode extends NodeBase<Function> {
             var param = funcProto.getParam(i);
             parameters.add(param);
         }
-
         returnStorage = funcProto.getReturnStorage();
-
-        var localSymMap = hFunc.getLocalSymbolMap();
-        for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
-            var sym = it.next();
-            if (parameters.contains(sym)) {
-                continue;
-            }
-            localVariables.add(sym);
-        }
 
         // Commit to database, then types and return can be found in Listing model
         // And Information can be accessed by Function.getParameters()
@@ -74,5 +65,20 @@ public class FunctionNode extends NodeBase<Function> {
         }
 
         assert value.getParameters().length == parameters.size();
+    }
+
+    /**
+     * Parse local variables from HighFunction.
+     * !IMPORTANT: This method should be called after `parsePrototype` method.
+     */
+    private void parseLocalVariable() {
+        var localSymMap = hFunc.getLocalSymbolMap();
+        for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
+            var sym = it.next();
+            if (parameters.contains(sym)) {
+                continue;
+            }
+            localVariables.add(sym);
+        }
     }
 }

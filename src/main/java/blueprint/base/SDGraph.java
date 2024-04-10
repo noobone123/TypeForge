@@ -2,8 +2,6 @@ package blueprint.base;
 
 import java.util.*;
 
-import blueprint.utils.GlobalState;
-
 import blueprint.utils.Logging;
 import ghidra.program.model.data.*;
 import ghidra.program.model.data.Enum;

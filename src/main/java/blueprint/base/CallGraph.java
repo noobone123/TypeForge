@@ -1,6 +1,6 @@
 package blueprint.base;
 
-import blueprint.utils.GlobalState;
+import blueprint.utils.Global;
 import blueprint.utils.FunctionHelper;
 import blueprint.utils.Logging;
 
@@ -35,7 +35,7 @@ public class CallGraph extends GraphBase<Function> {
     public static CallGraph getCallGraph() {
         Set<Function> possibleRoots = new HashSet<>();
 
-        for (var func : GlobalState.currentProgram.getListing().getFunctions(true)) {
+        for (var func : Global.currentProgram.getListing().getFunctions(true)) {
             // These functions should not be seen as root nodes of a call graph
             if (!FunctionHelper.isMeaningfulFunction(func)) {
                 continue;
@@ -67,7 +67,7 @@ public class CallGraph extends GraphBase<Function> {
     public void decompileAllFunctions() {
         DecompInterface ifc = FunctionHelper.setUpDecompiler(null);
         try {
-            if (!ifc.openProgram(GlobalState.currentProgram)) {
+            if (!ifc.openProgram(Global.currentProgram)) {
                 Logging.error("Failed to use the decompiler");
                 return;
             }
@@ -119,7 +119,7 @@ public class CallGraph extends GraphBase<Function> {
     public void buildCallGraph(Function root) {
         LinkedList<Function> workList = new LinkedList<>();
         Set<Function> visited = new HashSet<>();
-        var currentProgram = GlobalState.currentProgram;
+        var currentProgram = Global.currentProgram;
 
         workList.add(root);
         visited.add(root);
