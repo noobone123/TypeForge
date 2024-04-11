@@ -28,17 +28,16 @@ public class PCodeVisitor {
             var opcode = pcodeOp.getOpcode();
 
             Logging.info("Desc PcodeOp: " + pcodeOp);
-            Logging.info("Output: " + output);
-            Logging.info("Inputs: ");
-            for (var input : inputs) {
-                Logging.info("\t" + input.toString());
-            }
-            Logging.info("Opcode: " + opcode);
 
             switch (opcode) {
                 case PcodeOp.INT_SUB:
                 case PcodeOp.INT_ADD:
                     Logging.info("Found an addition or subtraction operation");
+                    if (!inputs[1].isConstant()) {
+                        break;
+                    }
+
+
             }
 
         }

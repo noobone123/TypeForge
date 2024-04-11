@@ -34,6 +34,8 @@ public class IntraSolver {
 
     /**
      * Collect intra-procedural data-flow facts on a parameter or local variable
+     * This Analysis is an on-demand analysis, because we only collect facts on
+     * Parameters / Variables we are interested in.
      * @param highSym the HighSymbol to collect facts on
      */
     private void collectFactsOnParameter(HighSymbol highSym) {
@@ -46,9 +48,9 @@ public class IntraSolver {
             return;
         }
 
-        if (highVar.getInstances().length <= 1) {
-            return;
-        }
+//        if (highVar.getInstances().length <= 1) {
+//            return;
+//        }
 
         Logging.info("Function: " + funcNode.value.getName());
         Logging.info("HighSymbol: " + highSym.getName());
