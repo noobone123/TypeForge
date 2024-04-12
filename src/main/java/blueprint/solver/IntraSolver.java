@@ -13,7 +13,7 @@ import groovy.util.logging.Log;
 public class IntraSolver {
 
     private final FunctionNode funcNode;
-    private Context ctx;
+    private final Context ctx;
 
     public IntraSolver(FunctionNode funcNode) {
         this.funcNode = funcNode;
@@ -48,29 +48,11 @@ public class IntraSolver {
             return;
         }
 
-//        if (highVar.getInstances().length <= 1) {
-//            return;
-//        }
-
         Logging.info("Function: " + funcNode.value.getName());
         Logging.info("HighSymbol: " + highSym.getName());
-        Logging.info("HighVariable: " + highVar.getName());
 
-        var startVarNode = highVar.getRepresentative();
-        Logging.info("StartVarNode: " + startVarNode);
-
-        for (var instance : highVar.getInstances()) {
-            Logging.info("Instance: " + instance);
-        }
-
-        ctx.addPointerRef(startVarNode, 0);
-
-        while (!ctx.todoList.isEmpty()) {
-            var cur = ctx.todoList.removeFirst();
-            Logging.info("Current PointerRef: " + cur.varnode + " Offset: " + cur.offset);
-            PCodeVisitor visitor = new PCodeVisitor(cur.varnode, ctx);
-            visitor.run();
-        }
-
+        // Collect dataflow-facts from specific VarNode
+        PCodeVisitor visitor = new PCodeVisitor(highVar, ctx);
+        visitor.run();
     }
 }
