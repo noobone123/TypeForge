@@ -6,10 +6,10 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="BluePrint" level="info" additivity="false">>
+        <Logger name="BluePrint" level="debug" additivity="false">>
             <AppenderRef ref="Console"/>
         </Logger>
-        <Root level="error">
+        <Root level="warn">
             <AppenderRef ref="Console"/>
         </Root>
     </Loggers>

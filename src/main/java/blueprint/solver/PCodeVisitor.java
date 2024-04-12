@@ -4,10 +4,9 @@ import blueprint.utils.Logging;
 import ghidra.program.model.pcode.HighVariable;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
-import groovy.util.logging.Log;
+import ghidra.program.model.pcode.VarnodeAST;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 
@@ -31,23 +30,31 @@ public class PCodeVisitor {
             varnode = ref;
             offset = off;
         }
+
+        @Override
+        public String toString() {
+            return "PointerRef{" +
+                    "varnode=" + varnode +
+                    ", offset=" + Long.toHexString(offset) +
+                    '}';
+        }
     }
 
     public HighVariable root;
     public Context ctx;
-    public ArrayList<PointerRef> todoList;
-    public HashSet<Varnode> doneList;
+    public ArrayList<PointerRef> workList;
+    public HashSet<Varnode> visited;
 
     public PCodeVisitor(HighVariable highVar, Context ctx) {
         this.root = highVar;
         this.ctx = ctx;
 
-        todoList = new ArrayList<>();
-        doneList = new HashSet<>();
+        workList = new ArrayList<>();
+        visited = new HashSet<>();
 
-        todoList.add(new PointerRef(root.getRepresentative(), 0));
+        workList.add(new PointerRef(root.getRepresentative(), 0));
 
-        Logging.info("Visiting HighVariable: " + root.getName());
+        Logging.debug("Visiting HighVariable: " + root.getName());
 
         // TODO: should we add the root's instances to the todoList?
     }
@@ -55,9 +62,12 @@ public class PCodeVisitor {
 
     public void run() {
 
-        while (!todoList.isEmpty()) {
-            PointerRef cur = todoList.remove(0);
-            Logging.info("Current Varnode: " + cur.varnode.toString() + " Offset: " + cur.offset);
+        while (!workList.isEmpty()) {
+            PointerRef cur = workList.remove(0);
+            Logging.debug(String.format(
+                    "[Varnode] Current varnodeAST-%d %s with offset 0x%x to worklist",
+                    ((VarnodeAST)cur.varnode).getUniqueId(), cur.varnode, cur.offset));
+
             if (cur.varnode == null) {
                 continue;
             }
@@ -65,16 +75,16 @@ public class PCodeVisitor {
             Iterator<PcodeOp> desc = cur.varnode.getDescendants();
             while (desc.hasNext()) {
                 PcodeOp pcodeOp = desc.next();
-                Varnode output = pcodeOp.getOutput();
-                Varnode[] inputs = pcodeOp.getInputs();
-
-                Logging.info("PCodeOp: " + pcodeOp.toString());
+                Logging.debug("PCodeOp: " + pcodeOp.toString());
 
                 switch (pcodeOp.getOpcode()) {
                     case PcodeOp.INT_ADD:
                     case PcodeOp.INT_SUB:
-                        handleAddOrSub(output, inputs);
+                        handleAddOrSub(cur, pcodeOp);
                         break;
+                    case PcodeOp.CAST:
+                    case PcodeOp.COPY:
+                        handleAssign(cur, pcodeOp);
                 }
 
             }
@@ -85,7 +95,98 @@ public class PCodeVisitor {
     }
 
 
-    private void handleAddOrSub(Varnode output, Varnode[] inputs) {
-        // Do something with the addition or subtraction operation
+    /**
+     * If parameter is an ADD or SUB operation, we can calculate the new offset
+     * But remember, only varnode_1 = varnode_0 + const is not enough to prove that
+     * varnode_0 is a base address of structure.
+     * For example:
+     * b = a + 4 is just a simple arithmetic operation, it does not mean that `a` is a base address of a structure.
+     * But if there is a load/store operation like:
+     * c = *(a + 4) or *(a + 4) = c, then we can say that `a` is a base address of a structure.
+     * @param cur the current PointerRef
+     * @param pcodeOp the PCodeOp
+     */
+    private void handleAddOrSub(PointerRef cur, PcodeOp pcodeOp) {
+        Varnode[] inputs = pcodeOp.getInputs();
+        Varnode output = pcodeOp.getOutput();
+        long newOff;
+        if (!inputs[1].isConstant()) {
+            return;
+        }
+        newOff = cur.offset +
+            (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
+
+        if (!OffsetSanityCheck(newOff)) {
+            return;
+        }
+
+        updateWorkList(output, newOff);
     }
+
+
+    private void handleAssign(PointerRef cur, PcodeOp pcodeOp) {
+        Varnode output = pcodeOp.getOutput();
+        updateWorkList(output, cur.offset);
+    }
+
+
+    /**
+     * Update worklist.
+     * Be careful, some varnode looks identical, but actually they have different uniqueId.
+     * So they are different varnodes.
+     * @param output the output varnode which is going to be added to worklist
+     * @param offset the offset of the output varnode
+     */
+    private void updateWorkList(Varnode output, long offset) {
+        if (!(output instanceof VarnodeAST ast)) {
+            Logging.warn("Varnode is not VarnodeAST: " + output.toString());
+            return;
+        }
+        if (visited.contains(output)) {
+            return;
+        }
+        workList.add(new PointerRef(output, offset));
+        Logging.debug(String.format(
+                "[WorkList] Adding varnodeAST-%d %s with offset 0x%x to worklist",
+                ast.getUniqueId(), ast, offset));
+
+        visited.add(output);
+    }
+
+
+    /**
+     * Get Signed value of a const varnode
+     * @param varnode the const varnode
+     * @return signed value
+     */
+    private long getSigned(Varnode varnode) {
+        assert varnode.isConstant();
+        // mask the sign bit
+        long mask = 0x80L << ((varnode.getSize() - 1) * 8);
+        // constant's value is actually unsigned offset in pcode's address space
+        long value = varnode.getOffset();
+        if ((value & mask) != 0) {
+            value |= (0xffffffffffffffffL << ((varnode.getSize() - 1) * 8));
+        }
+        return value;
+    }
+
+
+    /**
+     * Check if the offset is sane to be a structure offset
+     * @param offset the offset
+     * @return true if the offset is sane
+     */
+    private boolean OffsetSanityCheck(long offset) {
+        if (offset < 0) {
+            return false;
+        }
+        // TODO: 0x2000 is a reasonable limit for a structure ?
+        else if (offset > 0x2000) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
 }
