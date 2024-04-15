@@ -1,6 +1,8 @@
 package blueprint.solver;
 
+import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Logging;
+import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighVariable;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
@@ -14,7 +16,7 @@ public class PCodeVisitor {
 
     /**
      * VarNode with data-flow traceable to original pointer.
-     * For example, If there is an statement like following:
+     * For example, If there is a statement like following:
      * <p>
      *     <code> varnode_1 = *(varnode_0 + 4) </code>
      *     <code> varnode_2 = *(varnode_1 + 4) </code>
@@ -48,7 +50,6 @@ public class PCodeVisitor {
     public PCodeVisitor(HighVariable highVar, Context ctx) {
         this.root = highVar;
         this.ctx = ctx;
-
         workList = new ArrayList<>();
         visited = new HashSet<>();
 
@@ -85,6 +86,10 @@ public class PCodeVisitor {
                     case PcodeOp.CAST:
                     case PcodeOp.COPY:
                         handleAssign(cur, pcodeOp);
+                        break;
+                    case PcodeOp.LOAD:
+                        handleLoad(cur, pcodeOp);
+                        break;
                 }
 
             }
@@ -127,6 +132,21 @@ public class PCodeVisitor {
     private void handleAssign(PointerRef cur, PcodeOp pcodeOp) {
         Varnode output = pcodeOp.getOutput();
         updateWorkList(output, cur.offset);
+    }
+
+    private void handleLoad(PointerRef cur, PcodeOp pcodeOp) {
+        Varnode output = pcodeOp.getOutput();
+
+        // The amount of data loaded by this instruction is determined by the size of the output variable
+        DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
+
+        if (ctx.addDataType(root, cur.offset, outDT)) {
+            Logging.info(String.format(
+                    "[AddDataType] Adding data type %s at offset 0x%x to structure %s",
+                    outDT.getName(), cur.offset, root.getName()));
+        }
+
+
     }
 
 
@@ -182,11 +202,7 @@ public class PCodeVisitor {
             return false;
         }
         // TODO: 0x2000 is a reasonable limit for a structure ?
-        else if (offset > 0x2000) {
-            return false;
-        } else {
-            return true;
-        }
+        else return offset <= 0x2000;
     }
 
 }
