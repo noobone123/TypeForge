@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+
+import ghidra.program.model.data.DataType;
+import ghidra.program.model.pcode.HighVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
@@ -71,5 +74,12 @@ public class Logging {
      */
     public static void debug(String msg) {
         defaultLogger.debug(msg);
+    }
+
+
+    public static void collectTypeLog(HighVariable highVar, Long offset, DataType dataType) {
+        String msg = String.format("[Collector] HighVariable: %s, Offset: 0x%x, DataType: %s, Size: 0x%x",
+                highVar.getName(), offset, dataType.getName(), dataType.getLength());
+        Logging.info(msg);
     }
 }

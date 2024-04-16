@@ -93,6 +93,11 @@ public class PCodeVisitor {
                     case PcodeOp.STORE:
                         handleStore(cur, pcodeOp);
                         break;
+                    case PcodeOp.PTRADD:
+                        handlePtrAdd(cur, pcodeOp);
+                        break;
+                    case PcodeOp.PTRSUB:
+                        handlePtrSub(cur, pcodeOp);
                 }
 
             }
@@ -139,21 +144,23 @@ public class PCodeVisitor {
 
 
     /**
-     * If pcodeOp is a LOAD operation, it's possible that the offset is a field of a structure.
+     * If pcodeOp is a LOAD or STORE operation, it's possible that the offset is a field of a structure.
      * For instance:
      * <p>
      *     <code> varnode_1 = *(varnode_0 + 4) </code>
+     *     <code> *(varnode_1 + 4) = varnode_2 </code>
      * </p>
-     * And type of this field is determined by the type of output variable.
-     * However, be aware that some case might be loaded into a context even if they aren't
+     * And type of this field is determined by the type of loaded/stored varnode's type.
+     * However, be aware that some case might be loaded/store into a context even if they aren't
      * fields of a structure.
      * For instance:
      * <p>
      *     <code> varnode_1 = *varnode_0 </code>
+     *     <code> *varnode_1 = varnode_2 </code>
      * </p>
      * Such cases can be excluded in later stages.
      * @param cur The current PointerRef
-     * @param pcodeOp The LOAD PCodeOp
+     * @param pcodeOp The PCodeOp
      */
     private void handleLoad(PointerRef cur, PcodeOp pcodeOp) {
         Varnode output = pcodeOp.getOutput();
@@ -162,16 +169,61 @@ public class PCodeVisitor {
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
         if (ctx.addDataType(root, cur.offset, outDT)) {
-            Logging.info(String.format(
-                    "[AddDataType] Adding data type %s at offset 0x%x to structure %s",
-                    outDT.getName(), cur.offset, root.getName()));
+            Logging.collectTypeLog(root, cur.offset, outDT);
         }
     }
 
-
+    /**
+     * Same as handleLoad, but for STORE operation
+     */
     private void handleStore(PointerRef cur, PcodeOp pcodeOp) {
-        // pass
+        // the slot index of cur.varnode is 1, which means that this varnode
+        // represent the memory location to be stored
+        if (pcodeOp.getSlot(cur.varnode) != 1) {
+            return;
+        }
+        var storedValue = pcodeOp.getInput(2);
+        var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(storedValue);
 
+        if (ctx.addDataType(root, cur.offset, storedValueDT)) {
+            Logging.collectTypeLog(root, cur.offset, storedValueDT);
+        }
+    }
+
+    /**
+     * Handle PTRADD operation. In PTRADD operation,
+     * output = input0 + input1 * input2, where input0 is array's base address, input1 is index
+     * and input2 is element size.
+     * @param cur The current PointerRef
+     * @param pcodeOp The PCodeOp
+     */
+    private void handlePtrAdd(PointerRef cur, PcodeOp pcodeOp) {
+        Varnode[] inputs = pcodeOp.getInputs();
+        if (!inputs[1].isConstant() || !inputs[2].isConstant()) {
+            return;
+        }
+        var newOff = cur.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
+        if (OffsetSanityCheck(newOff)) {
+            updateWorkList(pcodeOp.getOutput(), newOff);
+        }
+    }
+
+    /**
+     * A PTRSUB performs the simple pointer calculation, input0 + input1
+     * Input0 is a pointer to the beginning of the structure, and input1 is a byte offset to the subcomponent.
+     * As an operation, PTRSUB produces a pointer to the subcomponent and stores it in output.
+     * @param cur The current PointerRef
+     * @param pcodeOp The PCodeOp
+     */
+    private void handlePtrSub(PointerRef cur, PcodeOp pcodeOp) {
+        Varnode[] inputs = pcodeOp.getInputs();
+        if (!inputs[1].isConstant()) {
+            return;
+        }
+        var newOff = cur.offset + getSigned(inputs[1]);
+        if (OffsetSanityCheck(newOff)) {
+            updateWorkList(pcodeOp.getOutput(), newOff);
+        }
     }
 
 
