@@ -18,7 +18,7 @@ public class Context {
     /**
      * For Example:
      * <p>
-     *     Symbol1 -> {
+     *     HighVariable1 -> {
      *         Offset_1 -> Set of data types
      *         Offset_2 -> Set of data types
      *         ...

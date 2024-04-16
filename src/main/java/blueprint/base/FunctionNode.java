@@ -16,6 +16,11 @@ public class FunctionNode extends NodeBase<Function> {
     public VariableStorage returnStorage = null;
     public Set<HighSymbol> localVariables = new HashSet<>();
 
+    /** Whether the function is a leaf node in the call graph */
+    public boolean isLeaf = false;
+
+    public boolean isMeaningful = false;
+
     HighFunction hFunc = null;
 
     public FunctionNode(Function value, int id) {

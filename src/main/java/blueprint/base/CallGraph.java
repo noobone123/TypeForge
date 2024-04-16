@@ -25,6 +25,8 @@ public class CallGraph extends GraphBase<Function> {
     /** Possible root nodes of the call graph */
     public Set<Function> roots;
 
+    public Set<FunctionNode> leafNodes = new HashSet<>();
+
     /**
      * Get the Whole Program's call graph.
      * We did not resolve indirect calls here, and we consider each function
@@ -108,6 +110,20 @@ public class CallGraph extends GraphBase<Function> {
 
         for (Function root : roots) {
             buildCallGraph(root);
+        }
+
+
+        // Update FunctionNode's property
+        for (var funcNode : functionNodes) {
+            if (funcNode.succ.isEmpty()) {
+                funcNode.isLeaf = true;
+                leafNodes.add(funcNode);
+            }
+
+            if (FunctionHelper.isMeaningfulFunction(funcNode.value)) {
+                funcNode.isMeaningful = true;
+            }
+
         }
     }
 
