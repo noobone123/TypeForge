@@ -90,6 +90,9 @@ public class PCodeVisitor {
                     case PcodeOp.LOAD:
                         handleLoad(cur, pcodeOp);
                         break;
+                    case PcodeOp.STORE:
+                        handleStore(cur, pcodeOp);
+                        break;
                 }
 
             }
@@ -134,6 +137,24 @@ public class PCodeVisitor {
         updateWorkList(output, cur.offset);
     }
 
+
+    /**
+     * If pcodeOp is a LOAD operation, it's possible that the offset is a field of a structure.
+     * For instance:
+     * <p>
+     *     <code> varnode_1 = *(varnode_0 + 4) </code>
+     * </p>
+     * And type of this field is determined by the type of output variable.
+     * However, be aware that some case might be loaded into a context even if they aren't
+     * fields of a structure.
+     * For instance:
+     * <p>
+     *     <code> varnode_1 = *varnode_0 </code>
+     * </p>
+     * Such cases can be excluded in later stages.
+     * @param cur The current PointerRef
+     * @param pcodeOp The LOAD PCodeOp
+     */
     private void handleLoad(PointerRef cur, PcodeOp pcodeOp) {
         Varnode output = pcodeOp.getOutput();
 
@@ -145,7 +166,11 @@ public class PCodeVisitor {
                     "[AddDataType] Adding data type %s at offset 0x%x to structure %s",
                     outDT.getName(), cur.offset, root.getName()));
         }
+    }
 
+
+    private void handleStore(PointerRef cur, PcodeOp pcodeOp) {
+        // pass
 
     }
 
