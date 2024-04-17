@@ -61,5 +61,7 @@ public class IntraSolver {
         // Collect dataflow-facts from specific VarNode
         PCodeVisitor visitor = new PCodeVisitor(highVar, ctx);
         visitor.run();
+
+        Logging.info(ctx.get(highVar).toString());
     }
 }

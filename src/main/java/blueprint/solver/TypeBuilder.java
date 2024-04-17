@@ -42,4 +42,19 @@ public class TypeBuilder {
 
         return fieldMap.get(offset).add(dt);
     }
+    
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("TypeBuilder{");
+        // sort the fieldMap by offset
+        var sortedFieldMap = new LinkedList<>(fieldMap.keySet());
+        sortedFieldMap.sort(Long::compareTo);
+        for (var offset : sortedFieldMap) {
+            sb.append("\n\tOffset_").append(Long.toHexString(offset)).append(" -> ");
+            sb.append(fieldMap.get(offset));
+        }
+        sb.append("\n}");
+        return sb.toString();
+    }
 }
