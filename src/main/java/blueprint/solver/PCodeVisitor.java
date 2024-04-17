@@ -9,6 +9,7 @@ import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.pcode.VarnodeAST;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 
@@ -43,11 +44,11 @@ public class PCodeVisitor {
     }
 
     public HighVariable root;
-    public Context ctx;
+    public HashMap<HighVariable, TypeBuilder> ctx;
     public ArrayList<PointerRef> workList;
     public HashSet<Varnode> visited;
 
-    public PCodeVisitor(HighVariable highVar, Context ctx) {
+    public PCodeVisitor(HighVariable highVar, HashMap<HighVariable, TypeBuilder> ctx) {
         this.root = highVar;
         this.ctx = ctx;
         workList = new ArrayList<>();
@@ -168,7 +169,7 @@ public class PCodeVisitor {
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
-        if (ctx.addDataType(root, cur.offset, outDT)) {
+        if (ctx.get(root).addDataType(cur.offset, outDT)) {
             Logging.collectTypeLog(root, cur.offset, outDT);
         }
     }
@@ -185,7 +186,7 @@ public class PCodeVisitor {
         var storedValue = pcodeOp.getInput(2);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(storedValue);
 
-        if (ctx.addDataType(root, cur.offset, storedValueDT)) {
+        if (ctx.get(root).addDataType(cur.offset, storedValueDT)) {
             Logging.collectTypeLog(root, cur.offset, storedValueDT);
         }
     }

@@ -3,14 +3,29 @@ package blueprint.solver;
 import blueprint.base.CallGraph;
 import blueprint.base.FunctionNode;
 import blueprint.utils.Logging;
+import ghidra.program.model.pcode.HighVariable;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.Map;
+import java.util.HashMap;
 
 public class InterSolver {
     CallGraph cg;
 
-    public Map<Long, HashMap<>>
+    Set<TypeBuilder> allTypes;
+
+    /**
+     * Following 2 maps are used to store the relationship between HighVariable and TypeBuilder
+     */
+    Map<TypeBuilder, Set<HighVariable>> typeToVars;
+    Map<HighVariable, TypeBuilder> varToType;
 
     public InterSolver(CallGraph cg) {
         this.cg = cg;
+        allTypes = new HashSet<>();
+        typeToVars = new HashMap<>();
+        varToType = new HashMap<>();
     }
 
 

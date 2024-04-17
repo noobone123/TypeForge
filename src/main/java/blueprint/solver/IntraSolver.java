@@ -2,10 +2,12 @@ package blueprint.solver;
 
 import blueprint.base.FunctionNode;
 import blueprint.utils.Logging;
+import blueprint.solver.TypeBuilder;
+
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.HighVariable;
-import ghidra.program.model.pcode.PcodeBlock;
-import groovy.util.logging.Log;
+
+import java.util.HashMap;
 
 /**
  * Class for intra-procedural analysis
@@ -13,11 +15,11 @@ import groovy.util.logging.Log;
 public class IntraSolver {
 
     private final FunctionNode funcNode;
-    private final Context ctx;
+    private final HashMap<HighVariable, TypeBuilder> ctx;
 
     public IntraSolver(FunctionNode funcNode) {
         this.funcNode = funcNode;
-        ctx = new Context();
+        ctx = new HashMap<>();
     }
 
     public void solve() {
@@ -41,6 +43,11 @@ public class IntraSolver {
     private void collectFactsOnParameter(HighSymbol highSym) {
         // TODO: fix ghidra's function prototype error.
         HighVariable highVar = highSym.getHighVariable();
+
+        // Initialize TypeBuilder for HighVariable
+        if (!ctx.containsKey(highVar)) {
+            ctx.put(highVar, new TypeBuilder());
+        }
 
         // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
         if (highVar == null) {
