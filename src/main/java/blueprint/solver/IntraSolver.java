@@ -34,6 +34,20 @@ public class IntraSolver {
         }
     }
 
+
+    /**
+     * Get the context of the intra-procedural analysis
+     * @return The HashMap of HighVariable and TypeBuilder in the function.
+     */
+    public HashMap<HighVariable, TypeBuilder> getCtx() {
+        for (var entry : ctx.entrySet()) {
+            Logging.info("HighVariable: " + entry.getKey().getName());
+            Logging.info("TypeBuilder: " + entry.getValue().toString());
+        }
+        return ctx;
+    }
+
+
     /**
      * Collect intra-procedural data-flow facts on a parameter or local variable
      * This Analysis is an on-demand analysis, because we only collect facts on
@@ -61,7 +75,5 @@ public class IntraSolver {
         // Collect dataflow-facts from specific VarNode
         PCodeVisitor visitor = new PCodeVisitor(highVar, ctx);
         visitor.run();
-
-        Logging.info(ctx.get(highVar).toString());
     }
 }

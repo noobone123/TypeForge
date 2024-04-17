@@ -37,6 +37,10 @@ public class InterSolver {
                 if (funcNode.value.getName().equals("network_merge_config_cpv")) {
                     IntraSolver intraSolver = new IntraSolver(funcNode);
                     intraSolver.solve();
+                    // var ctx = intraSolver.getCtx();
+
+                    // Testing of Decompiler
+
                 }
             }
         }

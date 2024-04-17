@@ -14,11 +14,12 @@ import java.util.Map;
 public class TypeBuilder {
 
     /**
-     * fieldMap stores the possible data types of the fields in the structure.
+     * fieldMap stores the possible data types and corresponding accessed time of each fields in the structure.
      * For Example:
      * <p>
      * fieldMap {
-     *     Offset_1 -> Map{DataType_1 -> access 1 time, ... , DataType_n -> access n times
+     *     Offset_1 -> Map{DataType_1 -> accessed 1 time, ... , DataType_n -> accessed n times},
+     *     Offset_2 -> Map{uint32 -> 1, int -> 10, ...},
      *     ...
      * }
      * </p>
@@ -50,7 +51,7 @@ public class TypeBuilder {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("TypeBuilder{");
+        sb.append("TypeBuilder {");
         // sort the fieldMap by offset
         var sortedFieldMap = new LinkedList<>(fieldMap.keySet());
         sortedFieldMap.sort(Long::compareTo);
