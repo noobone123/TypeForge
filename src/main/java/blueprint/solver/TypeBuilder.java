@@ -1,11 +1,15 @@
 package blueprint.solver;
 
+import blueprint.utils.Logging;
+
 import ghidra.program.model.data.DataType;
 
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.HashMap;
+import java.util.HashMap;
 import java.util.Set;
+import java.util.Map;
 
 public class TypeBuilder {
 
@@ -14,16 +18,12 @@ public class TypeBuilder {
      * For Example:
      * <p>
      * fieldMap {
-     *     Offset_1 -> Set<DataType>
-     *     Offset_2 -> Set<uint, int, unknown32>
-     *     Offset_3 -> Set<uchar, char, unknown32>
-     *     Offset_4 -> Set<void*, ObjectA *, ObjectB *, ObjectC *>
+     *     Offset_1 -> Map{DataType_1 -> access 1 time, ... , DataType_n -> access n times
      *     ...
-     *     Offset_n -> Set<char[32], short[16], int[8], long[4]>
      * }
      * </p>
      */
-    private final HashMap<Long, Set<DataType>> fieldMap;
+    private final HashMap<Long, Map<DataType, Integer>> fieldMap;
 
     public TypeBuilder() {
         fieldMap = new HashMap<>();
@@ -33,14 +33,18 @@ public class TypeBuilder {
      * Add a data type to the context
      * @param offset the offset of the field
      * @param dt the field's data type
-     * @return true if the data type is added successfully
      */
-    public boolean addDataType(long offset, DataType dt) {
+    public void addDataType(long offset, DataType dt) {
         if (!fieldMap.containsKey(offset)) {
-            fieldMap.put(offset, new HashSet<>());
+            fieldMap.put(offset, new HashMap<>());
         }
 
-        return fieldMap.get(offset).add(dt);
+        var typeCountMap = fieldMap.get(offset);
+        if (!typeCountMap.containsKey(dt)) {
+            typeCountMap.put(dt, 1);
+        } else {
+            typeCountMap.put(dt, typeCountMap.get(dt) + 1);
+        }
     }
     
     @Override
@@ -51,8 +55,12 @@ public class TypeBuilder {
         var sortedFieldMap = new LinkedList<>(fieldMap.keySet());
         sortedFieldMap.sort(Long::compareTo);
         for (var offset : sortedFieldMap) {
-            sb.append("\n\tOffset_").append(Long.toHexString(offset)).append(" -> ");
-            sb.append(fieldMap.get(offset));
+            sb.append("\n\tOffset_0x").append(Long.toHexString(offset)).append(" -> ");
+            sb.append("{");
+            for (var entry : fieldMap.get(offset).entrySet()) {
+                sb.append(entry.getKey().getName()).append(":").append(entry.getValue()).append(", ");
+            }
+            sb.append("}");
         }
         sb.append("\n}");
         return sb.toString();

@@ -169,9 +169,8 @@ public class PCodeVisitor {
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
-        if (ctx.get(root).addDataType(cur.offset, outDT)) {
-            Logging.collectTypeLog(root, cur.offset, outDT);
-        }
+        ctx.get(root).addDataType(cur.offset, outDT);
+        Logging.collectTypeLog(root, cur.offset, outDT);
     }
 
     /**
@@ -186,9 +185,8 @@ public class PCodeVisitor {
         var storedValue = pcodeOp.getInput(2);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(storedValue);
 
-        if (ctx.get(root).addDataType(cur.offset, storedValueDT)) {
-            Logging.collectTypeLog(root, cur.offset, storedValueDT);
-        }
+        ctx.get(root).addDataType(cur.offset, storedValueDT);
+        Logging.collectTypeLog(root, cur.offset, storedValueDT);
     }
 
     /**
