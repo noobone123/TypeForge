@@ -1,5 +1,6 @@
 package blueprint.base;
 
+import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
 import blueprint.utils.FunctionHelper;
 import blueprint.utils.Logging;
@@ -13,9 +14,6 @@ import ghidra.program.model.pcode.HighFunction;
 import ghidra.util.task.TaskMonitor;
 
 public class CallGraph extends GraphBase<Function> {
-    /** The cache of decompiled high functions */
-    private final Map<Function, HighFunction> highFunctionCache = new HashMap<>();
-
     /** The cache of function nodes */
     public final Set<FunctionNode> functionNodes = new HashSet<>();
 
@@ -67,7 +65,7 @@ public class CallGraph extends GraphBase<Function> {
      * Finally, build the highFunctionCache.
      */
     public void decompileAllFunctions() {
-        DecompInterface ifc = FunctionHelper.setUpDecompiler(null);
+        DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
         try {
             if (!ifc.openProgram(Global.currentProgram)) {
                 Logging.error("Failed to use the decompiler");
@@ -77,22 +75,16 @@ public class CallGraph extends GraphBase<Function> {
             for (var funcNode : functionNodes) {
                 Function func = funcNode.value;
                 HighFunction highFunc = null;
-                if (!highFunctionCache.containsKey(func)) {
-                    DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
-                    if (!decompileRes.decompileCompleted()) {
-                        Logging.error("Decompile failed for function " + func.getName());
-                        continue;
-                    } else {
-                        highFunc = decompileRes.getHighFunction();
-                        highFunctionCache.put(func, highFunc);
-                        Logging.info("Decompile function " + func.getName());
-                    }
+                DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
+                if (!decompileRes.decompileCompleted()) {
+                    Logging.error("Decompile failed for function " + func.getName());
+                    continue;
                 } else {
-                    highFunc = highFunctionCache.get(func);
+                    Logging.info("Decompile function " + func.getName());
+                    funcNode.setDecompileResult(decompileRes);
                 }
-
-                funcNode.setHighFunction(highFunc);
             }
+
         } finally {
             ifc.dispose();
         }

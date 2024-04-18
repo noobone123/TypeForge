@@ -2,8 +2,13 @@ package blueprint.solver;
 
 import blueprint.base.CallGraph;
 import blueprint.base.FunctionNode;
+import blueprint.utils.DataTypeHelper;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
+import ghidra.program.model.pcode.HighFunctionDBUtil;
 import ghidra.program.model.pcode.HighVariable;
+import ghidra.program.model.symbol.SourceType;
+import groovy.util.logging.Log;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -39,8 +44,27 @@ public class InterSolver {
                     intraSolver.solve();
                     // var ctx = intraSolver.getCtx();
 
-                    // Testing of Decompiler
+                    // Testing redecompile and retype.
+                    var dts = DataTypeHelper.getBuiltInLibTypes();
+                    for (var dt : dts) {
+                        if (dt.getName().equals("uint64_t")) {
+                            Logging.info(funcNode.getC());
+                            try {
+                                HighFunctionDBUtil.updateDBVariable(funcNode.parameters.get(0), null, dt, SourceType.USER_DEFINED);
+                                Logging.info("After UpdateDB");
+                                Logging.info(funcNode.getC());
 
+                                funcNode.reDecompile();
+                                Logging.info("After reDecompile");
+                                Logging.info(funcNode.getC());
+
+                            } catch (Exception e) {
+                                Logging.error(e.getMessage());
+                            }
+
+                            break;
+                        }
+                    }
                 }
             }
         }

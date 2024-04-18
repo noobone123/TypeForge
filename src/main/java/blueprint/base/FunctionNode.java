@@ -1,13 +1,18 @@
 package blueprint.base;
 
+import blueprint.utils.DecompilerHelper;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 
+import ghidra.app.decompiler.DecompInterface;
+import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.VariableStorage;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighFunctionDBUtil;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.symbol.SourceType;
+import ghidra.util.task.TaskMonitor;
 
 import java.util.*;
 
@@ -22,18 +27,17 @@ public class FunctionNode extends NodeBase<Function> {
     public boolean isMeaningful = false;
 
     HighFunction hFunc = null;
+    DecompileResults decompileResults = null;
 
     public FunctionNode(Function value, int id) {
         super(value, id);
     }
 
 
-    public void setHighFunction(HighFunction hFunc) {
-        if (this.hFunc == null) {
-            this.hFunc = hFunc;
-            parsePrototype();
-            parseLocalVariable();
-        }
+    public void setDecompileResult (DecompileResults res) {
+        this.decompileResults = res;
+        this.hFunc = res.getHighFunction();
+        parsePrototype();
     }
 
     public HighFunction getHighFunction() {
@@ -89,5 +93,33 @@ public class FunctionNode extends NodeBase<Function> {
             }
             localVariables.add(sym);
         }
+    }
+
+    /**
+     * Redecompilation current funcion.
+     */
+    public void reDecompile() {
+        DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
+        try {
+            if (!ifc.openProgram(Global.currentProgram)) {
+                Logging.error("Failed to use the decompiler");
+                return;
+            }
+
+            DecompileResults decompileRes = ifc.decompileFunction(value, 30, TaskMonitor.DUMMY);
+            if (!decompileRes.decompileCompleted()) {
+                Logging.error("Re-decompile failed for function " + value.getName());
+            } else {
+                Logging.info("Re-decompile function " + value.getName());
+                setDecompileResult(decompileRes);
+            }
+
+        } finally {
+            ifc.dispose();
+        }
+    }
+
+    public String getC() {
+        return decompileResults.getDecompiledFunction().getC();
     }
 }

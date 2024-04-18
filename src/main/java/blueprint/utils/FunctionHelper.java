@@ -122,20 +122,4 @@ public class FunctionHelper {
 
         return noCaller;
     }
-
-
-    /**
-     * For more information about the decompiler, please refer to the official documentation:
-     * <a href="https://ghidra.re/ghidra_docs/api/ghidra/app/decompiler/DecompInterface.html">...</a>
-     * @return DecompInterface
-     */
-    public static DecompInterface setUpDecompiler(DecompileOptions options) {
-        DecompInterface ifc = new DecompInterface();
-        if (options != null) {
-            ifc.setOptions(options);
-        }
-        ifc.toggleCCode(true);
-        ifc.toggleSyntaxTree(true);
-        return ifc;
-    }
 }
