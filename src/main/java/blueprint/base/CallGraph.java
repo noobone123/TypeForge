@@ -9,6 +9,9 @@ import java.util.*;
 
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
+import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressFactory;
+import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.util.task.TaskMonitor;
@@ -19,6 +22,9 @@ public class CallGraph extends GraphBase<Function> {
 
     /** The cache of root nodes to nodes */
     public final Map<Function, Set<Function>> rootToNodes = new HashMap<>();
+
+    /** The cache of address to node */
+    public final Map<Address, FunctionNode> addrToNode = new HashMap<>();
 
     /** Possible root nodes of the call graph */
     public Set<Function> roots;
@@ -116,6 +122,7 @@ public class CallGraph extends GraphBase<Function> {
                 funcNode.isMeaningful = true;
             }
 
+            addrToNode.put(funcNode.value.getEntryPoint(), funcNode);
         }
     }
 
@@ -169,5 +176,10 @@ public class CallGraph extends GraphBase<Function> {
         FunctionNode funcNode = new FunctionNode(value, node_id);
         functionNodes.add(funcNode);
         return funcNode;
+    }
+
+
+    public FunctionNode getNodebyAddr(Address addr) {
+        return addrToNode.get(addr);
     }
 }

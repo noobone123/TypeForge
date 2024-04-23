@@ -6,6 +6,7 @@ import blueprint.base.NodeBase;
 
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileOptions;
+import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.listing.Function;
 import ghidra.util.task.TaskMonitor;
@@ -121,5 +122,10 @@ public class FunctionHelper {
         }
 
         return noCaller;
+    }
+
+
+    public static Address getAddress(long offset) {
+        return Global.currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(offset);
     }
 }

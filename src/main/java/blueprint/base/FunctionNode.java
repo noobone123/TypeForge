@@ -37,7 +37,7 @@ public class FunctionNode extends NodeBase<Function> {
     public void setDecompileResult (DecompileResults res) {
         this.decompileResults = res;
         this.hFunc = res.getHighFunction();
-        parsePrototype();
+        syncPrototype();
     }
 
     public HighFunction getHighFunction() {
@@ -46,12 +46,12 @@ public class FunctionNode extends NodeBase<Function> {
 
 
     /**
-     * Parse function's prototype based on HighFunction.
+     * Sync high function's prototype to database.
      * in Ghidra, function's param and return information will not be stored in `Function` in ghidra listing model.
      * This information can be found in `HighFunction` and we can utilize `HighFunctionDBUtil.commitParamsToDatabase`
      * to sync this information to database.
      */
-    private void parsePrototype() {
+    private void syncPrototype() {
         if (hFunc == null) {
             Logging.warn("HighFunction is not set");
             return;
@@ -69,13 +69,13 @@ public class FunctionNode extends NodeBase<Function> {
         /* WARNING: `commitParamsToDatabase` method may cause some function's wrong prototype be committed to database
                     and wrong prototype will be propagated to other functions. Cause other functions' prototype be wrong.
                     For example: `log_error` is a function that has variable parameters, and using SSE register, it seems
-                    that ghidra performs poorly on recognizing its prototype.
+                    that ghidra performs poorly on recognizing its prototype. */
         try {
             HighFunctionDBUtil.commitParamsToDatabase(hFunc, true, SourceType.DEFAULT);
             HighFunctionDBUtil.commitReturnToDatabase(hFunc, SourceType.DEFAULT);
         } catch (Exception e) {
             Logging.error("Failed to commit parameters and return to database");
-        }  */
+        }
 
         assert value.getParameters().length == parameters.size();
     }
@@ -96,9 +96,9 @@ public class FunctionNode extends NodeBase<Function> {
     }
 
     /**
-     * Redecompilation current funcion.
+     * Decompile current function
      */
-    public void reDecompile() {
+    public void decompile() {
         DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
         try {
             if (!ifc.openProgram(Global.currentProgram)) {
@@ -108,9 +108,9 @@ public class FunctionNode extends NodeBase<Function> {
 
             DecompileResults decompileRes = ifc.decompileFunction(value, 30, TaskMonitor.DUMMY);
             if (!decompileRes.decompileCompleted()) {
-                Logging.error("Re-decompile failed for function " + value.getName());
+                Logging.error("Function decompile failed" + value.getName());
             } else {
-                Logging.info("Re-decompile function " + value.getName());
+                Logging.info("Decompiled function " + value.getName());
                 setDecompileResult(decompileRes);
             }
 

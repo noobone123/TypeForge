@@ -18,7 +18,14 @@ public class IntraSolver {
     private final HashMap<HighVariable, TypeBuilder> ctx;
 
     public IntraSolver(FunctionNode funcNode) {
+        if (funcNode.isLeaf) {
+            Logging.info("Leaf function: " + funcNode.value.getName());
+        } else {
+            Logging.info("Non-leaf function: " + funcNode.value.getName());
+        }
+
         this.funcNode = funcNode;
+        funcNode.decompile();
         ctx = new HashMap<>();
     }
 

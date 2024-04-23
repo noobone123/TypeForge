@@ -38,8 +38,6 @@ public class BluePrint extends GhidraScript {
         Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
 
         CallGraph cg = CallGraph.getCallGraph();
-        // Decompile all functions
-        cg.decompileAllFunctions();
 
         InterSolver interSolver = new InterSolver(cg);
         interSolver.run();
