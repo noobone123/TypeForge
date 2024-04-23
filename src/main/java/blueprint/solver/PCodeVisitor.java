@@ -86,7 +86,11 @@ public class PCodeVisitor {
                         break;
                     case PcodeOp.CAST:
                     case PcodeOp.COPY:
+                        // TODO: if COPY, the two highSymbol should hold the same dataflow facts ?
                         handleAssign(cur, pcodeOp);
+                        break;
+                    case PcodeOp.MULTIEQUAL:
+                        handleMultiEqual(cur, pcodeOp);
                         break;
                     case PcodeOp.LOAD:
                         handleLoad(cur, pcodeOp);
@@ -141,6 +145,11 @@ public class PCodeVisitor {
     private void handleAssign(PointerRef cur, PcodeOp pcodeOp) {
         Varnode output = pcodeOp.getOutput();
         updateWorkList(output, cur.offset);
+    }
+
+
+    private void handleMultiEqual(PointerRef cur, PcodeOp pcodeOp) {
+        // TODO: handle multiEqual
     }
 
 

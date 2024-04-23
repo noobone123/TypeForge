@@ -4,6 +4,7 @@ import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
 
+import java.util.Collection;
 import java.util.HashMap;
 
 /**
@@ -58,5 +59,13 @@ public class Context {
             Logging.info("HighSymbol: " + entry.getKey().getName());
             Logging.info("TypeBuilder: " + entry.getValue().toString());
         }
+    }
+
+    public Collection<HighSymbol> getHighSymbols() {
+        return ctx.keySet();
+    }
+
+    public boolean isEmpty() {
+        return ctx.isEmpty();
     }
 }
