@@ -33,7 +33,6 @@ public class FunctionNode extends NodeBase<Function> {
         super(value, id);
     }
 
-
     public void setDecompileResult (DecompileResults res) {
         this.decompileResults = res;
         this.hFunc = res.getHighFunction();
@@ -69,7 +68,7 @@ public class FunctionNode extends NodeBase<Function> {
         /* WARNING: `commitParamsToDatabase` method may cause some function's wrong prototype be committed to database
                     and wrong prototype will be propagated to other functions. Cause other functions' prototype be wrong.
                     For example: `log_error` is a function that has variable parameters, and using SSE register, it seems
-                    that ghidra performs poorly on recognizing its prototype. */
+                    that ghidra performs poorly on recognizing its prototype.
         try {
             HighFunctionDBUtil.commitParamsToDatabase(hFunc, true, SourceType.DEFAULT);
             HighFunctionDBUtil.commitReturnToDatabase(hFunc, SourceType.DEFAULT);
@@ -77,7 +76,7 @@ public class FunctionNode extends NodeBase<Function> {
             Logging.error("Failed to commit parameters and return to database");
         }
 
-        assert value.getParameters().length == parameters.size();
+        assert value.getParameters().length == parameters.size(); */
     }
 
     /**

@@ -15,18 +15,15 @@ import java.util.HashMap;
 public class IntraSolver {
 
     private final FunctionNode funcNode;
-    private final HashMap<HighVariable, TypeBuilder> ctx;
+    private final Context ctx;
 
-    public IntraSolver(FunctionNode funcNode) {
-        if (funcNode.isLeaf) {
-            Logging.info("Leaf function: " + funcNode.value.getName());
-        } else {
-            Logging.info("Non-leaf function: " + funcNode.value.getName());
-        }
-
+    public IntraSolver(FunctionNode funcNode, Context ctx) {
         this.funcNode = funcNode;
-        funcNode.decompile();
-        ctx = new HashMap<>();
+        if (ctx == null) {
+            this.ctx = new Context();
+        } else {
+            this.ctx = ctx;
+        }
     }
 
     public void solve() {
@@ -41,16 +38,12 @@ public class IntraSolver {
         }
     }
 
-
     /**
      * Get the context of the intra-procedural analysis
      * @return The HashMap of HighVariable and TypeBuilder in the function.
      */
-    public HashMap<HighVariable, TypeBuilder> getCtx() {
-        for (var entry : ctx.entrySet()) {
-            Logging.info("HighVariable: " + entry.getKey().getName());
-            Logging.info("TypeBuilder: " + entry.getValue().toString());
-        }
+    public Context getCtx() {
+        ctx.dump();
         return ctx;
     }
 
@@ -64,20 +57,13 @@ public class IntraSolver {
     private void collectFactsOnParameter(HighSymbol highSym) {
         // TODO: fix ghidra's function prototype error.
         HighVariable highVar = highSym.getHighVariable();
-
-        // Initialize TypeBuilder for HighVariable
-        if (!ctx.containsKey(highVar)) {
-            ctx.put(highVar, new TypeBuilder());
-        }
+        Logging.info("HighSymbol: " + highSym.getName());
 
         // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
         if (highVar == null) {
             Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + highSym.getName() + " has no HighVariable");
             return;
         }
-
-        Logging.info("Function: " + funcNode.value.getName());
-        Logging.info("HighSymbol: " + highSym.getName());
 
         // Collect dataflow-facts from specific VarNode
         PCodeVisitor visitor = new PCodeVisitor(highVar, ctx);

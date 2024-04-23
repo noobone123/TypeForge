@@ -44,11 +44,11 @@ public class PCodeVisitor {
     }
 
     public HighVariable root;
-    public HashMap<HighVariable, TypeBuilder> ctx;
+    public Context ctx;
     public ArrayList<PointerRef> workList;
     public HashSet<Varnode> visited;
 
-    public PCodeVisitor(HighVariable highVar, HashMap<HighVariable, TypeBuilder> ctx) {
+    public PCodeVisitor(HighVariable highVar, Context ctx) {
         this.root = highVar;
         this.ctx = ctx;
         workList = new ArrayList<>();
@@ -169,7 +169,7 @@ public class PCodeVisitor {
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
-        ctx.get(root).addDataType(cur.offset, outDT);
+        ctx.addDataType(root.getSymbol(), cur.offset, outDT);
         Logging.collectTypeLog(root, cur.offset, outDT);
     }
 
@@ -185,7 +185,7 @@ public class PCodeVisitor {
         var storedValue = pcodeOp.getInput(2);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(storedValue);
 
-        ctx.get(root).addDataType(cur.offset, storedValueDT);
+        ctx.addDataType(root.getSymbol(), cur.offset, storedValueDT);
         Logging.collectTypeLog(root, cur.offset, storedValueDT);
     }
 
