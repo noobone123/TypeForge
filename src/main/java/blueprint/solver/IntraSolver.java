@@ -43,7 +43,6 @@ public class IntraSolver {
      * @return The HashMap of HighVariable and TypeBuilder in the function.
      */
     public Context getCtx() {
-        ctx.dump();
         return ctx;
     }
 

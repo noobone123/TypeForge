@@ -77,11 +77,16 @@ public class InterSolver {
         Context ctx = new Context();
 
         mergeToArgs(funcNode, ctx);
+        // TODO: merge the return value
 
         return ctx;
     }
 
-
+    /**
+     * Merge the data-flow facts (TypeBuilder) from the callee function's param to the current function's arguments.
+     * @param funcNode the current non-leaf function node
+     * @param ctx the context to store current data-flow facts
+     */
     private void mergeToArgs(FunctionNode funcNode, Context ctx) {
         var highFunc = funcNode.getHighFunction();
 
@@ -89,7 +94,6 @@ public class InterSolver {
             var iter = block.getIterator();
             while (iter.hasNext()) {
                 PcodeOp op = iter.next();
-                Logging.info("PcodeOp: " + op.toString());
 
                 // If found Call pcodeOp, then we should merge the data-flow facts from the callee function
                 if (op.getOpcode() == PcodeOp.CALL) {
@@ -103,18 +107,27 @@ public class InterSolver {
                     var calleeCtx = intraSolvers.get(calleeNode).getCtx();
 
                     // Align the callsite's arguments and callee's parameters
+                    // TODO: what if callsite's arguments did not match callee's parameters?
                     assert calleeNode.parameters.size() == op.getNumInputs() - 1;
-                    for (int inputIdx = 1; inputIdx < op.getNumInputs(); inputIdx++) {
-                        var arg = op.getInput(inputIdx).getHigh();
-                        var param = calleeNode.parameters.get(inputIdx - 1);
-                        // TODO: do merging ...
-                        Logging.debug(String.format(
-                            "Merging TypeBuilder from %s: %s to %s: %s",
-                            calleeNode.value.getName(), param.getName(),
-                            funcNode.value.getName(), arg.getSymbol().getName()
-                        ));
-                    }
 
+                    for (int inputIdx = 1; inputIdx < op.getNumInputs(); inputIdx++) {
+                        var arg = op.getInput(inputIdx).getHigh().getSymbol();
+                        var param = calleeNode.parameters.get(inputIdx - 1);
+
+                        if(ctx.merge(calleeCtx, param, arg)) {
+                            Logging.debug(String.format(
+                                    "Merge TypeBuilder from %s: %s to %s: %s",
+                                    calleeNode.value.getName(), param.getName(),
+                                    funcNode.value.getName(), arg.getName()
+                            ));
+                        } else {
+                            Logging.error(String.format(
+                                    "Failed to merge TypeBuilder from %s: %s to %s: %s",
+                                    calleeNode.value.getName(), param.getName(),
+                                    funcNode.value.getName(), arg.getName()
+                            ));
+                        }
+                    }
                 }
             }
         }
