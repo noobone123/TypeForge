@@ -155,7 +155,7 @@ public class PCodeVisitor {
         if (inputSymbol.getDataType() instanceof Pointer && outputSymbol.getDataType() instanceof Pointer) {
             if (ctx.alignAliasFacts(inputSymbol, outputSymbol)) {
                 Logging.debug(
-                        String.format("[Align] Aligning dataflow facts from %s to %s",
+                        String.format("[Align] Aligning dataflow facts of %s and %s",
                                 inputSymbol.getName(), outputSymbol.getName())
                 );
             }
