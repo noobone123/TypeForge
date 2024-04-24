@@ -4,6 +4,7 @@ import blueprint.utils.Logging;
 
 import ghidra.program.model.data.DataType;
 
+import java.lang.reflect.Type;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.HashMap;
@@ -24,7 +25,7 @@ public class TypeBuilder {
      * }
      * </p>
      */
-    private final HashMap<Long, Map<DataType, Integer>> fieldMap;
+    public final HashMap<Long, Map<DataType, Integer>> fieldMap;
 
     public TypeBuilder() {
         fieldMap = new HashMap<>();
@@ -47,7 +48,38 @@ public class TypeBuilder {
             typeCountMap.put(dt, typeCountMap.get(dt) + 1);
         }
     }
-    
+
+
+    /**
+     * Merge dataflow facts from other TypeBuilder.
+     * @param other other TypeBuilder instance.
+     */
+    public void merge(TypeBuilder other) {
+        if (other == null) {
+            return;
+        }
+
+        for (var otherEntry: other.fieldMap.entrySet()) {
+            var otherKey = otherEntry.getKey();
+            var otherValue = otherEntry.getValue();
+            if (!fieldMap.containsKey(otherKey)) {
+                fieldMap.put(otherKey, new HashMap<>(otherValue));
+            } else {
+                var typeCountMap = fieldMap.get(otherKey);
+                for (var entry: otherValue.entrySet()) {
+                    var dt = entry.getKey();
+                    var count = entry.getValue();
+                    if (!typeCountMap.containsKey(dt)) {
+                        typeCountMap.put(dt, count);
+                    } else {
+                        typeCountMap.put(dt, typeCountMap.get(dt) + count);
+                    }
+                }
+            }
+        }
+    }
+
+
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();

@@ -3,15 +3,16 @@ package blueprint.solver;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.Pointer;
 import ghidra.program.model.pcode.HighVariable;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.pcode.VarnodeAST;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedList;
 
 public class PCodeVisitor {
 
@@ -43,26 +44,27 @@ public class PCodeVisitor {
         }
     }
 
-    public HighVariable root;
     public Context ctx;
-    public ArrayList<PointerRef> workList;
     public HashSet<Varnode> visited;
+    public LinkedList<PointerRef> workList;
+    public HighVariable root = null;
 
-    public PCodeVisitor(HighVariable highVar, Context ctx) {
-        this.root = highVar;
+    public PCodeVisitor(Context ctx) {
         this.ctx = ctx;
-        workList = new ArrayList<>();
         visited = new HashSet<>();
-
-        workList.add(new PointerRef(root.getRepresentative(), 0));
-
-        Logging.debug("Visiting HighVariable: " + root.getName());
-
-        // TODO: should we add the root's instances to the todoList?
+        workList = new LinkedList<>();
     }
 
-
-    public void run() {
+    /**
+     * Start visiting the HighVariable
+     * @param currentVar the current HighVariable to visit
+     */
+    public void run(HighVariable currentVar) {
+        root = currentVar;
+        assert workList.isEmpty();
+        // TODO: should we add the root's instances to the todoList?
+        workList.add(new PointerRef(root.getRepresentative(), 0));
+        Logging.debug("Visiting HighVariable: " + root.getName());
 
         while (!workList.isEmpty()) {
             PointerRef cur = workList.remove(0);
@@ -85,9 +87,10 @@ public class PCodeVisitor {
                         handleAddOrSub(cur, pcodeOp);
                         break;
                     case PcodeOp.CAST:
+                        handleCast(cur, pcodeOp);
+                        break;
                     case PcodeOp.COPY:
-                        // TODO: if COPY, the two highSymbol should hold the same dataflow facts ?
-                        handleAssign(cur, pcodeOp);
+                        handleCopy(cur, pcodeOp);
                         break;
                     case PcodeOp.MULTIEQUAL:
                         handleMultiEqual(cur, pcodeOp);
@@ -103,6 +106,7 @@ public class PCodeVisitor {
                         break;
                     case PcodeOp.PTRSUB:
                         handlePtrSub(cur, pcodeOp);
+                        break;
                 }
 
             }
@@ -142,14 +146,35 @@ public class PCodeVisitor {
     }
 
 
-    private void handleAssign(PointerRef cur, PcodeOp pcodeOp) {
+    private void handleCopy(PointerRef cur, PcodeOp pcodeOp) {
+        Varnode output = pcodeOp.getOutput();
+        var inputSymbol = pcodeOp.getInput(0).getHigh().getSymbol();
+        var outputSymbol = output.getHigh().getSymbol();
+
+        // Handle Pointer Assignment
+        if (inputSymbol.getDataType() instanceof Pointer && outputSymbol.getDataType() instanceof Pointer) {
+            if (ctx.alignAliasFacts(inputSymbol, outputSymbol)) {
+                Logging.debug(
+                        String.format("[Align] Aligning dataflow facts from %s to %s",
+                                inputSymbol.getName(), outputSymbol.getName())
+                );
+            }
+        }
+
+        updateWorkList(output, cur.offset);
+    }
+
+
+    private void handleCast(PointerRef cur, PcodeOp pcodeOp) {
         Varnode output = pcodeOp.getOutput();
         updateWorkList(output, cur.offset);
     }
 
 
     private void handleMultiEqual(PointerRef cur, PcodeOp pcodeOp) {
-        // TODO: handle multiEqual
+        // TODO: Merging multiple dataflow facts from multiple varnodes?
+        Varnode output = pcodeOp.getOutput();
+        updateWorkList(output, cur.offset);
     }
 
 

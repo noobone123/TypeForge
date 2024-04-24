@@ -51,6 +51,33 @@ public class Context {
         return true;
     }
 
+
+    /**
+     * If two highSymbols are aliases of each other, then merge and align the DataFlowFacts of
+     * these two Pointer HighSymbols, which means the two HighSymbols will hold the same TypeBuilder.
+     * @param a the HighSymbol a
+     * @param b the HighSymbol b
+     */
+    public boolean alignAliasFacts(HighSymbol a, HighSymbol b) {
+        var typeBuilder_a = ctx.get(a);
+        var typeBuilder_b = ctx.get(b);
+
+        if (typeBuilder_a == null && typeBuilder_b == null) {
+            return false;
+        }
+
+        if (typeBuilder_a != null) {
+            typeBuilder_a.merge(typeBuilder_b);
+            ctx.put(a, typeBuilder_a);
+            ctx.put(b, typeBuilder_a);
+        } else {
+            ctx.put(a, typeBuilder_b);
+            ctx.put(b, typeBuilder_b);
+        }
+
+        return true;
+    }
+
     /**
      * Dump the current context to the log
      */

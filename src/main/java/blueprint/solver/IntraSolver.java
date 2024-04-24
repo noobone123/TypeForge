@@ -20,6 +20,8 @@ public class IntraSolver {
     /** The candidate HighSymbols that need to collect data-flow facts */
     private final Queue<HighSymbol> candidates;
 
+    private final PCodeVisitor visitor;
+
     public IntraSolver(FunctionNode funcNode, Context ctx) {
         // TODO: fix ghidra's function prototype error.
         this.funcNode = funcNode;
@@ -29,6 +31,7 @@ public class IntraSolver {
             this.ctx = ctx;
         }
         this.candidates = new LinkedList<>();
+        visitor = new PCodeVisitor(this.ctx);
         updateCandidates();
     }
 
@@ -81,8 +84,7 @@ public class IntraSolver {
         }
 
         // Collect dataflow-facts from specific VarNode
-        PCodeVisitor visitor = new PCodeVisitor(highVar, ctx);
-        visitor.run();
+        visitor.run(highVar);
     }
 
 
