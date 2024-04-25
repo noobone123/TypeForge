@@ -1,20 +1,9 @@
 package blueprint.utils;
 
-import blueprint.base.DataTypeNode;
-import blueprint.base.SDGraph;
-import blueprint.base.NodeBase;
-
-import ghidra.app.decompiler.DecompInterface;
-import ghidra.app.decompiler.DecompileOptions;
 import ghidra.program.model.address.Address;
-import ghidra.program.model.data.DataType;
 import ghidra.program.model.listing.Function;
 import ghidra.util.task.TaskMonitor;
 
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.Set;
 

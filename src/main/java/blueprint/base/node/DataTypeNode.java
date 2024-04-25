@@ -1,10 +1,9 @@
-package blueprint.base;
+package blueprint.base.node;
 
-import aQute.lib.link.Link;
+import blueprint.base.graph.SDGraph;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.DataTypeComponent;
 import ghidra.program.model.data.Structure;
-import ghidra.program.model.data.StructureDataType;
 
 import java.util.*;
 

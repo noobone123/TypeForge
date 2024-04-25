@@ -1,5 +1,7 @@
-package blueprint.base;
+package blueprint.base.graph;
 
+import blueprint.base.node.FunctionNode;
+import blueprint.base.node.NodeBase;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
 import blueprint.utils.FunctionHelper;
@@ -10,8 +12,6 @@ import java.util.*;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.address.Address;
-import ghidra.program.model.address.AddressFactory;
-import ghidra.program.model.address.DefaultAddressFactory;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.util.task.TaskMonitor;

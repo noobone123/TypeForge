@@ -1,6 +1,6 @@
 package blueprint.solver;
 
-import blueprint.base.FunctionNode;
+import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 
 import ghidra.program.model.pcode.HighSymbol;

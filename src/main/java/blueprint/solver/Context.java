@@ -1,5 +1,6 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.TypeBuilder;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
@@ -20,45 +21,53 @@ public class Context {
     }
 
     /**
-     * Add a data type to the current context
-     * @param highSym the HighSymbol
-     * @param offset the offset of the field
-     * @param dt the field's data type
+     * Add a field to the current context. The field can be a primitive data type.
+     * @param highSym the HighSymbol representing the variable that holds this structure type
+     * @param offset the offset of the field within the structure
+     * @param dt the field's data type if adding a DataType
      */
-    public void addDataType(HighSymbol highSym, long offset, DataType dt) {
-        if (!ctx.containsKey(highSym)) {
-            ctx.put(highSym, new TypeBuilder());
-        }
+    public void addField(HighSymbol highSym, long offset, DataType dt) {
+        ctx.computeIfAbsent(highSym, k -> new TypeBuilder()).addPrimitive(offset, dt);
+    }
 
-        var typeBuilder = ctx.get(highSym);
-        typeBuilder.addDataType(offset, dt);
+    public void addField(HighSymbol highSym, long offset, TypeBuilder builder) {
+        ctx.computeIfAbsent(highSym, k -> new TypeBuilder()).addTypeBuilder(offset, builder);
     }
 
     /**
-     * Merge the TypeBuilder of the other context to the current context.
+     * Merge the TypeBuilder of the other intraSolver's context to the current context.
      * @param other the other intraSolver's context
      * @param from the HighSymbol in the other context
      * @param to the HighSymbol in the current context
+     * @param offset the offset of `to` highSymbol's field
      * @return true if the merge is successful
      */
-    public boolean merge(Context other, HighSymbol from, HighSymbol to) {
+    public boolean mergeFromOther(Context other, HighSymbol from, HighSymbol to, long offset) {
         if (!other.ctx.containsKey(from)) {
             Logging.error("No HighSymbol in the other context");
             return false;
         }
 
-        ctx.put(to, other.ctx.get(from));
+        var otherTypeBuilder = other.ctx.get(from);
+        if (offset == 0) {
+            ctx.put(to, otherTypeBuilder);
+        } else {
+            var typeBuilder = ctx.computeIfAbsent(to, k -> new TypeBuilder());
+            typeBuilder.addTypeBuilder(offset, otherTypeBuilder);
+            typeBuilder.addTag(offset, "ARGUMENT");
+        }
+
         return true;
     }
 
 
     /**
-     * If two highSymbols are aliases of each other, then merge and align the DataFlowFacts of
-     * these two Pointer HighSymbols, which means the two HighSymbols will hold the same TypeBuilder.
+     * If two Pointer highSymbols are alias intra-procedural. Then we should merge the TypeBuilder of
+     * these two HighSymbols, which means the two HighSymbols will hold the same TypeBuilder.
      * @param a the HighSymbol a
      * @param b the HighSymbol b
      */
-    public boolean alignAliasFacts(HighSymbol a, HighSymbol b) {
+    public boolean setAliasIntra(HighSymbol a, HighSymbol b) {
         var typeBuilder_a = ctx.get(a);
         var typeBuilder_b = ctx.get(b);
 

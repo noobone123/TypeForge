@@ -1,4 +1,4 @@
-package blueprint.base;
+package blueprint.base.node;
 
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
@@ -9,9 +9,7 @@ import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.VariableStorage;
 import ghidra.program.model.pcode.HighFunction;
-import ghidra.program.model.pcode.HighFunctionDBUtil;
 import ghidra.program.model.pcode.HighSymbol;
-import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 
 import java.util.*;

@@ -1,7 +1,9 @@
-package blueprint.base;
+package blueprint.base.graph;
 
 import java.util.*;
 
+import blueprint.base.node.DataTypeNode;
+import blueprint.base.node.NodeBase;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.*;
 import ghidra.program.model.data.Enum;

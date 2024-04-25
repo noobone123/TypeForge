@@ -1,15 +1,11 @@
 import blueprint.solver.InterSolver;
 import ghidra.app.script.GhidraScript;
-import ghidra.program.model.data.DataType;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
-import blueprint.base.CallGraph;
-import blueprint.base.FunctionNode;
+import blueprint.base.graph.CallGraph;
 import blueprint.utils.*;
 
-import javax.swing.*;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 

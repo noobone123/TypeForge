@@ -4,7 +4,7 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
-import blueprint.base.CallGraph;
+import blueprint.base.graph.CallGraph;
 
 import java.util.HashSet;
 import java.util.List;

@@ -1,9 +1,8 @@
 package blueprint.utils;
 
-import blueprint.base.CallGraph;
-import blueprint.base.DataTypeNode;
-import blueprint.base.NodeBase;
-import blueprint.base.SDGraph;
+import blueprint.base.node.DataTypeNode;
+import blueprint.base.node.NodeBase;
+import blueprint.base.graph.SDGraph;
 import ghidra.program.model.data.DataType;
 
 import java.io.BufferedWriter;

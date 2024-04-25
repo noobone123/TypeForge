@@ -14,6 +14,8 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 
+import static blueprint.utils.DecompilerHelper.getSigned;
+
 public class PCodeVisitor {
 
     /**
@@ -151,14 +153,12 @@ public class PCodeVisitor {
         var inputSymbol = pcodeOp.getInput(0).getHigh().getSymbol();
         var outputSymbol = output.getHigh().getSymbol();
 
-        // Handle Pointer Assignment
-        if (inputSymbol.getDataType() instanceof Pointer && outputSymbol.getDataType() instanceof Pointer) {
-            if (ctx.alignAliasFacts(inputSymbol, outputSymbol)) {
-                Logging.debug(
-                        String.format("[Align] Aligning dataflow facts of %s and %s",
-                                inputSymbol.getName(), outputSymbol.getName())
+        // TODO: restrict the aliasing to only pointer Type?
+        if (ctx.setAliasIntra(inputSymbol, outputSymbol)) {
+            Logging.debug(
+                    String.format("[Align] Aligning dataflow facts from %s to %s",
+                            inputSymbol.getName(), outputSymbol.getName())
                 );
-            }
         }
 
         updateWorkList(output, cur.offset);
@@ -203,7 +203,7 @@ public class PCodeVisitor {
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
-        ctx.addDataType(root.getSymbol(), cur.offset, outDT);
+        ctx.addField(root.getSymbol(), cur.offset, outDT);
         Logging.collectTypeLog(root, cur.offset, outDT);
     }
 
@@ -219,7 +219,7 @@ public class PCodeVisitor {
         var storedValue = pcodeOp.getInput(2);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(storedValue);
 
-        ctx.addDataType(root.getSymbol(), cur.offset, storedValueDT);
+        ctx.addField(root.getSymbol(), cur.offset, storedValueDT);
         Logging.collectTypeLog(root, cur.offset, storedValueDT);
     }
 
@@ -281,24 +281,6 @@ public class PCodeVisitor {
                 ast.getUniqueId(), ast, offset));
 
         visited.add(output);
-    }
-
-
-    /**
-     * Get Signed value of a const varnode
-     * @param varnode the const varnode
-     * @return signed value
-     */
-    private long getSigned(Varnode varnode) {
-        assert varnode.isConstant();
-        // mask the sign bit
-        long mask = 0x80L << ((varnode.getSize() - 1) * 8);
-        // constant's value is actually unsigned offset in pcode's address space
-        long value = varnode.getOffset();
-        if ((value & mask) != 0) {
-            value |= (0xffffffffffffffffL << ((varnode.getSize() - 1) * 8));
-        }
-        return value;
     }
 
 

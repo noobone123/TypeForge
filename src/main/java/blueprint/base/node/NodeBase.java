@@ -1,4 +1,4 @@
-package blueprint.base;
+package blueprint.base.node;
 
 import java.util.HashSet;
 import java.util.Set;

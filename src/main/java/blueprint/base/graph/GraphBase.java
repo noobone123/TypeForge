@@ -1,4 +1,6 @@
-package blueprint.base;
+package blueprint.base.graph;
+
+import blueprint.base.node.NodeBase;
 
 import java.util.HashMap;
 import java.util.HashSet;
