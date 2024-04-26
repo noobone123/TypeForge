@@ -3,23 +3,20 @@ package blueprint.solver;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
-import ghidra.program.model.data.Pointer;
-import ghidra.program.model.pcode.HighVariable;
-import ghidra.program.model.pcode.PcodeOp;
-import ghidra.program.model.pcode.Varnode;
-import ghidra.program.model.pcode.VarnodeAST;
+import ghidra.program.model.pcode.*;
+import groovy.util.logging.Log;
 
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Set;
 
 import static blueprint.utils.DecompilerHelper.getSigned;
 
 public class PCodeVisitor {
 
     /**
-     * VarNode with data-flow traceable to original pointer.
+     * VarNode with data-flow traceable to base pointer.
      * For example, If there is a statement like following:
      * <p>
      *     <code> varnode_1 = *(varnode_0 + 4) </code>
@@ -29,31 +26,36 @@ public class PCodeVisitor {
      * varnode_0 is the original pointer, varnode_1's offset is 4, varnode_2's offset is 8
      */
     public static class PointerRef {
-        Varnode varnode;		// The traced Varnode
-        long offset;			// Offset relative to ** Original ** pointer
+        Varnode base;           // The base pointer
+        Varnode current;		// The current pointer
+        long offset;			// Offset relative to ** Base ** pointer
 
-        public PointerRef(Varnode ref, long off) {
-            varnode = ref;
+        public PointerRef(Varnode base, Varnode ref, long off) {
+            this.base = base;
+            current = ref;
             offset = off;
         }
 
         @Override
         public String toString() {
-            return "PointerRef{" +
-                    "varnode=" + varnode +
-                    ", offset=" + Long.toHexString(offset) +
-                    '}';
+            var currentAST = (VarnodeAST) current;
+            var baseAST = (VarnodeAST) base;
+            return "PointerRef{ " +
+                    "curr = " + currentAST.getUniqueId() + "_" + currentAST +  ", " +
+                    "base = " + baseAST.getUniqueId() + "_" + baseAST + ", " +
+                    "offset = 0x" + Long.toHexString(offset) +
+                    " }";
         }
     }
 
     public Context ctx;
-    public HashSet<Varnode> visited;
+    public HashSet<String> collectedPtrRef;
     public LinkedList<PointerRef> workList;
     public HighVariable root = null;
 
     public PCodeVisitor(Context ctx) {
         this.ctx = ctx;
-        visited = new HashSet<>();
+        collectedPtrRef = new HashSet<>();
         workList = new LinkedList<>();
     }
 
@@ -65,60 +67,57 @@ public class PCodeVisitor {
         root = currentVar;
         assert workList.isEmpty();
 
-        // add the root's instances to the todoList, because a HighVariable may reside
-        // in different places at various times in the program
-        for (var varnode : root.getInstances()) {
-            workList.add(new PointerRef(varnode, 0));
-        }
-
-        Logging.debug("Visiting HighVariable: " + root.getName());
+        // TODO: How to handle Loop ?
 
         while (!workList.isEmpty()) {
             PointerRef cur = workList.remove(0);
-            Logging.debug(String.format(
-                    "[Varnode] Current varnodeAST-%d %s with offset 0x%x to worklist",
-                    ((VarnodeAST)cur.varnode).getUniqueId(), cur.varnode, cur.offset));
+            Logging.debug("[PtrRef] Current Ref " + cur);
 
-            if (cur.varnode == null) {
+            if (cur.current == null) {
                 continue;
             }
 
-            Iterator<PcodeOp> desc = cur.varnode.getDescendants();
+            Iterator<PcodeOp> desc = cur.current.getDescendants();
             while (desc.hasNext()) {
                 PcodeOp pcodeOp = desc.next();
-                Logging.debug("PCodeOp: " + pcodeOp.toString());
 
                 switch (pcodeOp.getOpcode()) {
                     case PcodeOp.INT_ADD:
                     case PcodeOp.INT_SUB:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handleAddOrSub(cur, pcodeOp);
                         break;
                     case PcodeOp.CAST:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handleCast(cur, pcodeOp);
                         break;
                     case PcodeOp.COPY:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handleCopy(cur, pcodeOp);
                         break;
                     case PcodeOp.MULTIEQUAL:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handleMultiEqual(cur, pcodeOp);
                         break;
                     case PcodeOp.LOAD:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handleLoad(cur, pcodeOp);
                         break;
                     case PcodeOp.STORE:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handleStore(cur, pcodeOp);
                         break;
                     case PcodeOp.PTRADD:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handlePtrAdd(cur, pcodeOp);
                         break;
                     case PcodeOp.PTRSUB:
+                        Logging.debug("[PCodeOp] " + pcodeOp);
                         handlePtrSub(cur, pcodeOp);
                         break;
                 }
 
             }
-
-
         }
 
     }
@@ -149,7 +148,7 @@ public class PCodeVisitor {
             return;
         }
 
-        updateWorkList(output, newOff);
+        updateWorkList(output, cur.base, newOff);
     }
 
 
@@ -166,20 +165,20 @@ public class PCodeVisitor {
                 );
         }
 
-        updateWorkList(output, cur.offset);
+        updateWorkList(output, cur.base, cur.offset);
     }
 
 
     private void handleCast(PointerRef cur, PcodeOp pcodeOp) {
         Varnode output = pcodeOp.getOutput();
-        updateWorkList(output, cur.offset);
+        updateWorkList(output, cur.base, cur.offset);
     }
 
 
     private void handleMultiEqual(PointerRef cur, PcodeOp pcodeOp) {
         // TODO: Merging multiple dataflow facts from multiple varnodes?
         Varnode output = pcodeOp.getOutput();
-        updateWorkList(output, cur.offset);
+        updateWorkList(output, cur.base, cur.offset);
     }
 
 
@@ -218,7 +217,7 @@ public class PCodeVisitor {
     private void handleStore(PointerRef cur, PcodeOp pcodeOp) {
         // the slot index of cur.varnode is 1, which means that this varnode
         // represent the memory location to be stored
-        if (pcodeOp.getSlot(cur.varnode) != 1) {
+        if (pcodeOp.getSlot(cur.current) != 1) {
             return;
         }
         var storedValue = pcodeOp.getInput(2);
@@ -242,7 +241,7 @@ public class PCodeVisitor {
         }
         var newOff = cur.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
         if (OffsetSanityCheck(newOff)) {
-            updateWorkList(pcodeOp.getOutput(), newOff);
+            updateWorkList(pcodeOp.getOutput(), cur.base, newOff);
         }
     }
 
@@ -260,7 +259,33 @@ public class PCodeVisitor {
         }
         var newOff = cur.offset + getSigned(inputs[1]);
         if (OffsetSanityCheck(newOff)) {
-            updateWorkList(pcodeOp.getOutput(), newOff);
+            updateWorkList(pcodeOp.getOutput(), cur.base, newOff);
+        }
+    }
+
+
+    /**
+     * Find all varnode instances of new root (HighVariable) and add them to the worklist
+     * A new root is a parameter, argument, return value or their alias in most cases.
+     * @param hVar the new HighVariable to add
+     */
+    private void addAllInstanceToWorkList(HighVariable hVar) {
+        assert hVar.getSymbol() != null; // Make sure the new root has a corresponding HighSymbol
+        var startVN = hVar.getRepresentative();
+        var ptrRef = new PointerRef(startVN, startVN, 0);
+        workList.add(ptrRef);
+        Logging.debug("[WorkList] Adding " + ptrRef);
+
+        // Add the root's instances to the todoList, because a HighVariable may reside
+        // in different places at various times in the program
+        for (var varnode : hVar.getInstances()) {
+            if (startVN != varnode) {
+                // Make sure all instances are in the worklist
+                ptrRef = new PointerRef(startVN, varnode, 0);
+                workList.add(ptrRef);
+                collectedPtrRef.add(getPointerRefSig(ptrRef.base, ptrRef.current, ptrRef.offset));
+                Logging.debug("[WorkList] Adding " + ptrRef);
+            }
         }
     }
 
@@ -269,25 +294,36 @@ public class PCodeVisitor {
      * Update worklist.
      * Be careful, some varnode looks identical, but actually they have different uniqueId.
      * So they are different varnodes.
-     * @param output the output varnode which is going to be added to worklist
-     * @param offset the offset of the output varnode
+     * @param newRef the new reference varnode in the PointerRef
+     * @param base the base varnode in the PointerRef
+     * @param offset the offset between newRef and base
      */
-    private void updateWorkList(Varnode output, long offset) {
-        if (!(output instanceof VarnodeAST ast)) {
-            Logging.warn("Varnode is not VarnodeAST: " + output.toString());
+    private void updateWorkList(Varnode newRef, Varnode base, long offset) {
+        if (!(newRef instanceof VarnodeAST ast)) {
+            Logging.warn("Varnode is not VarnodeAST: " + newRef.toString());
             return;
         }
-        if (visited.contains(output)) {
-            return;
-        }
-        workList.add(new PointerRef(output, offset));
-        Logging.debug(String.format(
-                "[WorkList] Adding varnodeAST-%d %s with offset 0x%x to worklist",
-                ast.getUniqueId(), ast, offset));
 
-        visited.add(output);
+        if (collectedPtrRef.contains(getPointerRefSig(base, newRef, offset))) {
+            return;
+        }
+
+//        if (output.getHigh().getSymbol() == null) {
+//            workList.add(new PointerRef(output, offset));
+//            Logging.debug(String.format(
+//                    "[WorkList] Adding varnodeAST-%d %s with offset 0x%x",
+//                    ast.getUniqueId(), ast, offset));
+//        } else {
+//            addRootToWorkList(output.getHigh());
+//            Logging.debug(String.format(
+//                    "[WorkList] Adding HighVariable %s -> varnodeAST-%d %s with offset 0x%x",
+//                    output.getHigh().getName(), ast.getUniqueId(), ast, offset));
+//        }
+        var ptrRef = new PointerRef(base, newRef, offset);
+        workList.add(ptrRef);
+        collectedPtrRef.add(getPointerRefSig(ptrRef.base, ptrRef.current, ptrRef.offset));
+        Logging.debug("[WorkList] Adding " + ptrRef);
     }
-
 
     /**
      * Check if the offset is sane to be a structure offset
@@ -302,4 +338,7 @@ public class PCodeVisitor {
         else return offset <= 0x2000;
     }
 
+    public String getPointerRefSig(Varnode base, Varnode ref, long off) {
+        return ((VarnodeAST)base).getUniqueId() + "-" + ((VarnodeAST)ref).getUniqueId() + "-" + off;
+    }
 }
