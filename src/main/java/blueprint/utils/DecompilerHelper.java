@@ -139,6 +139,8 @@ public class DecompilerHelper {
                     retstr += "[" + v.getHigh().getName() + "]";
                 }
             }
+        } else {
+            retstr += "[null]";
         }
         return retstr;
     }

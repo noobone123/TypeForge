@@ -64,8 +64,13 @@ public class PCodeVisitor {
     public void run(HighVariable currentVar) {
         root = currentVar;
         assert workList.isEmpty();
-        // TODO: should we add the root's instances to the todoList?
-        workList.add(new PointerRef(root.getRepresentative(), 0));
+
+        // add the root's instances to the todoList, because a HighVariable may reside
+        // in different places at various times in the program
+        for (var varnode : root.getInstances()) {
+            workList.add(new PointerRef(varnode, 0));
+        }
+
         Logging.debug("Visiting HighVariable: " + root.getName());
 
         while (!workList.isEmpty()) {

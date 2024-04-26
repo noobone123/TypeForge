@@ -53,7 +53,7 @@ public class FieldEntry {
         sb.append("tag: <");
         tag.forEach(t -> sb.append(t).append(", "));
         sb.append(">");
-        sb.append("}");
+        sb.append("} ");
 
         return sb.toString();
     }

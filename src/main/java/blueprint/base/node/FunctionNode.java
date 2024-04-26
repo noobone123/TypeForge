@@ -4,8 +4,11 @@ import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 
+import ghidra.app.decompiler.ClangLine;
+import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
+import ghidra.app.decompiler.component.DecompilerUtils;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.VariableStorage;
 import ghidra.program.model.pcode.HighFunction;
@@ -24,7 +27,9 @@ public class FunctionNode extends NodeBase<Function> {
 
     public boolean isMeaningful = false;
 
-    HighFunction hFunc = null;
+    public HighFunction hFunc = null;
+    public ArrayList<ClangLine> lines;
+    public ArrayList<ClangToken> tokens = new ArrayList<>();
     DecompileResults decompileResults = null;
 
     public FunctionNode(Function value, int id) {
@@ -34,13 +39,13 @@ public class FunctionNode extends NodeBase<Function> {
     public void setDecompileResult (DecompileResults res) {
         this.decompileResults = res;
         this.hFunc = res.getHighFunction();
+        lines = DecompilerUtils.toLines(this.decompileResults.getCCodeMarkup());
+        for (ClangLine line : lines) {
+            var lineTokens = line.getAllTokens();
+            tokens.addAll(lineTokens);
+        }
         syncPrototype();
     }
-
-    public HighFunction getHighFunction() {
-        return this.hFunc;
-    }
-
 
     /**
      * Sync high function's prototype to database.

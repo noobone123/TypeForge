@@ -46,7 +46,17 @@ public class InterSolver {
             FunctionNode funcNode = workList.poll();
             IntraSolver intraSolver;
             funcNode.decompile();
-            // DecompilerHelper.dumpHighPcode(funcNode.getHighFunction());
+            // DecompilerHelper.dumpHighPcode(funcNode.hFunc);
+            // Logging.info(funcNode.getC());
+//            for (var token: funcNode.tokens) {
+//                if (token.getText().equals("local_a8")) {
+//                    Logging.info("Found local_a8");
+//                    Logging.info(String.valueOf(token.getHighSymbol(funcNode.hFunc).getName()));
+//                } else if (token.getText().equals(("local_148"))) {
+//                    Logging.info("Found local_148");
+//                    Logging.info(String.valueOf(token.getHighSymbol(funcNode.hFunc).getName()));
+//                }
+//            }
 
             // If the function is not a leaf function, we should
             // collect data-flow facts from its callee functions.
@@ -56,6 +66,7 @@ public class InterSolver {
                 intraSolver = new IntraSolver(funcNode, ctx);
             } else {
                 Logging.info("Leaf function: " + funcNode.value.getName());
+
                 intraSolver = new IntraSolver(funcNode, null);
             }
 
@@ -86,7 +97,7 @@ public class InterSolver {
      * @param ctx the context to store current data-flow facts
      */
     private void mergeParamsToArgs(FunctionNode funcNode, Context ctx) {
-        var highFunc = funcNode.getHighFunction();
+        var highFunc = funcNode.hFunc;
 
         for (var block : highFunc.getBasicBlocks()) {
             var iter = block.getIterator();
