@@ -211,12 +211,12 @@ public class InterSolver {
         FunctionNode funcNode = cg.getNodebyAddr(addr);
         workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x00119337);
-        funcNode = cg.getNodebyAddr(addr);
-        workList.add(funcNode);
-
-        addr = FunctionHelper.getAddress(0x0011a70a);
-        funcNode = cg.getNodebyAddr(addr);
-        workList.add(funcNode);
+//        addr = FunctionHelper.getAddress(0x00119337);
+//        funcNode = cg.getNodebyAddr(addr);
+//        workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x0011a70a);
+//        funcNode = cg.getNodebyAddr(addr);
+//        workList.add(funcNode);
     }
 }

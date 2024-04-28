@@ -1,15 +1,12 @@
 package blueprint.solver;
 
+import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
-import groovy.util.logging.Log;
 
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.Set;
+import java.util.*;
 
 import static blueprint.utils.DecompilerHelper.getSigned;
 
@@ -30,7 +27,7 @@ public class PCodeVisitor {
         Varnode current;		// The current pointer
         long offset;			// Offset relative to ** Base ** pointer
 
-        public PointerRef(Varnode base, Varnode ref, long off) {
+        public PointerRef(Varnode ref, Varnode base, long off) {
             this.base = base;
             current = ref;
             offset = off;
@@ -49,77 +46,173 @@ public class PCodeVisitor {
     }
 
     public Context ctx;
-    public HashSet<String> collectedPtrRef;
-    public LinkedList<PointerRef> workList;
-    public HighVariable root = null;
+    public FunctionNode funcNode;
 
-    public PCodeVisitor(Context ctx) {
+    /** We only collect data-flow related to interested varnodes */
+    public Set<Varnode> interestedVn = new HashSet<>();
+
+    /** The workList queue of current function */
+    public LinkedList<PcodeOpAST> workList = new LinkedList<>();
+
+    /** Dataflow facts collected from the current function */
+    public HashMap<Varnode, PointerRef> dataFlowFacts = new HashMap<>();
+
+    /** This aliasMap should be traced recursively manually, for example: a->b, b->c, but a->c will not be recorded */
+    public HashMap<Varnode, HashSet<Varnode>> aliasMap = new HashMap<>();
+
+    /** These 2 maps are used to record the DataType's load/store operation on insteseted varnodes */
+    public HashMap<PointerRef, DataType> loadMap = new HashMap<>();
+    public HashMap<PointerRef, DataType> storeMap = new HashMap<>();
+
+    public PCodeVisitor(FunctionNode funcNode, Context ctx) {
+        this.funcNode = funcNode;
         this.ctx = ctx;
-        collectedPtrRef = new HashSet<>();
-        workList = new LinkedList<>();
     }
 
     /**
-     * Start visiting the HighVariable
-     * @param currentVar the current HighVariable to visit
+     * Prepare the PCodeVisitor for running flow-sensitive, on-demand data-flow analysis.
+     * In detail:
+     * 1. we need to collect the candidate highSymbol's corresponding varnodes and mark them as interested varnodes.
+     * 2. initialize the dataFlowFacts using the interested varnodes
+     * 2. initialize the workList
+     * @param candidates the list of HighSymbols that need to collect data-flow facts
      */
-    public void run(HighVariable currentVar) {
-        root = currentVar;
-        assert workList.isEmpty();
+    public void prepare(List<HighSymbol> candidates) {
+        initDataFlowFacts(candidates);
 
-        // TODO: How to handle Loop ?
+        // update the workList
+        for (var bb: funcNode.hFunc.getBasicBlocks()) {
+            var iter = bb.getIterator();
+            while (iter.hasNext()) {
+                PcodeOp op = iter.next();
+                workList.add((PcodeOpAST) op);
+            }
+        }
+    }
 
-        while (!workList.isEmpty()) {
-            PointerRef cur = workList.remove(0);
-            Logging.debug("[PtrRef] Current Ref " + cur);
 
-            if (cur.current == null) {
+    private void initDataFlowFacts(List<HighSymbol> candidates) {
+        // Update the interestedVn
+        for (var candidate: candidates) {
+            var highVar = candidate.getHighVariable();
+            Logging.info("HighSymbol: " + candidate.getName());
+
+            // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
+            if (highVar == null) {
+                Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + candidate.getName() + " has no HighVariable");
                 continue;
             }
 
-            Iterator<PcodeOp> desc = cur.current.getDescendants();
-            while (desc.hasNext()) {
-                PcodeOp pcodeOp = desc.next();
+            // Add all varnode instances of the HighVariable to the interestedVn
+            interestedVn.addAll(Arrays.asList(highVar.getInstances()));
 
-                switch (pcodeOp.getOpcode()) {
-                    case PcodeOp.INT_ADD:
-                    case PcodeOp.INT_SUB:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handleAddOrSub(cur, pcodeOp);
-                        break;
-                    case PcodeOp.CAST:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handleCast(cur, pcodeOp);
-                        break;
-                    case PcodeOp.COPY:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handleCopy(cur, pcodeOp);
-                        break;
-                    case PcodeOp.MULTIEQUAL:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handleMultiEqual(cur, pcodeOp);
-                        break;
-                    case PcodeOp.LOAD:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handleLoad(cur, pcodeOp);
-                        break;
-                    case PcodeOp.STORE:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handleStore(cur, pcodeOp);
-                        break;
-                    case PcodeOp.PTRADD:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handlePtrAdd(cur, pcodeOp);
-                        break;
-                    case PcodeOp.PTRSUB:
-                        Logging.debug("[PCodeOp] " + pcodeOp);
-                        handlePtrSub(cur, pcodeOp);
-                        break;
-                }
-
+            // Initialize the dataFlowFacts using the interested varnodes
+            for (var vn: highVar.getInstances()) {
+                var startVn = highVar.getRepresentative();
+                dataFlowFacts.put(vn, new PointerRef(vn, startVn, 0));
             }
         }
+    }
 
+
+    /**
+     * If the PCodeOp's input varnodes is related to the interested varnode, then we should handle it.
+     * @param pcode the PCodeOp
+     * @return true if the PCodeOp is related to the interested varnode
+     */
+    private boolean isInterestedPCode(PcodeOpAST pcode) {
+        for (var vn: pcode.getInputs()) {
+            if (interestedVn.contains(vn)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    private PointerRef getDataFlowFact(Varnode vn) {
+        var res = dataFlowFacts.get(vn);
+        if (res == null) {
+            Logging.warn("Failed to get dataflow fact for " + vn);
+            return null;
+        }
+        return res;
+    }
+
+    /**
+     * Run the flow-sensitive, on-demand data-flow analysis.
+     */
+    public void run() {
+        while (!workList.isEmpty()) {
+            var pcode = workList.poll();
+            var opCode = pcode.getOpcode();
+
+            switch (opCode) {
+                case PcodeOp.INT_ADD, PcodeOp.INT_SUB -> {
+                    if (isInterestedPCode(pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handleAddOrSub(pcode);
+                    }
+                }
+                case PcodeOp.COPY, PcodeOp.CAST -> {
+                    if (isInterestedPCode(pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handleAssign(pcode);
+                    }
+                }
+                case PcodeOp.PTRADD -> {
+                    if (isInterestedPCode(pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handlePtrAdd(pcode);
+                    }
+                }
+                case PcodeOp.PTRSUB -> {
+                    if (isInterestedPCode(pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handlePtrSub(pcode);
+                    }
+                }
+                case PcodeOp.MULTIEQUAL -> {
+                    if (isInterestedPCode(pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handleMultiEqual(pcode);
+                    }
+                }
+                case PcodeOp.LOAD -> {
+                    if (isInterestedPCode(pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handleLoad(pcode);
+                    }
+                }
+                case PcodeOp.STORE -> {
+                    if (isInterestedPCode(pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handleStore(pcode);
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * update IntraSolver's context with the collected data-flow facts.
+     */
+    public void updateContext() {
+        // TODO: handle alias and TypeBuilder ...
+        loadMap.forEach((ptrRef, dt) -> {
+            var base = ptrRef.base;
+            var offset = ptrRef.offset;
+            var highSymbol = base.getHigh().getSymbol();
+            ctx.addField(highSymbol, offset, dt);
+        });
+
+        storeMap.forEach((ptrRef, dt) -> {
+            var base = ptrRef.base;
+            var offset = ptrRef.offset;
+            var highSymbol = base.getHigh().getSymbol();
+            ctx.addField(highSymbol, offset, dt);
+        });
     }
 
 
@@ -131,54 +224,99 @@ public class PCodeVisitor {
      * b = a + 4 is just a simple arithmetic operation, it does not mean that `a` is a base address of a structure.
      * But if there is a load/store operation like:
      * c = *(a + 4) or *(a + 4) = c, then we can say that `a` is a base address of a structure.
-     * @param cur the current PointerRef
-     * @param pcodeOp the PCodeOp
+     * @param pcodeOp the PCodeOpAST
      */
-    private void handleAddOrSub(PointerRef cur, PcodeOp pcodeOp) {
+    private void handleAddOrSub(PcodeOpAST pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
         long newOff;
+
         if (!inputs[1].isConstant()) {
             return;
         }
-        newOff = cur.offset +
+
+        var inputFact = getDataFlowFact(inputs[0]);
+        assert inputFact != null;
+
+        newOff = inputFact.offset +
             (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
 
         if (!OffsetSanityCheck(newOff)) {
             return;
         }
 
-        updateWorkList(output, cur.base, newOff);
+        updateDataFlowFacts(output, inputFact.base, newOff);
+        addInterestedVn(output);
     }
 
 
-    private void handleCopy(PointerRef cur, PcodeOp pcodeOp) {
-        Varnode output = pcodeOp.getOutput();
-        var inputSymbol = pcodeOp.getInput(0).getHigh().getSymbol();
-        var outputSymbol = output.getHigh().getSymbol();
+    private void handleAssign(PcodeOp pcodeOp) {
+        var inputVn = pcodeOp.getInput(0);
+        var outputVn = pcodeOp.getOutput();
+
+        var inputFact = getDataFlowFact(inputVn);
+        assert inputFact != null;
+
+        updateDataFlowFacts(outputVn, inputFact.base, inputFact.offset);
+        updateAliasMap(inputVn, outputVn);
+        addInterestedVn(outputVn);
 
         // TODO: restrict the aliasing to only pointer Type?
-        if (ctx.setAliasIntra(inputSymbol, outputSymbol)) {
-            Logging.debug(
-                    String.format("[Align] Aligning dataflow facts from %s to %s",
-                            inputSymbol.getName(), outputSymbol.getName())
-                );
+//        if (ctx.setAliasIntra(inputSymbol, outputSymbol)) {
+//            Logging.debug(
+//                    String.format("[Align] Aligning dataflow facts from %s to %s",
+//                            inputSymbol.getName(), outputSymbol.getName())
+//                );
+//        }
+    }
+
+
+    /**
+     * Handle PTRADD operation. In PTRADD operation,
+     * output = input0 + input1 * input2, where input0 is array's base address, input1 is index
+     * and input2 is element size.
+     * @param pcodeOp The PCodeOp
+     */
+    private void handlePtrAdd(PcodeOp pcodeOp) {
+        Varnode[] inputs = pcodeOp.getInputs();
+        // TODO: handle the case where input1 or input2 is not constant
+        if (!inputs[1].isConstant() || !inputs[2].isConstant()) {
+            return;
         }
 
-        updateWorkList(output, cur.base, cur.offset);
+        var inputFact = getDataFlowFact(inputs[0]);
+        assert inputFact != null;
+        var newOff = inputFact.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
+        if (OffsetSanityCheck(newOff)) {
+            updateDataFlowFacts(pcodeOp.getOutput(), inputFact.base, newOff);
+            addInterestedVn(pcodeOp.getOutput());
+        }
+    }
+
+    /**
+     * A PTRSUB performs the simple pointer calculation, input0 + input1
+     * Input0 is a pointer to the beginning of the structure, and input1 is a byte offset to the subcomponent.
+     * As an operation, PTRSUB produces a pointer to the subcomponent and stores it in output.
+     * @param pcodeOp The PCodeOp
+     */
+    private void handlePtrSub(PcodeOp pcodeOp) {
+        Varnode[] inputs = pcodeOp.getInputs();
+        if (!inputs[1].isConstant()) {
+            return;
+        }
+        var inputFact = getDataFlowFact(inputs[0]);
+        assert inputFact != null;
+        var newOff = inputFact.offset + getSigned(inputs[1]);
+        if (OffsetSanityCheck(newOff)) {
+            updateDataFlowFacts(pcodeOp.getOutput(), inputFact.base, newOff);
+            addInterestedVn(pcodeOp.getOutput());
+        }
     }
 
 
-    private void handleCast(PointerRef cur, PcodeOp pcodeOp) {
-        Varnode output = pcodeOp.getOutput();
-        updateWorkList(output, cur.base, cur.offset);
-    }
-
-
-    private void handleMultiEqual(PointerRef cur, PcodeOp pcodeOp) {
+    private void handleMultiEqual(PcodeOp pcodeOp) {
         // TODO: Merging multiple dataflow facts from multiple varnodes?
-        Varnode output = pcodeOp.getOutput();
-        updateWorkList(output, cur.base, cur.offset);
+        var output = pcodeOp.getOutput();
     }
 
 
@@ -198,131 +336,69 @@ public class PCodeVisitor {
      *     <code> *varnode_1 = varnode_2 </code>
      * </p>
      * Such cases can be excluded in later stages.
-     * @param cur The current PointerRef
      * @param pcodeOp The PCodeOp
      */
-    private void handleLoad(PointerRef cur, PcodeOp pcodeOp) {
-        Varnode output = pcodeOp.getOutput();
+    private void handleLoad(PcodeOp pcodeOp) {
+        var input = pcodeOp.getInput(1);
+        var output = pcodeOp.getOutput();
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
+        loadMap.put(getDataFlowFact(input), outDT);
+        Logging.debug("[Load] " + input + " -> " + outDT);
 
-        ctx.addField(root.getSymbol(), cur.offset, outDT);
-        Logging.collectTypeLog(root, cur.offset, outDT);
+        // also trace the varnode loaded from addr
+        updateDataFlowFacts(output, output, 0);
+        addInterestedVn(output);
     }
 
     /**
      * Same as handleLoad, but for STORE operation
      */
-    private void handleStore(PointerRef cur, PcodeOp pcodeOp) {
-        // the slot index of cur.varnode is 1, which means that this varnode
+    private void handleStore(PcodeOp pcodeOp) {
+        // the slot index of cur.varnode is 1, which means this varnode
         // represent the memory location to be stored
-        if (pcodeOp.getSlot(cur.current) != 1) {
-            return;
-        }
-        var storedValue = pcodeOp.getInput(2);
-        var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(storedValue);
+        var storedAddrVn = pcodeOp.getInput(1);
+        var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
-        ctx.addField(root.getSymbol(), cur.offset, storedValueDT);
-        Logging.collectTypeLog(root, cur.offset, storedValueDT);
-    }
-
-    /**
-     * Handle PTRADD operation. In PTRADD operation,
-     * output = input0 + input1 * input2, where input0 is array's base address, input1 is index
-     * and input2 is element size.
-     * @param cur The current PointerRef
-     * @param pcodeOp The PCodeOp
-     */
-    private void handlePtrAdd(PointerRef cur, PcodeOp pcodeOp) {
-        Varnode[] inputs = pcodeOp.getInputs();
-        if (!inputs[1].isConstant() || !inputs[2].isConstant()) {
-            return;
-        }
-        var newOff = cur.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
-        if (OffsetSanityCheck(newOff)) {
-            updateWorkList(pcodeOp.getOutput(), cur.base, newOff);
-        }
-    }
-
-    /**
-     * A PTRSUB performs the simple pointer calculation, input0 + input1
-     * Input0 is a pointer to the beginning of the structure, and input1 is a byte offset to the subcomponent.
-     * As an operation, PTRSUB produces a pointer to the subcomponent and stores it in output.
-     * @param cur The current PointerRef
-     * @param pcodeOp The PCodeOp
-     */
-    private void handlePtrSub(PointerRef cur, PcodeOp pcodeOp) {
-        Varnode[] inputs = pcodeOp.getInputs();
-        if (!inputs[1].isConstant()) {
-            return;
-        }
-        var newOff = cur.offset + getSigned(inputs[1]);
-        if (OffsetSanityCheck(newOff)) {
-            updateWorkList(pcodeOp.getOutput(), cur.base, newOff);
-        }
+        storeMap.put(getDataFlowFact(storedAddrVn), storedValueDT);
+        Logging.debug("[Store] " + storedAddrVn + " -> " + storedValueDT);
+        addInterestedVn(storedAddrVn);
     }
 
 
     /**
-     * Find all varnode instances of new root (HighVariable) and add them to the worklist
-     * A new root is a parameter, argument, return value or their alias in most cases.
-     * @param hVar the new HighVariable to add
-     */
-    private void addAllInstanceToWorkList(HighVariable hVar) {
-        assert hVar.getSymbol() != null; // Make sure the new root has a corresponding HighSymbol
-        var startVN = hVar.getRepresentative();
-        var ptrRef = new PointerRef(startVN, startVN, 0);
-        workList.add(ptrRef);
-        Logging.debug("[WorkList] Adding " + ptrRef);
-
-        // Add the root's instances to the todoList, because a HighVariable may reside
-        // in different places at various times in the program
-        for (var varnode : hVar.getInstances()) {
-            if (startVN != varnode) {
-                // Make sure all instances are in the worklist
-                ptrRef = new PointerRef(startVN, varnode, 0);
-                workList.add(ptrRef);
-                collectedPtrRef.add(getPointerRefSig(ptrRef.base, ptrRef.current, ptrRef.offset));
-                Logging.debug("[WorkList] Adding " + ptrRef);
-            }
-        }
-    }
-
-
-    /**
-     * Update worklist.
+     * Update the dataflow facts with the new reference varnode.
      * Be careful, some varnode looks identical, but actually they have different uniqueId.
      * So they are different varnodes.
-     * @param newRef the new reference varnode in the PointerRef
+     * @param cur the current varnode which indicates the reference
      * @param base the base varnode in the PointerRef
      * @param offset the offset between newRef and base
      */
-    private void updateWorkList(Varnode newRef, Varnode base, long offset) {
-        if (!(newRef instanceof VarnodeAST ast)) {
-            Logging.warn("Varnode is not VarnodeAST: " + newRef.toString());
+    private void updateDataFlowFacts(Varnode cur, Varnode base, long offset) {
+        if (!(cur instanceof VarnodeAST ast)) {
+            Logging.warn("Varnode is not VarnodeAST: " + cur.toString());
             return;
         }
 
-        if (collectedPtrRef.contains(getPointerRefSig(base, newRef, offset))) {
-            return;
-        }
+        var newPtrRef = new PointerRef(cur, base, offset);
+        dataFlowFacts.put(cur, newPtrRef);
+        Logging.debug("[DataFlow] Update dataflow facts: " + newPtrRef);
+    }
 
-//        if (output.getHigh().getSymbol() == null) {
-//            workList.add(new PointerRef(output, offset));
-//            Logging.debug(String.format(
-//                    "[WorkList] Adding varnodeAST-%d %s with offset 0x%x",
-//                    ast.getUniqueId(), ast, offset));
-//        } else {
-//            addRootToWorkList(output.getHigh());
-//            Logging.debug(String.format(
-//                    "[WorkList] Adding HighVariable %s -> varnodeAST-%d %s with offset 0x%x",
-//                    output.getHigh().getName(), ast.getUniqueId(), ast, offset));
-//        }
-        var ptrRef = new PointerRef(base, newRef, offset);
-        workList.add(ptrRef);
-        collectedPtrRef.add(getPointerRefSig(ptrRef.base, ptrRef.current, ptrRef.offset));
-        Logging.debug("[WorkList] Adding " + ptrRef);
+    private void addInterestedVn(Varnode vn) {
+        if (interestedVn.add(vn)) {
+            Logging.debug("[Interested] Add interested varnode: " + vn);
+        }
+    }
+
+    /**
+     * Update the alias map to record the aliasing relationship between two varnodes.
+     */
+    private void updateAliasMap(Varnode a, Varnode b) {
+        aliasMap.computeIfAbsent(a, k -> new HashSet<>()).add(b);
+        aliasMap.computeIfAbsent(b, k -> new HashSet<>()).add(a);
+        Logging.debug("[Alias] Update alias map: " + a + " -> " + b);
     }
 
     /**

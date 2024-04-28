@@ -7,6 +7,7 @@ import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.HighVariable;
 
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Queue;
 
 /**
@@ -18,7 +19,7 @@ public class IntraSolver {
     private final Context ctx;
 
     /** The candidate HighSymbols that need to collect data-flow facts */
-    private final Queue<HighSymbol> candidates;
+    private final List<HighSymbol> candidates;
 
     private final PCodeVisitor visitor;
 
@@ -31,7 +32,7 @@ public class IntraSolver {
             this.ctx = ctx;
         }
         this.candidates = new LinkedList<>();
-        visitor = new PCodeVisitor(this.ctx);
+        visitor = new PCodeVisitor(this.funcNode, this.ctx);
         updateCandidates();
     }
 
@@ -60,33 +61,12 @@ public class IntraSolver {
     public void solve() {
         Logging.info("Solving function: " + funcNode.value.getName());
 
-        for (var symbol : candidates) {
-            collectFactsOnSymbol(symbol);
-        }
+        visitor.prepare(candidates);
+        visitor.run();
+        visitor.updateContext();
 
         ctx.dump();
     }
-
-    /**
-     * Collect intra-procedural data-flow facts on a highSymbol (parameter or local variable)
-     * This Analysis is an on-demand analysis, because we only collect facts on
-     * Parameters / Variables we are interested in.
-     * @param highSym the HighSymbol to collect facts on
-     */
-    private void collectFactsOnSymbol(HighSymbol highSym) {
-        HighVariable highVar = highSym.getHighVariable();
-        Logging.info("HighSymbol: " + highSym.getName());
-
-        // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
-        if (highVar == null) {
-            Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + highSym.getName() + " has no HighVariable");
-            return;
-        }
-
-        // Collect dataflow-facts from specific VarNode
-        visitor.run(highVar);
-    }
-
 
     /**
      * Get the context of the intra-procedural analysis
