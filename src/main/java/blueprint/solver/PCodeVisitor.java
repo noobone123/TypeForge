@@ -246,7 +246,7 @@ public class PCodeVisitor {
         }
 
         updateDataFlowFacts(output, inputFact.base, newOff);
-        addInterestedVn(output);
+        updateInterested(output);
     }
 
 
@@ -259,15 +259,7 @@ public class PCodeVisitor {
 
         updateDataFlowFacts(outputVn, inputFact.base, inputFact.offset);
         updateAliasMap(inputVn, outputVn);
-        addInterestedVn(outputVn);
-
-        // TODO: restrict the aliasing to only pointer Type?
-//        if (ctx.setAliasIntra(inputSymbol, outputSymbol)) {
-//            Logging.debug(
-//                    String.format("[Align] Aligning dataflow facts from %s to %s",
-//                            inputSymbol.getName(), outputSymbol.getName())
-//                );
-//        }
+        updateInterested(outputVn);
     }
 
 
@@ -289,7 +281,7 @@ public class PCodeVisitor {
         var newOff = inputFact.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
         if (OffsetSanityCheck(newOff)) {
             updateDataFlowFacts(pcodeOp.getOutput(), inputFact.base, newOff);
-            addInterestedVn(pcodeOp.getOutput());
+            updateInterested(pcodeOp.getOutput());
         }
     }
 
@@ -309,7 +301,7 @@ public class PCodeVisitor {
         var newOff = inputFact.offset + getSigned(inputs[1]);
         if (OffsetSanityCheck(newOff)) {
             updateDataFlowFacts(pcodeOp.getOutput(), inputFact.base, newOff);
-            addInterestedVn(pcodeOp.getOutput());
+            updateInterested(pcodeOp.getOutput());
         }
     }
 
@@ -344,12 +336,13 @@ public class PCodeVisitor {
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
-        loadMap.put(getDataFlowFact(input), outDT);
-        Logging.debug("[Load] " + input + " -> " + outDT);
+        if (loadMap.put(getDataFlowFact(input), outDT) == null) {
+            Logging.debug("[Load] " + input + " -> " + outDT);
+        }
 
         // also trace the varnode loaded from addr
         updateDataFlowFacts(output, output, 0);
-        addInterestedVn(output);
+        updateInterested(output);
     }
 
     /**
@@ -361,9 +354,11 @@ public class PCodeVisitor {
         var storedAddrVn = pcodeOp.getInput(1);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
-        storeMap.put(getDataFlowFact(storedAddrVn), storedValueDT);
-        Logging.debug("[Store] " + storedAddrVn + " -> " + storedValueDT);
-        addInterestedVn(storedAddrVn);
+        if (storeMap.put(getDataFlowFact(storedAddrVn), storedValueDT) == null) {
+            Logging.debug("[Store] " + storedAddrVn + " -> " + storedValueDT);
+        }
+
+        updateInterested(storedAddrVn);
     }
 
 
@@ -376,17 +371,13 @@ public class PCodeVisitor {
      * @param offset the offset between newRef and base
      */
     private void updateDataFlowFacts(Varnode cur, Varnode base, long offset) {
-        if (!(cur instanceof VarnodeAST ast)) {
-            Logging.warn("Varnode is not VarnodeAST: " + cur.toString());
-            return;
-        }
-
         var newPtrRef = new PointerRef(cur, base, offset);
-        dataFlowFacts.put(cur, newPtrRef);
-        Logging.debug("[DataFlow] Update dataflow facts: " + newPtrRef);
+        if (dataFlowFacts.put(cur, newPtrRef) == null) {
+            Logging.debug("[DataFlow] Update dataflow facts: " + newPtrRef);
+        }
     }
 
-    private void addInterestedVn(Varnode vn) {
+    private void updateInterested(Varnode vn) {
         if (interestedVn.add(vn)) {
             Logging.debug("[Interested] Add interested varnode: " + vn);
         }
