@@ -140,7 +140,7 @@ public class InterSolver {
 
                         var from = calleeNode.parameters.get(inputIdx - 1);
 
-                        if (ctx.updateTypeBuilderFromOther(calleeCtx, from, to, offset)) {
+                        if (ctx.updateTypeBuilderFromCallee(calleeCtx, from, to, offset)) {
                             Logging.debug(String.format(
                                     "Merge TypeBuilder from %s: %s to %s: %s + 0x%x",
                                     calleeNode.value.getName(), from.getName(),

@@ -146,6 +146,12 @@ public class PCodeVisitor {
             ctx.updateDataFlowFacts(outputVn, ptrRef.base, ptrRef.offset);
             ctx.updateInterested(outputVn);
         }
+
+        var inputSymbol = inputVn.getHigh().getSymbol();
+        var outputSymbol = outputVn.getHigh().getSymbol();
+        if (inputSymbol != null && outputSymbol != null) {
+            ctx.setHighSymbolAlias(inputSymbol, outputSymbol);
+        }
     }
 
 

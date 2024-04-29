@@ -1,6 +1,8 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.TypeBuilder;
+import blueprint.base.dataflow.UnionFind;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.PointerRef;
@@ -18,56 +20,6 @@ import java.util.*;
  */
 public class Context {
 
-    /**
-     * KSet is a set with a maximum size.
-     * If the set is full, then the add operation will return false.
-     * @param <E> the element type
-     */
-    public static class KSet<E> implements Iterable<E> {
-        private final HashSet<E> set;
-        private final int maxSize;
-
-        public KSet(int maxSize) {
-            this.maxSize = maxSize;
-            this.set = new HashSet<>();
-        }
-
-        public boolean add(E element) {
-            if (set.size() >= maxSize) {
-                return false;
-            }
-            if (set.add(element)) {
-                Logging.debug("[KSet] Add element, current set: " + set);
-                return true;
-            } else {
-                return false;
-            }
-        }
-
-        public boolean contains(E element) {
-            return set.contains(element);
-        }
-
-        public void merge(KSet<E> other) {
-            for (E element : other.set) {
-                if (this.set.size() >= this.maxSize) {
-                    break;
-                }
-                this.add(element);
-            }
-        }
-
-        @Override
-        public String toString() {
-            return set.toString();
-        }
-
-        @Override
-        public Iterator<E> iterator() {
-            return set.iterator();
-        }
-    }
-
     public FunctionNode funcNode;
 
     /** The map from HighSymbol to TypeBuilder in the current context */
@@ -81,8 +33,7 @@ public class Context {
     public int dataFlowFactKSize = 10;
 
     /** This aliasMap should be traced recursively manually, for example: a->b, b->c, but a->c will not be recorded */
-    public HashMap<Varnode, KSet<Varnode>> aliasMap;
-    public int aliasMapKSize = 10;
+    public UnionFind<HighSymbol> symbolAliasMap;
 
     /** These 2 maps are used to record the DataType's load/store operation on insteseted varnodes */
     public HashMap<PointerRef, DataType> loadMap;
@@ -94,7 +45,7 @@ public class Context {
         this.typeBuilderMap = new HashMap<>();
         this.interestedVn = new HashSet<>();
         this.dataFlowFacts = new HashMap<>();
-        this.aliasMap = new HashMap<>();
+        this.symbolAliasMap = new UnionFind<>();
         this.loadMap = new HashMap<>();
         this.storeMap = new HashMap<>();
     }
@@ -184,6 +135,11 @@ public class Context {
     }
 
 
+    /**
+     * Update the TypeBuilder based on the current context.
+     * The TypeBuilder is used to store the dataflow facts of the HighSymbol.
+     * The dataflow facts are stored in the fieldMap of the TypeBuilder.
+     */
     public void updateTypeBuilder() {
         loadMap.forEach((ptrRef, dt) -> {
             var vn = ptrRef.base;
@@ -204,6 +160,17 @@ public class Context {
             }
             addField(highSym, ptrRef.offset, dt);
         });
+
+
+        // handle highSymbol alias
+        // If two highSymbols are alias, then they will share the same TypeBuilder
+        // TODO: merge to which TypeBuilder? currently we merge to the TypeBuilder which used as the argument
+        typeBuilderMap.forEach((highSym, typeBuilder) -> {
+            HighSymbol root = symbolAliasMap.find(highSym);
+            if (root != highSym) {
+
+            }
+        });
     }
 
 
@@ -223,13 +190,13 @@ public class Context {
 
     /**
      * Merge the TypeBuilder of the other intraSolver's context to the current context.
-     * @param other the other intraSolver's context
+     * @param other the callee intraSolver's context
      * @param from the HighSymbol in the other context
      * @param to the HighSymbol in the current context
      * @param offset the offset of `to` highSymbol's field
      * @return true if the merge is successful
      */
-    public boolean updateTypeBuilderFromOther(Context other, HighSymbol from, HighSymbol to, long offset) {
+    public boolean updateTypeBuilderFromCallee(Context other, HighSymbol from, HighSymbol to, long offset) {
         if (!other.typeBuilderMap.containsKey(from)) {
             Logging.error("No HighSymbol in the other context");
             return false;
@@ -238,6 +205,7 @@ public class Context {
         var otherTypeBuilder = other.typeBuilderMap.get(from);
         if (offset == 0) {
             typeBuilderMap.put(to, otherTypeBuilder);
+            otherTypeBuilder.addTag(0, "ARGUMENT");
         } else {
             var typeBuilder = typeBuilderMap.computeIfAbsent(to, k -> new TypeBuilder());
             typeBuilder.addTypeBuilder(offset, otherTypeBuilder);
@@ -247,31 +215,14 @@ public class Context {
         return true;
     }
 
-
     /**
-     * If two Pointer highSymbols are alias intra-procedural. Then we should merge the TypeBuilder of
-     * these two HighSymbols, which means the two HighSymbols will hold the same TypeBuilder.
+     * If two highSymbols are alias intra-procedural. Then we should set the alias relationship.
      * @param a the HighSymbol a
      * @param b the HighSymbol b
      */
-    public boolean setAliasIntra(HighSymbol a, HighSymbol b) {
-        var typeBuilder_a = typeBuilderMap.get(a);
-        var typeBuilder_b = typeBuilderMap.get(b);
-
-        if (typeBuilder_a == null && typeBuilder_b == null) {
-            return false;
-        }
-
-        if (typeBuilder_a != null) {
-            typeBuilder_a.merge(typeBuilder_b);
-            typeBuilderMap.put(a, typeBuilder_a);
-            typeBuilderMap.put(b, typeBuilder_a);
-        } else {
-            typeBuilderMap.put(a, typeBuilder_b);
-            typeBuilderMap.put(b, typeBuilder_b);
-        }
-
-        return true;
+    public void setHighSymbolAlias(HighSymbol a, HighSymbol b) {
+        Logging.debug("[Alias] Set symbol alias: " + a.getName() + " and " + b.getName());
+        symbolAliasMap.union(a, b);
     }
 
     /**
