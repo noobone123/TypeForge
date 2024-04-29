@@ -24,7 +24,7 @@ public class PCodeVisitor {
     }
 
     /**
-     * Prepare the PCodeVisitor for running flow-sensitive, on-demand data-flow analysis.
+     * Prepare the PCodeVisitor for running on-demand data-flow analysis.
      * In detail:
      * 1. we need to collect the candidate highSymbol's corresponding varnodes and mark them as interested varnodes.
      * 2. initialize the dataFlowFacts using the interested varnodes
@@ -45,7 +45,7 @@ public class PCodeVisitor {
     }
 
     /**
-     * Run the flow-sensitive, on-demand data-flow analysis.
+     * Run the on-demand data-flow analysis.
      */
     public void run() {
         while (!workList.isEmpty()) {
@@ -97,6 +97,8 @@ public class PCodeVisitor {
                 }
             }
         }
+
+        ctx.updateTypeBuilder();
     }
 
     /**
@@ -197,8 +199,14 @@ public class PCodeVisitor {
 
 
     private void handleMultiEqual(PcodeOp pcodeOp) {
-        // TODO: Merging multiple dataflow facts from multiple varnodes?
+        // TODO: a too simple implementation, need to be improved
         var output = pcodeOp.getOutput();
+        var outputFact = ctx.getDataFlowFact(output);
+        for (var input: pcodeOp.getInputs()) {
+            var inputFact = ctx.getDataFlowFact(input);
+            assert inputFact != null;
+            outputFact.merge(inputFact);
+        }
     }
 
 

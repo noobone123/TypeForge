@@ -36,11 +36,25 @@ public class Context {
             if (set.size() >= maxSize) {
                 return false;
             }
-            return set.add(element);
+            if (set.add(element)) {
+                Logging.debug("[KSet] Add element, current set: " + set);
+                return true;
+            } else {
+                return false;
+            }
         }
 
         public boolean contains(E element) {
             return set.contains(element);
+        }
+
+        public void merge(KSet<E> other) {
+            for (E element : other.set) {
+                if (this.set.size() >= this.maxSize) {
+                    break;
+                }
+                this.add(element);
+            }
         }
 
         @Override
@@ -62,7 +76,7 @@ public class Context {
     /** We only collect data-flow related to interested varnodes */
     public final HashSet<Varnode> interestedVn;
 
-    /** Dataflow facts collected from the current function */
+    /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
     public HashMap<Varnode, KSet<PointerRef>> dataFlowFacts;
     public int dataFlowFactKSize = 10;
 
@@ -106,6 +120,7 @@ public class Context {
             interestedVn.addAll(Arrays.asList(highVar.getInstances()));
 
             // Initialize the dataFlowFacts using the interested varnodes
+            // TODO: This may cause flow-insensitive
             for (var vn: highVar.getInstances()) {
                 var startVn = highVar.getRepresentative();
                 var ptrRef = new PointerRef(vn, startVn, 0);
@@ -141,7 +156,6 @@ public class Context {
         var newPtrRef = new PointerRef(cur, base, offset);
         var curDataFlowFact = dataFlowFacts.computeIfAbsent(cur, k -> new KSet<>(dataFlowFactKSize));
         curDataFlowFact.add(newPtrRef);
-        Logging.debug("[DataFlow] Update dataflow fact: " + curDataFlowFact);
     }
 
     public void updateLoadStoreMap(PointerRef ptrRef, DataType dt, boolean isLoad) {
@@ -169,6 +183,30 @@ public class Context {
         }
     }
 
+
+    public void updateTypeBuilder() {
+        loadMap.forEach((ptrRef, dt) -> {
+            var vn = ptrRef.base;
+            var highSym = vn.getHigh().getSymbol();
+            if (highSym == null) {
+                Logging.warn("Failed to get HighSymbol for " + vn);
+                return;
+            }
+            addField(highSym, ptrRef.offset, dt);
+        });
+
+        storeMap.forEach((ptrRef, dt) -> {
+            var vn = ptrRef.base;
+            var highSym = vn.getHigh().getSymbol();
+            if (highSym == null) {
+                Logging.warn("Failed to get HighSymbol for " + vn);
+                return;
+            }
+            addField(highSym, ptrRef.offset, dt);
+        });
+    }
+
+
     /**
      * Add a field to the current context. The field can be a primitive data type.
      * @param highSym the HighSymbol representing the variable that holds this structure type
@@ -191,7 +229,7 @@ public class Context {
      * @param offset the offset of `to` highSymbol's field
      * @return true if the merge is successful
      */
-    public boolean mergeFromOther(Context other, HighSymbol from, HighSymbol to, long offset) {
+    public boolean updateTypeBuilderFromOther(Context other, HighSymbol from, HighSymbol to, long offset) {
         if (!other.typeBuilderMap.containsKey(from)) {
             Logging.error("No HighSymbol in the other context");
             return false;

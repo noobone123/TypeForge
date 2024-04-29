@@ -134,9 +134,7 @@ public class DecompilerHelper {
 
         //include HighVariable information if it's there
         //but don't output UNNAMED a ton of times
-        if (v.getHigh() == null) {
-            retstr += "[noHighVar]";
-        } else {
+        if (v.getHigh() != null) {
             if (v.getHigh().getSymbol() == null) {
                 retstr += "[noHighSym]";
             } else {

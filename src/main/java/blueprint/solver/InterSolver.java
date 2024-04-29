@@ -127,10 +127,10 @@ public class InterSolver {
                         // callsite case 2: func(a+0x10, b), in this case, varnode `a+0x10` has HighVariable without name and has no HighSymbol,
                         //                  in this case, we should merge the data-flow facts to `a` instead of `a+0x10`. So we should find the
                         //                  original HighSymbol `a`.
-                        var callSiteVn = op.getInput(inputIdx);
-                        var resolved = resolveCallSiteArg(callSiteVn);
+                        var callSiteArgVn = op.getInput(inputIdx);
+                        var resolved = resolveCallSiteArg(callSiteArgVn);
                         if (resolved == null) {
-                            Logging.warn("Failed to resolve callsite argument: " + callSiteVn);
+                            Logging.warn("Failed to resolve callsite argument: " + callSiteArgVn);
                             continue;
                         }
 
@@ -140,7 +140,7 @@ public class InterSolver {
 
                         var from = calleeNode.parameters.get(inputIdx - 1);
 
-                        if (ctx.mergeFromOther(calleeCtx, from, to, offset)) {
+                        if (ctx.updateTypeBuilderFromOther(calleeCtx, from, to, offset)) {
                             Logging.debug(String.format(
                                     "Merge TypeBuilder from %s: %s to %s: %s + 0x%x",
                                     calleeNode.value.getName(), from.getName(),
@@ -211,9 +211,9 @@ public class InterSolver {
         FunctionNode funcNode = cg.getNodebyAddr(addr);
         workList.add(funcNode);
 
-//        addr = FunctionHelper.getAddress(0x00119337);
-//        funcNode = cg.getNodebyAddr(addr);
-//        workList.add(funcNode);
+        addr = FunctionHelper.getAddress(0x00119337);
+        funcNode = cg.getNodebyAddr(addr);
+        workList.add(funcNode);
 //
 //        addr = FunctionHelper.getAddress(0x0011a70a);
 //        funcNode = cg.getNodebyAddr(addr);

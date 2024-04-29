@@ -3,6 +3,8 @@ package blueprint.base.dataflow;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.pcode.VarnodeAST;
 
+import java.util.Objects;
+
 
 /**
  * VarNode with data-flow traceable to base pointer.
@@ -23,6 +25,21 @@ public class PointerRef {
         this.base = base;
         current = ref;
         offset = off;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        PointerRef that = (PointerRef) o;
+        return offset == that.offset &&
+                Objects.equals(current, that.current) &&
+                Objects.equals(base, that.base);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(current, base, offset);
     }
 
     @Override
