@@ -46,7 +46,7 @@ public class InterSolver {
             FunctionNode funcNode = workList.poll();
             IntraSolver intraSolver;
             funcNode.decompile();
-            // DecompilerHelper.dumpHighPcode(funcNode.hFunc);
+            DecompilerHelper.dumpHighPcode(funcNode.hFunc);
             // Logging.info(funcNode.getC());
 //            for (var token: funcNode.tokens) {
 //                if (token.getText().equals("local_a8")) {
@@ -83,7 +83,7 @@ public class InterSolver {
      * @return the merged context
      */
     private Context mergeCalleeFacts(FunctionNode funcNode) {
-        Context ctx = new Context();
+        Context ctx = new Context(funcNode);
 
         mergeParamsToArgs(funcNode, ctx);
         // TODO: merge the return value

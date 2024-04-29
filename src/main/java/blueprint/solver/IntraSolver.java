@@ -27,7 +27,7 @@ public class IntraSolver {
         // TODO: fix ghidra's function prototype error.
         this.funcNode = funcNode;
         if (ctx == null) {
-            this.ctx = new Context();
+            this.ctx = new Context(funcNode);
         } else {
             this.ctx = ctx;
         }
@@ -63,7 +63,6 @@ public class IntraSolver {
 
         visitor.prepare(candidates);
         visitor.run();
-        visitor.updateContext();
 
         ctx.dump();
     }

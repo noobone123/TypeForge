@@ -1,12 +1,16 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.TypeBuilder;
+import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
+import blueprint.base.dataflow.PointerRef;
+
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.PcodeOpAST;
+import ghidra.program.model.pcode.Varnode;
 
-import java.util.Collection;
-import java.util.HashMap;
+import java.util.*;
 
 /**
  * The context used to store the relationship between HighSymbol and TypeBuilder.
@@ -14,10 +18,155 @@ import java.util.HashMap;
  */
 public class Context {
 
-    private final HashMap<HighSymbol, TypeBuilder> ctx;
+    /**
+     * KSet is a set with a maximum size.
+     * If the set is full, then the add operation will return false.
+     * @param <E> the element type
+     */
+    public static class KSet<E> implements Iterable<E> {
+        private final HashSet<E> set;
+        private final int maxSize;
 
-    public Context() {
-        this.ctx = new HashMap<>();
+        public KSet(int maxSize) {
+            this.maxSize = maxSize;
+            this.set = new HashSet<>();
+        }
+
+        public boolean add(E element) {
+            if (set.size() >= maxSize) {
+                return false;
+            }
+            return set.add(element);
+        }
+
+        public boolean contains(E element) {
+            return set.contains(element);
+        }
+
+        @Override
+        public String toString() {
+            return set.toString();
+        }
+
+        @Override
+        public Iterator<E> iterator() {
+            return set.iterator();
+        }
+    }
+
+    public FunctionNode funcNode;
+
+    /** The map from HighSymbol to TypeBuilder in the current context */
+    public final HashMap<HighSymbol, TypeBuilder> typeBuilderMap;
+
+    /** We only collect data-flow related to interested varnodes */
+    public final HashSet<Varnode> interestedVn;
+
+    /** Dataflow facts collected from the current function */
+    public HashMap<Varnode, KSet<PointerRef>> dataFlowFacts;
+    public int dataFlowFactKSize = 10;
+
+    /** This aliasMap should be traced recursively manually, for example: a->b, b->c, but a->c will not be recorded */
+    public HashMap<Varnode, KSet<Varnode>> aliasMap;
+    public int aliasMapKSize = 10;
+
+    /** These 2 maps are used to record the DataType's load/store operation on insteseted varnodes */
+    public HashMap<PointerRef, DataType> loadMap;
+    public HashMap<PointerRef, DataType> storeMap;
+
+
+    public Context(FunctionNode funcNode) {
+        this.funcNode = funcNode;
+        this.typeBuilderMap = new HashMap<>();
+        this.interestedVn = new HashSet<>();
+        this.dataFlowFacts = new HashMap<>();
+        this.aliasMap = new HashMap<>();
+        this.loadMap = new HashMap<>();
+        this.storeMap = new HashMap<>();
+    }
+
+
+    /**
+     * Initialize the dataFlowFacts using the interested HighSymbols
+     * @param candidates the HighSymbols that need to collect data-flow facts
+     */
+    public void initDataFlowFacts(List<HighSymbol> candidates) {
+        // Update the interestedVn
+        for (var candidate: candidates) {
+            var highVar = candidate.getHighVariable();
+            Logging.info("Candidate HighSymbol: " + candidate.getName());
+
+            // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
+            if (highVar == null) {
+                Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + candidate.getName() + " has no HighVariable");
+                continue;
+            }
+
+            // Add all varnode instances of the HighVariable to the interestedVn
+            interestedVn.addAll(Arrays.asList(highVar.getInstances()));
+
+            // Initialize the dataFlowFacts using the interested varnodes
+            for (var vn: highVar.getInstances()) {
+                var startVn = highVar.getRepresentative();
+                var ptrRef = new PointerRef(vn, startVn, 0);
+                dataFlowFacts.put(vn, new KSet<>(dataFlowFactKSize));
+                dataFlowFacts.get(vn).add(ptrRef);
+            }
+        }
+    }
+
+    /**
+     * If the PCodeOp's input varnodes is related to the interested varnode, then we should handle it.
+     * @param pcode the PCodeOp
+     * @return true if the PCodeOp is related to the interested varnode
+     */
+    public boolean isInterestedPCode(PcodeOpAST pcode) {
+        for (var vn: pcode.getInputs()) {
+            if (interestedVn.contains(vn)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Update the dataflow facts with the new reference varnode.
+     * Be careful, some varnode looks identical, but actually they have different uniqueId.
+     * So they are different varnodes.
+     * @param cur the current varnode which indicates the reference
+     * @param base the base varnode in the PointerRef
+     * @param offset the offset between newRef and base
+     */
+    public void updateDataFlowFacts(Varnode cur, Varnode base, long offset) {
+        var newPtrRef = new PointerRef(cur, base, offset);
+        var curDataFlowFact = dataFlowFacts.computeIfAbsent(cur, k -> new KSet<>(dataFlowFactKSize));
+        curDataFlowFact.add(newPtrRef);
+        Logging.debug("[DataFlow] Update dataflow fact: " + curDataFlowFact);
+    }
+
+    public void updateLoadStoreMap(PointerRef ptrRef, DataType dt, boolean isLoad) {
+        if (isLoad) {
+            loadMap.put(ptrRef, dt);
+            Logging.debug("[Load] Update load map: " + ptrRef + " -> " + dt);
+        } else {
+            storeMap.put(ptrRef, dt);
+            Logging.debug("[Store] Update store map: " + ptrRef + " -> " + dt);
+        }
+    }
+
+    public KSet<PointerRef> getDataFlowFact(Varnode vn) {
+        var res = dataFlowFacts.get(vn);
+        if (res == null) {
+            Logging.warn("Failed to get dataflow fact for " + vn);
+            return null;
+        }
+        return res;
+    }
+
+    public void updateInterested(Varnode vn) {
+        if (interestedVn.add(vn)) {
+            Logging.debug("[Interested] Add interested varnode: " + vn);
+        }
     }
 
     /**
@@ -27,11 +176,11 @@ public class Context {
      * @param dt the field's data type if adding a DataType
      */
     public void addField(HighSymbol highSym, long offset, DataType dt) {
-        ctx.computeIfAbsent(highSym, k -> new TypeBuilder()).addPrimitive(offset, dt);
+        typeBuilderMap.computeIfAbsent(highSym, k -> new TypeBuilder()).addPrimitive(offset, dt);
     }
 
     public void addField(HighSymbol highSym, long offset, TypeBuilder builder) {
-        ctx.computeIfAbsent(highSym, k -> new TypeBuilder()).addTypeBuilder(offset, builder);
+        typeBuilderMap.computeIfAbsent(highSym, k -> new TypeBuilder()).addTypeBuilder(offset, builder);
     }
 
     /**
@@ -43,16 +192,16 @@ public class Context {
      * @return true if the merge is successful
      */
     public boolean mergeFromOther(Context other, HighSymbol from, HighSymbol to, long offset) {
-        if (!other.ctx.containsKey(from)) {
+        if (!other.typeBuilderMap.containsKey(from)) {
             Logging.error("No HighSymbol in the other context");
             return false;
         }
 
-        var otherTypeBuilder = other.ctx.get(from);
+        var otherTypeBuilder = other.typeBuilderMap.get(from);
         if (offset == 0) {
-            ctx.put(to, otherTypeBuilder);
+            typeBuilderMap.put(to, otherTypeBuilder);
         } else {
-            var typeBuilder = ctx.computeIfAbsent(to, k -> new TypeBuilder());
+            var typeBuilder = typeBuilderMap.computeIfAbsent(to, k -> new TypeBuilder());
             typeBuilder.addTypeBuilder(offset, otherTypeBuilder);
             typeBuilder.addTag(offset, "ARGUMENT");
         }
@@ -68,8 +217,8 @@ public class Context {
      * @param b the HighSymbol b
      */
     public boolean setAliasIntra(HighSymbol a, HighSymbol b) {
-        var typeBuilder_a = ctx.get(a);
-        var typeBuilder_b = ctx.get(b);
+        var typeBuilder_a = typeBuilderMap.get(a);
+        var typeBuilder_b = typeBuilderMap.get(b);
 
         if (typeBuilder_a == null && typeBuilder_b == null) {
             return false;
@@ -77,11 +226,11 @@ public class Context {
 
         if (typeBuilder_a != null) {
             typeBuilder_a.merge(typeBuilder_b);
-            ctx.put(a, typeBuilder_a);
-            ctx.put(b, typeBuilder_a);
+            typeBuilderMap.put(a, typeBuilder_a);
+            typeBuilderMap.put(b, typeBuilder_a);
         } else {
-            ctx.put(a, typeBuilder_b);
-            ctx.put(b, typeBuilder_b);
+            typeBuilderMap.put(a, typeBuilder_b);
+            typeBuilderMap.put(b, typeBuilder_b);
         }
 
         return true;
@@ -91,17 +240,17 @@ public class Context {
      * Dump the current context to the log
      */
     public void dump() {
-        for (var entry : ctx.entrySet()) {
+        for (var entry : typeBuilderMap.entrySet()) {
             Logging.info("HighSymbol: " + entry.getKey().getName());
             Logging.info("TypeBuilder: " + entry.getValue().toString());
         }
     }
 
     public Collection<HighSymbol> getHighSymbols() {
-        return ctx.keySet();
+        return typeBuilderMap.keySet();
     }
 
     public boolean isEmpty() {
-        return ctx.isEmpty();
+        return typeBuilderMap.isEmpty();
     }
 }

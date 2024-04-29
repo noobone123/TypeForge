@@ -102,7 +102,8 @@ public class DecompilerHelper {
                     highPcodeInst.append("," + " ").append(getVarnodeString((VarnodeAST) op.getInput(i)));
                 }
 
-                Logging.info(op.getSeqnum().toString() + " => " + highPcodeInst);
+                // Logging.info(op.getSeqnum().toString() + " => " + highPcodeInst);
+                Logging.info(highPcodeInst.toString());
             }
         }
     }
@@ -128,19 +129,19 @@ public class DecompilerHelper {
 
     protected static String getVarnodeString(VarnodeAST v) {
         String retstr = "";
+        retstr += v.getUniqueId() + "_";
         retstr += v.toString();
 
         //include HighVariable information if it's there
         //but don't output UNNAMED a ton of times
-
-        if (v.getHigh() != null) {
-            if (v.getHigh().getName() != null) {
-                if (v.getHigh().getName() != "UNNAMED") {
-                    retstr += "[" + v.getHigh().getName() + "]";
-                }
-            }
+        if (v.getHigh() == null) {
+            retstr += "[noHighVar]";
         } else {
-            retstr += "[null]";
+            if (v.getHigh().getSymbol() == null) {
+                retstr += "[noHighSym]";
+            } else {
+                retstr += "[" + v.getHigh().getSymbol().getName() + "]";
+            }
         }
         return retstr;
     }

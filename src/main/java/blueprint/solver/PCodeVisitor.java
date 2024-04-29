@@ -12,57 +12,11 @@ import static blueprint.utils.DecompilerHelper.getSigned;
 
 public class PCodeVisitor {
 
-    /**
-     * VarNode with data-flow traceable to base pointer.
-     * For example, If there is a statement like following:
-     * <p>
-     *     <code> varnode_1 = *(varnode_0 + 4) </code>
-     *     <code> varnode_2 = *(varnode_1 + 4) </code>
-     * </p>
-     *
-     * varnode_0 is the original pointer, varnode_1's offset is 4, varnode_2's offset is 8
-     */
-    public static class PointerRef {
-        Varnode base;           // The base pointer
-        Varnode current;		// The current pointer
-        long offset;			// Offset relative to ** Base ** pointer
-
-        public PointerRef(Varnode ref, Varnode base, long off) {
-            this.base = base;
-            current = ref;
-            offset = off;
-        }
-
-        @Override
-        public String toString() {
-            var currentAST = (VarnodeAST) current;
-            var baseAST = (VarnodeAST) base;
-            return "PointerRef{ " +
-                    "curr = " + currentAST.getUniqueId() + "_" + currentAST +  ", " +
-                    "base = " + baseAST.getUniqueId() + "_" + baseAST + ", " +
-                    "offset = 0x" + Long.toHexString(offset) +
-                    " }";
-        }
-    }
-
     public Context ctx;
     public FunctionNode funcNode;
 
-    /** We only collect data-flow related to interested varnodes */
-    public Set<Varnode> interestedVn = new HashSet<>();
-
     /** The workList queue of current function */
     public LinkedList<PcodeOpAST> workList = new LinkedList<>();
-
-    /** Dataflow facts collected from the current function */
-    public HashMap<Varnode, PointerRef> dataFlowFacts = new HashMap<>();
-
-    /** This aliasMap should be traced recursively manually, for example: a->b, b->c, but a->c will not be recorded */
-    public HashMap<Varnode, HashSet<Varnode>> aliasMap = new HashMap<>();
-
-    /** These 2 maps are used to record the DataType's load/store operation on insteseted varnodes */
-    public HashMap<PointerRef, DataType> loadMap = new HashMap<>();
-    public HashMap<PointerRef, DataType> storeMap = new HashMap<>();
 
     public PCodeVisitor(FunctionNode funcNode, Context ctx) {
         this.funcNode = funcNode;
@@ -78,7 +32,7 @@ public class PCodeVisitor {
      * @param candidates the list of HighSymbols that need to collect data-flow facts
      */
     public void prepare(List<HighSymbol> candidates) {
-        initDataFlowFacts(candidates);
+        ctx.initDataFlowFacts(candidates);
 
         // update the workList
         for (var bb: funcNode.hFunc.getBasicBlocks()) {
@@ -88,55 +42,6 @@ public class PCodeVisitor {
                 workList.add((PcodeOpAST) op);
             }
         }
-    }
-
-
-    private void initDataFlowFacts(List<HighSymbol> candidates) {
-        // Update the interestedVn
-        for (var candidate: candidates) {
-            var highVar = candidate.getHighVariable();
-            Logging.info("HighSymbol: " + candidate.getName());
-
-            // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
-            if (highVar == null) {
-                Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + candidate.getName() + " has no HighVariable");
-                continue;
-            }
-
-            // Add all varnode instances of the HighVariable to the interestedVn
-            interestedVn.addAll(Arrays.asList(highVar.getInstances()));
-
-            // Initialize the dataFlowFacts using the interested varnodes
-            for (var vn: highVar.getInstances()) {
-                var startVn = highVar.getRepresentative();
-                dataFlowFacts.put(vn, new PointerRef(vn, startVn, 0));
-            }
-        }
-    }
-
-
-    /**
-     * If the PCodeOp's input varnodes is related to the interested varnode, then we should handle it.
-     * @param pcode the PCodeOp
-     * @return true if the PCodeOp is related to the interested varnode
-     */
-    private boolean isInterestedPCode(PcodeOpAST pcode) {
-        for (var vn: pcode.getInputs()) {
-            if (interestedVn.contains(vn)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-
-    private PointerRef getDataFlowFact(Varnode vn) {
-        var res = dataFlowFacts.get(vn);
-        if (res == null) {
-            Logging.warn("Failed to get dataflow fact for " + vn);
-            return null;
-        }
-        return res;
     }
 
     /**
@@ -149,43 +54,43 @@ public class PCodeVisitor {
 
             switch (opCode) {
                 case PcodeOp.INT_ADD, PcodeOp.INT_SUB -> {
-                    if (isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleAddOrSub(pcode);
                     }
                 }
                 case PcodeOp.COPY, PcodeOp.CAST -> {
-                    if (isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleAssign(pcode);
                     }
                 }
                 case PcodeOp.PTRADD -> {
-                    if (isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handlePtrAdd(pcode);
                     }
                 }
                 case PcodeOp.PTRSUB -> {
-                    if (isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handlePtrSub(pcode);
                     }
                 }
                 case PcodeOp.MULTIEQUAL -> {
-                    if (isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleMultiEqual(pcode);
                     }
                 }
                 case PcodeOp.LOAD -> {
-                    if (isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleLoad(pcode);
                     }
                 }
                 case PcodeOp.STORE -> {
-                    if (isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleStore(pcode);
                     }
@@ -193,28 +98,6 @@ public class PCodeVisitor {
             }
         }
     }
-
-
-    /**
-     * update IntraSolver's context with the collected data-flow facts.
-     */
-    public void updateContext() {
-        // TODO: handle alias and TypeBuilder ...
-        loadMap.forEach((ptrRef, dt) -> {
-            var base = ptrRef.base;
-            var offset = ptrRef.offset;
-            var highSymbol = base.getHigh().getSymbol();
-            ctx.addField(highSymbol, offset, dt);
-        });
-
-        storeMap.forEach((ptrRef, dt) -> {
-            var base = ptrRef.base;
-            var offset = ptrRef.offset;
-            var highSymbol = base.getHigh().getSymbol();
-            ctx.addField(highSymbol, offset, dt);
-        });
-    }
-
 
     /**
      * If parameter is an ADD or SUB operation, we can calculate the new offset
@@ -235,18 +118,18 @@ public class PCodeVisitor {
             return;
         }
 
-        var inputFact = getDataFlowFact(inputs[0]);
+        var inputFact = ctx.getDataFlowFact(inputs[0]);
         assert inputFact != null;
 
-        newOff = inputFact.offset +
-            (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
+        for (var ptrRef: inputFact) {
+            newOff = ptrRef.offset +
+                (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
 
-        if (!OffsetSanityCheck(newOff)) {
-            return;
+            if (OffsetSanityCheck(newOff)) {
+                ctx.updateDataFlowFacts(output, ptrRef.base, newOff);
+                ctx.updateInterested(output);
+            }
         }
-
-        updateDataFlowFacts(output, inputFact.base, newOff);
-        updateInterested(output);
     }
 
 
@@ -254,12 +137,13 @@ public class PCodeVisitor {
         var inputVn = pcodeOp.getInput(0);
         var outputVn = pcodeOp.getOutput();
 
-        var inputFact = getDataFlowFact(inputVn);
+        var inputFact = ctx.getDataFlowFact(inputVn);
         assert inputFact != null;
 
-        updateDataFlowFacts(outputVn, inputFact.base, inputFact.offset);
-        updateAliasMap(inputVn, outputVn);
-        updateInterested(outputVn);
+        for (var ptrRef: inputFact) {
+            ctx.updateDataFlowFacts(outputVn, ptrRef.base, ptrRef.offset);
+            ctx.updateInterested(outputVn);
+        }
     }
 
 
@@ -276,12 +160,15 @@ public class PCodeVisitor {
             return;
         }
 
-        var inputFact = getDataFlowFact(inputs[0]);
+        var inputFact = ctx.getDataFlowFact(inputs[0]);
         assert inputFact != null;
-        var newOff = inputFact.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
-        if (OffsetSanityCheck(newOff)) {
-            updateDataFlowFacts(pcodeOp.getOutput(), inputFact.base, newOff);
-            updateInterested(pcodeOp.getOutput());
+
+        for (var ptrRef: inputFact) {
+            long newOff = ptrRef.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
+            if (OffsetSanityCheck(newOff)) {
+                ctx.updateDataFlowFacts(pcodeOp.getOutput(), ptrRef.base, newOff);
+                ctx.updateInterested(pcodeOp.getOutput());
+            }
         }
     }
 
@@ -296,12 +183,15 @@ public class PCodeVisitor {
         if (!inputs[1].isConstant()) {
             return;
         }
-        var inputFact = getDataFlowFact(inputs[0]);
+        var inputFact = ctx.getDataFlowFact(inputs[0]);
         assert inputFact != null;
-        var newOff = inputFact.offset + getSigned(inputs[1]);
-        if (OffsetSanityCheck(newOff)) {
-            updateDataFlowFacts(pcodeOp.getOutput(), inputFact.base, newOff);
-            updateInterested(pcodeOp.getOutput());
+
+        for (var ptrRef: inputFact) {
+            long newOff = ptrRef.offset + getSigned(inputs[1]);
+            if (OffsetSanityCheck(newOff)) {
+                ctx.updateDataFlowFacts(pcodeOp.getOutput(), ptrRef.base, newOff);
+                ctx.updateInterested(pcodeOp.getOutput());
+            }
         }
     }
 
@@ -336,13 +226,12 @@ public class PCodeVisitor {
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
-        if (loadMap.put(getDataFlowFact(input), outDT) == null) {
-            Logging.debug("[Load] " + input + " -> " + outDT);
+
+        for (var ptrRef : ctx.getDataFlowFact(input)) {
+            ctx.updateLoadStoreMap(ptrRef, outDT, true);
         }
 
-        // also trace the varnode loaded from addr
-        updateDataFlowFacts(output, output, 0);
-        updateInterested(output);
+        // TODO: tracing the dataflow of load op's output varnode?
     }
 
     /**
@@ -354,42 +243,9 @@ public class PCodeVisitor {
         var storedAddrVn = pcodeOp.getInput(1);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
-        if (storeMap.put(getDataFlowFact(storedAddrVn), storedValueDT) == null) {
-            Logging.debug("[Store] " + storedAddrVn + " -> " + storedValueDT);
+        for (var ptrRef : ctx.getDataFlowFact(storedAddrVn)) {
+            ctx.updateLoadStoreMap(ptrRef, storedValueDT, false);
         }
-
-        updateInterested(storedAddrVn);
-    }
-
-
-    /**
-     * Update the dataflow facts with the new reference varnode.
-     * Be careful, some varnode looks identical, but actually they have different uniqueId.
-     * So they are different varnodes.
-     * @param cur the current varnode which indicates the reference
-     * @param base the base varnode in the PointerRef
-     * @param offset the offset between newRef and base
-     */
-    private void updateDataFlowFacts(Varnode cur, Varnode base, long offset) {
-        var newPtrRef = new PointerRef(cur, base, offset);
-        if (dataFlowFacts.put(cur, newPtrRef) == null) {
-            Logging.debug("[DataFlow] Update dataflow facts: " + newPtrRef);
-        }
-    }
-
-    private void updateInterested(Varnode vn) {
-        if (interestedVn.add(vn)) {
-            Logging.debug("[Interested] Add interested varnode: " + vn);
-        }
-    }
-
-    /**
-     * Update the alias map to record the aliasing relationship between two varnodes.
-     */
-    private void updateAliasMap(Varnode a, Varnode b) {
-        aliasMap.computeIfAbsent(a, k -> new HashSet<>()).add(b);
-        aliasMap.computeIfAbsent(b, k -> new HashSet<>()).add(a);
-        Logging.debug("[Alias] Update alias map: " + a + " -> " + b);
     }
 
     /**
@@ -403,9 +259,5 @@ public class PCodeVisitor {
         }
         // TODO: 0x2000 is a reasonable limit for a structure ?
         else return offset <= 0x2000;
-    }
-
-    public String getPointerRefSig(Varnode base, Varnode ref, long off) {
-        return ((VarnodeAST)base).getUniqueId() + "-" + ((VarnodeAST)ref).getUniqueId() + "-" + off;
     }
 }
