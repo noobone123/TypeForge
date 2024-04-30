@@ -1,5 +1,7 @@
 package blueprint.base.dataflow;
 
+import blueprint.utils.Logging;
+import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.pcode.VarnodeAST;
 
@@ -16,14 +18,19 @@ import java.util.Objects;
  *
  * varnode_0 is the original pointer, varnode_1's offset is 4, varnode_2's offset is 8
  */
-public class PointerRef {
-    public Varnode base;           // The base pointer
-    public Varnode current;		// The current pointer
-    public long offset;			// Offset relative to ** Base ** pointer
+public class SymbolExpr {
+    public HighSymbol baseSymbol;
+    public long offset;
+    public Varnode representVn;
+    public Varnode baseVn;
 
-    public PointerRef(Varnode ref, Varnode base, long off) {
-        this.base = base;
-        current = ref;
+    public SymbolExpr(Varnode representVn, Varnode base, long off) {
+        this.baseVn = base;
+        this.baseSymbol = base.getHigh().getSymbol();
+        if (this.baseSymbol == null) {
+            Logging.warn("Base Varnode has no HighSymbol: " + base);
+        }
+        this.representVn = representVn;
         offset = off;
     }
 
@@ -31,24 +38,22 @@ public class PointerRef {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        PointerRef that = (PointerRef) o;
+        SymbolExpr that = (SymbolExpr) o;
         return offset == that.offset &&
-                Objects.equals(current, that.current) &&
-                Objects.equals(base, that.base);
+                Objects.equals(baseSymbol, that.baseSymbol);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(current, base, offset);
+        return Objects.hash(baseSymbol, offset);
     }
 
     @Override
     public String toString() {
-        var currentAST = (VarnodeAST) current;
-        var baseAST = (VarnodeAST) base;
+        var representAST = (VarnodeAST) representVn;
         return "PointerRef{ " +
-                "curr = " + currentAST.getUniqueId() + "_" + currentAST +  ", " +
-                "base = " + baseAST.getUniqueId() + "_" + baseAST + ", " +
+                "repr = " + representAST.getUniqueId() + "_" + representAST +  ", " +
+                "symbol = " + baseSymbol.getName() + ", " +
                 "offset = 0x" + Long.toHexString(offset) +
                 " }";
     }

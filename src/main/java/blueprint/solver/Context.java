@@ -5,7 +5,7 @@ import blueprint.base.dataflow.TypeBuilder;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
-import blueprint.base.dataflow.PointerRef;
+import blueprint.base.dataflow.SymbolExpr;
 
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
@@ -29,15 +29,15 @@ public class Context {
     public final HashSet<Varnode> interestedVn;
 
     /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
-    public HashMap<Varnode, KSet<PointerRef>> dataFlowFacts;
+    public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
     public int dataFlowFactKSize = 10;
 
     /** This aliasMap should be traced recursively manually, for example: a->b, b->c, but a->c will not be recorded */
     public UnionFind<HighSymbol> symbolAliasMap;
 
     /** These 2 maps are used to record the DataType's load/store operation on insteseted varnodes */
-    public HashMap<PointerRef, DataType> loadMap;
-    public HashMap<PointerRef, DataType> storeMap;
+    public HashMap<SymbolExpr, DataType> loadMap;
+    public HashMap<SymbolExpr, DataType> storeMap;
 
 
     public Context(FunctionNode funcNode) {
@@ -74,7 +74,7 @@ public class Context {
             // TODO: This may cause flow-insensitive
             for (var vn: highVar.getInstances()) {
                 var startVn = highVar.getRepresentative();
-                var ptrRef = new PointerRef(vn, startVn, 0);
+                var ptrRef = new SymbolExpr(vn, startVn, 0);
                 dataFlowFacts.put(vn, new KSet<>(dataFlowFactKSize));
                 dataFlowFacts.get(vn).add(ptrRef);
             }
@@ -104,12 +104,12 @@ public class Context {
      * @param offset the offset between newRef and base
      */
     public void updateDataFlowFacts(Varnode cur, Varnode base, long offset) {
-        var newPtrRef = new PointerRef(cur, base, offset);
+        var newPtrRef = new SymbolExpr(cur, base, offset);
         var curDataFlowFact = dataFlowFacts.computeIfAbsent(cur, k -> new KSet<>(dataFlowFactKSize));
         curDataFlowFact.add(newPtrRef);
     }
 
-    public void updateLoadStoreMap(PointerRef ptrRef, DataType dt, boolean isLoad) {
+    public void updateLoadStoreMap(SymbolExpr ptrRef, DataType dt, boolean isLoad) {
         if (isLoad) {
             loadMap.put(ptrRef, dt);
             Logging.debug("[Load] Update load map: " + ptrRef + " -> " + dt);
@@ -119,7 +119,7 @@ public class Context {
         }
     }
 
-    public KSet<PointerRef> getDataFlowFact(Varnode vn) {
+    public KSet<SymbolExpr> getDataFlowFact(Varnode vn) {
         var res = dataFlowFacts.get(vn);
         if (res == null) {
             Logging.warn("Failed to get dataflow fact for " + vn);
