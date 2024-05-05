@@ -18,42 +18,27 @@ public class IntraSolver {
     private final FunctionNode funcNode;
     private final Context ctx;
 
-    /** The candidate HighSymbols that need to collect data-flow facts */
-    private final List<HighSymbol> candidates;
-
     private final PCodeVisitor visitor;
 
     public IntraSolver(FunctionNode funcNode, Context ctx) {
         // TODO: fix ghidra's function prototype error.
         this.funcNode = funcNode;
-        if (ctx == null) {
-            this.ctx = new Context(funcNode);
-        } else {
-            this.ctx = ctx;
-        }
-        this.candidates = new LinkedList<>();
+        this.ctx = ctx;
         visitor = new PCodeVisitor(this.funcNode, this.ctx);
-        updateCandidates();
-    }
 
-    /**
-     * IMPORTANT: Update the candidate HighSymbols that need to collect data-flow facts
-     * Currently, we only collect data-flow facts on parameters and symbols used as arguments at callsite.
-     */
-    public void updateCandidates() {
+        /*
+         * IMPORTANT: Update the candidate HighSymbols that need to collect data-flow facts
+         * Currently, we only collect data-flow facts on :
+         * 1. parameters
+         * 2. arguments
+         * 3. return values
+         * and their aliases.
+         */
         if (funcNode.parameters.isEmpty()) {
             Logging.warn("No parameters in the function");
         }
-        candidates.addAll(funcNode.parameters);
-
-        // If it has highSymbols merged from callee functions
-        if (!ctx.isEmpty()) {
-            for (var symbol : ctx.getHighSymbols()) {
-                if (funcNode.parameters.contains(symbol)) {
-                    continue;
-                }
-                candidates.add(symbol);
-            }
+        for (var symbol : funcNode.parameters) {
+            ctx.updateIntraCandidates(funcNode, symbol);
         }
     }
 
@@ -61,7 +46,7 @@ public class IntraSolver {
     public void solve() {
         Logging.info("Solving function: " + funcNode.value.getName());
 
-        visitor.prepare(candidates);
+        visitor.prepare();
         visitor.run();
 
         ctx.dump();

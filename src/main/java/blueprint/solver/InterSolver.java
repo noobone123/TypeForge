@@ -19,10 +19,9 @@ public class InterSolver {
     Queue<FunctionNode> workList = new LinkedList<>();
 
     /** The set of solved functions */
-    Set<FunctionNode> solved = new HashSet<>();
+    Set<FunctionNode> solvedFunc = new HashSet<>();
 
-    /** The map from function node to its intra-procedural solver */
-    Map<FunctionNode, IntraSolver> funcNodeToIntraSolver = new HashMap<>();
+    Context interCtx;
 
     Set<TypeBuilder> allTypes = new HashSet<>();
 
@@ -37,6 +36,7 @@ public class InterSolver {
 
     public InterSolver(CallGraph cg) {
         this.cg = cg;
+        this.interCtx = new Context();
         buildWorkListTest();
     }
 
@@ -44,7 +44,6 @@ public class InterSolver {
     public void run() {
         while (!workList.isEmpty()) {
             FunctionNode funcNode = workList.poll();
-            IntraSolver intraSolver;
             funcNode.decompile();
             DecompilerHelper.dumpHighPcode(funcNode.hFunc);
             // Logging.info(funcNode.getC());
@@ -62,17 +61,16 @@ public class InterSolver {
             // collect data-flow facts from its callee functions.
             if (!funcNode.isLeaf) {
                 Logging.info("Non-leaf function: " + funcNode.value.getName());
-                var ctx = mergeCalleeFacts(funcNode);
-                intraSolver = new IntraSolver(funcNode, ctx);
+                // var ctx = mergeCalleeFacts(funcNode);
+                // intraSolver = new IntraSolver(funcNode, ctx);
             } else {
                 Logging.info("Leaf function: " + funcNode.value.getName());
-
-                intraSolver = new IntraSolver(funcNode, null);
+                interCtx.createIntraContext(funcNode);
             }
-
+            IntraSolver intraSolver = new IntraSolver(funcNode, interCtx);
             intraSolver.solve();
-            funcNodeToIntraSolver.put(funcNode, intraSolver);
-            solved.add(funcNode);
+
+            solvedFunc.add(funcNode);
         }
     }
 
@@ -108,7 +106,7 @@ public class InterSolver {
                 if (op.getOpcode() == PcodeOp.CALL) {
                     var calleeAddr = op.getInput(0).getAddress();
                     var calleeNode = cg.getNodebyAddr(calleeAddr);
-                    if (!solved.contains(calleeNode)) {
+                    if (!solvedFunc.contains(calleeNode)) {
                         Logging.warn("Callee function not solved: " + calleeNode.value.getName());
                         continue;
                     }
@@ -211,9 +209,9 @@ public class InterSolver {
         FunctionNode funcNode = cg.getNodebyAddr(addr);
         workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x00119337);
-        funcNode = cg.getNodebyAddr(addr);
-        workList.add(funcNode);
+//        addr = FunctionHelper.getAddress(0x00119337);
+//        funcNode = cg.getNodebyAddr(addr);
+//        workList.add(funcNode);
 //
 //        addr = FunctionHelper.getAddress(0x0011a70a);
 //        funcNode = cg.getNodebyAddr(addr);

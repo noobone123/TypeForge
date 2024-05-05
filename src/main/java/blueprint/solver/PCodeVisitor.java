@@ -31,7 +31,7 @@ public class PCodeVisitor {
      * 2. initialize the workList
      * @param candidates the list of HighSymbols that need to collect data-flow facts
      */
-    public void prepare(List<HighSymbol> candidates) {
+    public void prepare() {
         ctx.initDataFlowFacts(candidates);
 
         // update the workList

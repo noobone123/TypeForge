@@ -11,43 +11,59 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
+import org.h2.expression.function.FunctionN;
 
 import java.util.*;
 
 /**
  * The context used to store the relationship between HighSymbol and TypeBuilder.
- * Each IntraSolver holds a Context.
  */
 public class Context {
 
-    public FunctionNode funcNode;
+    public static class IntraContext {
+        /** The candidate HighSymbols that need to collect data-flow facts */
+        public final HashSet<HighSymbol> candidates;
+        public final HashSet<Varnode> interestedVn;
 
-    /** The map from HighSymbol to TypeBuilder in the current context */
-    public final HashMap<HighSymbol, TypeBuilder> typeBuilderMap;
+        /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
+        public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
+        public int dataFlowFactKSize = 10;
 
-    /** We only collect data-flow related to interested varnodes */
-    public final HashSet<Varnode> interestedVn;
+        /** These 2 maps are used to record the DataType's load/store operation on insteseted varnodes */
+        public HashMap<SymbolExpr, DataType> loadMap;
+        public HashMap<SymbolExpr, DataType> storeMap;
 
-    /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
-    public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
-    public int dataFlowFactKSize = 10;
+        public IntraContext() {
+            this.candidates = new HashSet<>();
+            this.interestedVn = new HashSet<>();
+            this.dataFlowFacts = new HashMap<>();
+            this.loadMap = new HashMap<>();
+            this.storeMap = new HashMap<>();
+        }
+    }
 
-    /** This aliasMap should be traced recursively manually, for example: a->b, b->c, but a->c will not be recorded */
-    public UnionFind<HighSymbol> symbolAliasMap;
+    public HashMap<FunctionNode, IntraContext> intraCtxMap;
+    public UnionFind<SymbolExpr> symbolAliasMap;
+    public HashMap<SymbolExpr, TypeBuilder> symbol2TypeBuilder;
 
-    /** These 2 maps are used to record the DataType's load/store operation on insteseted varnodes */
-    public HashMap<SymbolExpr, DataType> loadMap;
-    public HashMap<SymbolExpr, DataType> storeMap;
-
-
-    public Context(FunctionNode funcNode) {
-        this.funcNode = funcNode;
-        this.typeBuilderMap = new HashMap<>();
-        this.interestedVn = new HashSet<>();
-        this.dataFlowFacts = new HashMap<>();
+    public Context() {
+        this.intraCtxMap = new HashMap<>();
         this.symbolAliasMap = new UnionFind<>();
-        this.loadMap = new HashMap<>();
-        this.storeMap = new HashMap<>();
+        this.symbol2TypeBuilder = new HashMap<>();
+    }
+
+    public void createIntraContext(FunctionNode funcNode) {
+        IntraContext intraCtx = new IntraContext();
+        intraCtxMap.put(funcNode, intraCtx);
+    }
+
+    public void updateIntraCandidates(FunctionNode funcNode, HighSymbol highSymbol) {
+        IntraContext intraCtx = intraCtxMap.get(funcNode);
+        if (intraCtx == null) {
+            Logging.error("Failed to get intraContext for " + funcNode.value.getName());
+            return;
+        }
+        intraCtx.candidates.add(highSymbol);
     }
 
 
