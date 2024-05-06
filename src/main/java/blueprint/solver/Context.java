@@ -11,7 +11,6 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
-import org.h2.expression.function.FunctionN;
 
 import java.util.*;
 
@@ -22,8 +21,8 @@ public class Context {
 
     public static class IntraContext {
         /** The candidate HighSymbols that need to collect data-flow facts */
-        public final HashSet<HighSymbol> candidates;
-        public final HashSet<Varnode> interestedVn;
+        public final HashSet<HighSymbol> tracedSymbols;
+        public final HashSet<Varnode> tracedVarnodes;
 
         /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
         public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
@@ -34,8 +33,8 @@ public class Context {
         public HashMap<SymbolExpr, DataType> storeMap;
 
         public IntraContext() {
-            this.candidates = new HashSet<>();
-            this.interestedVn = new HashSet<>();
+            this.tracedSymbols = new HashSet<>();
+            this.tracedVarnodes = new HashSet<>();
             this.dataFlowFacts = new HashMap<>();
             this.loadMap = new HashMap<>();
             this.storeMap = new HashMap<>();
@@ -57,23 +56,29 @@ public class Context {
         intraCtxMap.put(funcNode, intraCtx);
     }
 
-    public void updateIntraCandidates(FunctionNode funcNode, HighSymbol highSymbol) {
+    public void addTracedSymbol(FunctionNode funcNode, HighSymbol highSymbol) {
         IntraContext intraCtx = intraCtxMap.get(funcNode);
         if (intraCtx == null) {
             Logging.error("Failed to get intraContext for " + funcNode.value.getName());
             return;
         }
-        intraCtx.candidates.add(highSymbol);
+        intraCtx.tracedSymbols.add(highSymbol);
     }
 
+    public void addTracedVarnode(FunctionNode funcNode, Varnode vn) {
+        var tracedVns = intraCtxMap.get(funcNode).tracedVarnodes;
+        if (tracedVns.add(vn)) {
+            Logging.debug("[Interested] Add traced varnode: " + vn);
+        }
+    }
 
     /**
-     * Initialize the dataFlowFacts using the interested HighSymbols
-     * @param candidates the HighSymbols that need to collect data-flow facts
+     * Initialize the dataFlowFacts using the candidate HighSymbols
      */
-    public void initDataFlowFacts(List<HighSymbol> candidates) {
+    public void initIntraDataFlowFacts(FunctionNode funcNode) {
+        var intraCtx = intraCtxMap.get(funcNode);
         // Update the interestedVn
-        for (var candidate: candidates) {
+        for (var candidate: intraCtx.tracedSymbols) {
             var highVar = candidate.getHighVariable();
             Logging.info("Candidate HighSymbol: " + candidate.getName());
 
@@ -142,12 +147,6 @@ public class Context {
             return null;
         }
         return res;
-    }
-
-    public void updateInterested(Varnode vn) {
-        if (interestedVn.add(vn)) {
-            Logging.debug("[Interested] Add interested varnode: " + vn);
-        }
     }
 
 

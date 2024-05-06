@@ -3,13 +3,6 @@ package blueprint.solver;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 
-import ghidra.program.model.pcode.HighSymbol;
-import ghidra.program.model.pcode.HighVariable;
-
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Queue;
-
 /**
  * Class for intra-procedural analysis
  */
@@ -38,7 +31,7 @@ public class IntraSolver {
             Logging.warn("No parameters in the function");
         }
         for (var symbol : funcNode.parameters) {
-            ctx.updateIntraCandidates(funcNode, symbol);
+            ctx.addTracedSymbol(funcNode, symbol);
         }
     }
 

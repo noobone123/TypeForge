@@ -29,12 +29,12 @@ public class PCodeVisitor {
      * 1. we need to collect the candidate highSymbol's corresponding varnodes and mark them as interested varnodes.
      * 2. initialize the dataFlowFacts using the interested varnodes
      * 2. initialize the workList
-     * @param candidates the list of HighSymbols that need to collect data-flow facts
      */
     public void prepare() {
-        ctx.initDataFlowFacts(candidates);
+        // initialize the data-flow facts
+        ctx.initIntraDataFlowFacts(funcNode);
 
-        // update the workList
+        // initialize the workList
         for (var bb: funcNode.hFunc.getBasicBlocks()) {
             var iter = bb.getIterator();
             while (iter.hasNext()) {
