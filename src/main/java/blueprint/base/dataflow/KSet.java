@@ -23,12 +23,7 @@ public class KSet<E> implements Iterable<E> {
         if (set.size() >= maxSize) {
             return false;
         }
-        if (set.add(element)) {
-            Logging.debug("[KSet] Add element, current set: " + set);
-            return true;
-        } else {
-            return false;
-        }
+        return set.add(element);
     }
 
     public boolean contains(E element) {

@@ -11,6 +11,7 @@ public class PrimitiveType implements GeneralType {
         this.typeName = type.getName();
     }
 
+
     @Override
     public String getTypeName() {
         return typeName;
@@ -21,5 +22,18 @@ public class PrimitiveType implements GeneralType {
         return "PrimitiveType{" +
                 "typeName='" + typeName + '\'' +
                 '}';
+    }
+
+    @Override
+    public int hashCode() {
+        return this.type.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof PrimitiveType) {
+            return this.type.equals(((PrimitiveType) obj).type);
+        }
+        return false;
     }
 }

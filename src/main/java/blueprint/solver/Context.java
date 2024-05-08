@@ -1,7 +1,6 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.KSet;
-import blueprint.base.dataflow.TypeCollector;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.type.ComplexType;
 import blueprint.base.dataflow.type.GeneralType;
@@ -9,9 +8,8 @@ import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
 
-import ghidra.program.model.address.Address;
-import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
 
@@ -21,6 +19,23 @@ import java.util.*;
  * The context used to store the relationship between HighSymbol and TypeBuilder.
  */
 public class Context {
+
+    public static class AccessPoint {
+        public final PcodeOp pcodeOp;
+        public final SymbolExpr symExpr;
+        public final GeneralType type;
+
+        public AccessPoint(PcodeOp pcodeOp, SymbolExpr symExpr, GeneralType type) {
+            this.pcodeOp = pcodeOp;
+            this.symExpr = symExpr;
+            this.type = type;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s -> %s", symExpr, type);
+        }
+    }
 
     public static class IntraContext {
         /** The candidate HighSymbols that need to collect data-flow facts */
@@ -34,20 +49,19 @@ public class Context {
         public int dataFlowFactKSize = 10;
 
         /** These 2 maps are used to record the DataType's load/store operation on traced varnodes */
-        public HashMap<SymbolExpr, HashSet<Address>> loadAddrMap;
-        public HashMap<SymbolExpr, HashSet<Address>> storeAddrMap;
-        public HashMap<SymbolExpr, GeneralType> loadMap;
-        public HashMap<SymbolExpr, GeneralType> storeMap;
+        public HashSet<AccessPoint> allLoads;
+        public HashSet<AccessPoint> allStores;
+
+        public UnionFind<SymbolExpr> intraAliasMap;
 
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
             this.tracedVarnodes = new HashSet<>();
             this.allSymbolExprs = new HashSet<>();
             this.dataFlowFacts = new HashMap<>();
-            this.loadMap = new HashMap<>();
-            this.storeMap = new HashMap<>();
-            this.loadAddrMap = new HashMap<>();
-            this.storeAddrMap = new HashMap<>();
+            this.allLoads = new HashSet<>();
+            this.allStores = new HashSet<>();
+            this.intraAliasMap = new UnionFind<>();
         }
     }
 
@@ -100,7 +114,7 @@ public class Context {
         var curDataFlowFact = intraCtx.dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(intraCtx.dataFlowFactKSize));
 
         if (curDataFlowFact.add(symbolExpr)) {
-            Logging.debug("[DataFlow] Add dataflow fact: " + vn + " -> " + symbolExpr);
+            Logging.debug("[DataFlow] " + vn + " -> " + curDataFlowFact);
         }
     }
 
@@ -146,16 +160,16 @@ public class Context {
     }
 
 
-    public void updateLoadStoreMap(FunctionNode funcNode, Address addr, SymbolExpr symExpr, GeneralType type, boolean isLoad) {
+    public void updateLoadStoreMap(FunctionNode funcNode, PcodeOp pcodeOp, SymbolExpr symExpr, GeneralType type, boolean isLoad) {
         var intraCtx = intraCtxMap.get(funcNode);
         if (isLoad) {
-            intraCtx.loadAddrMap.computeIfAbsent(symExpr, k -> new HashSet<>()).add(addr);
-            intraCtx.loadMap.put(symExpr, type);
-            Logging.debug(String.format("[Load] Found load operation at 0x%s: %s -> %s", addr, symExpr, type));
+            var access = new AccessPoint(pcodeOp, symExpr, type);
+            intraCtx.allLoads.add(access);
+            Logging.debug(String.format("[Load] Found load operation: %s -> %s", symExpr, type));
         } else {
-            intraCtx.storeAddrMap.computeIfAbsent(symExpr, k -> new HashSet<>()).add(addr);
-            intraCtx.storeMap.put(symExpr, type);
-            Logging.debug(String.format("[Store] Found store operation at 0x%s: %s -> %s", addr, symExpr, type));
+            var access = new AccessPoint(pcodeOp, symExpr, type);
+            intraCtx.allStores.add(access);
+            Logging.debug(String.format("[Store] Found store operation: %s -> %s", symExpr, type));
         }
     }
 
@@ -171,7 +185,8 @@ public class Context {
     }
 
 
-    public void updateSymbolAliasMap(HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
+    public void updateIntraSymbolAliasMap(FunctionNode funcNode, HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
+        var symbolAliasMap = intraCtxMap.get(funcNode).intraAliasMap;
         var se1 = new SymbolExpr(sym1, off1);
         var se2 = new SymbolExpr(sym2, off2);
         symbolAliasMap.union(se1, se2);
@@ -180,17 +195,45 @@ public class Context {
 
     /**
      * Build the complex data type for the HighSymbol based on the load/store maps calculated from intraSolver.
+     * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
-    public void buildDataType(FunctionNode funcNode) {
-        // TODO: handle Load/Store of TypeCollector
+    public void buildComplexType(FunctionNode funcNode) {
         var intraCtx = intraCtxMap.get(funcNode);
-        for (var entry : intraCtx.loadMap.entrySet()) {
-            var symExpr = entry.getKey();
-            var type = entry.getValue();
-            var addrSet = intraCtx.loadAddrMap.get(symExpr);
+        intraCtx.allLoads.forEach(load -> {
+            var pcodeOp = load.pcodeOp;
+            var symExpr = load.symExpr;
+            var type = load.type;
+            var highSym = symExpr.baseSymbol;
+            var offset = symExpr.offset;
 
-            symbol2ComplexType.computeIfAbsent(symExpr.baseSymbol, k -> new ComplexType())
-                    .addField(symExpr.offset, type, addrSet.size());
+            if (intraCtx.tracedSymbols.contains(highSym)) {
+                var complexType = symbol2ComplexType.computeIfAbsent(highSym, k -> new ComplexType());
+                complexType.addField(offset, type);
+            }
+        });
+
+        intraCtx.allStores.forEach(store -> {
+            var pcodeOp = store.pcodeOp;
+            var symExpr = store.symExpr;
+            var type = store.type;
+            var highSym = symExpr.baseSymbol;
+            var offset = symExpr.offset;
+
+            if (intraCtx.tracedSymbols.contains(highSym)) {
+                var complexType = symbol2ComplexType.computeIfAbsent(highSym, k -> new ComplexType());
+                complexType.addField(offset, type);
+            }
+        });
+    }
+
+
+    public void dumpIntraComplexType(FunctionNode funcNode) {
+        var intraCtx = intraCtxMap.get(funcNode);
+        for (var highSym: intraCtx.tracedSymbols) {
+            var complexType = symbol2ComplexType.get(highSym);
+            if (complexType != null) {
+                Logging.info("[ComplexType] " + highSym.getName() + " -> " + complexType);
+            }
         }
     }
 

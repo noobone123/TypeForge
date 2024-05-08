@@ -1,6 +1,7 @@
 package blueprint.base.dataflow;
 
 import blueprint.utils.Logging;
+import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.Varnode;
 import ghidra.program.model.pcode.VarnodeAST;

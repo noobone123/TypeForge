@@ -31,20 +31,39 @@ public class ComplexType implements GeneralType {
         shortUUID = uuid.toString().substring(0, 8);
     }
 
-    public void addField(long offset, GeneralType type, int count) {
-        HashMap<GeneralType, Integer> entry = fieldMap.computeIfAbsent(offset, k -> new HashMap<>());
-        entry.merge(type, count, Integer::sum);
+    public void addField(long offset, GeneralType type) {
+        fieldMap.putIfAbsent(offset, new HashMap<>());
+        fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
     }
 
     @Override
     public String getTypeName() {
-        StringBuilder sb = new StringBuilder("ComplexType_" + shortUUID + " {");
+        return shortUUID;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("ComplexType_" + shortUUID + " {\n");
         fieldMap.forEach((offset, typeMap) -> {
-            sb.append(offset).append(" : {");
+            sb.append("0x").append(Long.toHexString(offset)).append(" : {");
             typeMap.forEach((type, count) -> sb.append(type.getTypeName()).append(" : ").append(count).append(", "));
-            sb.append("}, ");
+            sb.append("}, \n");
         });
         sb.append("}");
         return sb.toString();
     }
+
+    @Override
+    public int hashCode() {
+        return uuid.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (obj instanceof ComplexType) {
+            return this.uuid.equals(((ComplexType) obj).uuid);
+        }
+        return false;
+    }
+
 }

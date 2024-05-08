@@ -44,6 +44,8 @@ public class IntraSolver {
 
         visitor.prepare();
         visitor.run();
+
+        ctx.dumpIntraComplexType(funcNode);
     }
 
     /**

@@ -96,7 +96,7 @@ public class PCodeVisitor {
             }
         }
 
-        ctx.buildDataType(funcNode);
+        ctx.buildComplexType(funcNode);
     }
 
     /**
@@ -150,7 +150,7 @@ public class PCodeVisitor {
             if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
                 var inputOffset = symExpr.offset;
                 var outputOffset = 0;
-                ctx.updateSymbolAliasMap(inputSymbol, inputOffset, outputSymbol, outputOffset);
+                ctx.updateIntraSymbolAliasMap(funcNode, inputSymbol, inputOffset, outputSymbol, outputOffset);
             }
         }
     }
@@ -245,7 +245,7 @@ public class PCodeVisitor {
 
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, input)) {
             var type = new PrimitiveType(outDT);
-            ctx.updateLoadStoreMap(funcNode, output.getAddress(), symExpr, type, true);
+            ctx.updateLoadStoreMap(funcNode, pcodeOp, symExpr, type, true);
         }
 
         // TODO: tracing the dataflow of load op's output varnode?
@@ -262,7 +262,7 @@ public class PCodeVisitor {
 
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
             var type = new PrimitiveType(storedValueDT);
-            ctx.updateLoadStoreMap(funcNode, storedAddrVn.getAddress(), symExpr, type, false);
+            ctx.updateLoadStoreMap(funcNode, pcodeOp, symExpr, type, false);
         }
     }
 
