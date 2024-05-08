@@ -35,9 +35,6 @@ public class SymbolExpr {
 
     @Override
     public String toString() {
-        return "SymbolExpr{ " +
-                "symbol = " + baseSymbol.getName() + ", " +
-                "offset = 0x" + Long.toHexString(offset) +
-                " }";
+        return String.format("%s + 0x%d", baseSymbol.getName(), offset);
     }
 }

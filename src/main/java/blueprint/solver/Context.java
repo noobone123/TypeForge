@@ -46,6 +46,8 @@ public class Context {
             this.dataFlowFacts = new HashMap<>();
             this.loadMap = new HashMap<>();
             this.storeMap = new HashMap<>();
+            this.loadAddrMap = new HashMap<>();
+            this.storeAddrMap = new HashMap<>();
         }
     }
 
