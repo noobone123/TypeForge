@@ -27,7 +27,7 @@ public class FieldEntry {
     /**
      * typeBuilderMap stores the accessed time of each complex data type (Structure, Union, etc ...).
      */
-    public Map<TypeBuilder, Integer> typeBuilderMap;
+    public Map<TypeCollector, Integer> typeBuilderMap;
 
     /**
      * tag is used to store the tag of the field. All TAG includes:

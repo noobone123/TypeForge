@@ -1,5 +1,6 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.type.PrimitiveType;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Logging;
@@ -31,9 +32,6 @@ public class PCodeVisitor {
      * 2. initialize the workList
      */
     public void prepare() {
-        // initialize the data-flow facts
-        ctx.initIntraDataFlowFacts(funcNode);
-
         // initialize the workList
         for (var bb: funcNode.hFunc.getBasicBlocks()) {
             var iter = bb.getIterator();
@@ -54,43 +52,43 @@ public class PCodeVisitor {
 
             switch (opCode) {
                 case PcodeOp.INT_ADD, PcodeOp.INT_SUB -> {
-                    if (ctx.isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleAddOrSub(pcode);
                     }
                 }
                 case PcodeOp.COPY, PcodeOp.CAST -> {
-                    if (ctx.isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleAssign(pcode);
                     }
                 }
                 case PcodeOp.PTRADD -> {
-                    if (ctx.isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handlePtrAdd(pcode);
                     }
                 }
                 case PcodeOp.PTRSUB -> {
-                    if (ctx.isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handlePtrSub(pcode);
                     }
                 }
                 case PcodeOp.MULTIEQUAL -> {
-                    if (ctx.isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleMultiEqual(pcode);
                     }
                 }
                 case PcodeOp.LOAD -> {
-                    if (ctx.isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleLoad(pcode);
                     }
                 }
                 case PcodeOp.STORE -> {
-                    if (ctx.isInterestedPCode(pcode)) {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
                         Logging.debug("[PCode] " + pcode);
                         handleStore(pcode);
                     }
@@ -98,7 +96,7 @@ public class PCodeVisitor {
             }
         }
 
-        ctx.updateTypeBuilder();
+        ctx.buildDataType(funcNode);
     }
 
     /**
@@ -120,16 +118,16 @@ public class PCodeVisitor {
             return;
         }
 
-        var inputFact = ctx.getDataFlowFact(inputs[0]);
+        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact != null;
 
-        for (var ptrRef: inputFact) {
-            newOff = ptrRef.offset +
+        for (var symExpr: inputFact) {
+            newOff = symExpr.offset +
                 (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
 
             if (OffsetSanityCheck(newOff)) {
-                ctx.updateDataFlowFacts(output, ptrRef.base, newOff);
-                ctx.updateInterested(output);
+                ctx.addDataFlowFact(funcNode, output, symExpr.baseSymbol, newOff);
+                ctx.addTracedVarnode(funcNode, output);
             }
         }
     }
@@ -139,18 +137,21 @@ public class PCodeVisitor {
         var inputVn = pcodeOp.getInput(0);
         var outputVn = pcodeOp.getOutput();
 
-        var inputFact = ctx.getDataFlowFact(inputVn);
+        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputVn);
         assert inputFact != null;
 
-        for (var ptrRef: inputFact) {
-            ctx.updateDataFlowFacts(outputVn, ptrRef.base, ptrRef.offset);
-            ctx.updateInterested(outputVn);
-        }
+        for (var symExpr: inputFact) {
+            ctx.addDataFlowFact(funcNode, outputVn, symExpr.baseSymbol, symExpr.offset);
+            ctx.addTracedVarnode(funcNode, outputVn);
 
-        var inputSymbol = inputVn.getHigh().getSymbol();
-        var outputSymbol = outputVn.getHigh().getSymbol();
-        if (inputSymbol != null && outputSymbol != null) {
-            ctx.setHighSymbolAlias(inputSymbol, outputSymbol);
+            // TODO: is this setSymbolAlias robust enough?
+            var inputSymbol = inputVn.getHigh().getSymbol();
+            var outputSymbol = outputVn.getHigh().getSymbol();
+            if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
+                var inputOffset = symExpr.offset;
+                var outputOffset = 0;
+                ctx.updateSymbolAliasMap(inputSymbol, inputOffset, outputSymbol, outputOffset);
+            }
         }
     }
 
@@ -168,14 +169,14 @@ public class PCodeVisitor {
             return;
         }
 
-        var inputFact = ctx.getDataFlowFact(inputs[0]);
+        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact != null;
 
-        for (var ptrRef: inputFact) {
-            long newOff = ptrRef.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
+        for (var symExpr: inputFact) {
+            long newOff = symExpr.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
             if (OffsetSanityCheck(newOff)) {
-                ctx.updateDataFlowFacts(pcodeOp.getOutput(), ptrRef.base, newOff);
-                ctx.updateInterested(pcodeOp.getOutput());
+                ctx.addDataFlowFact(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
+                ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
             }
         }
     }
@@ -191,14 +192,14 @@ public class PCodeVisitor {
         if (!inputs[1].isConstant()) {
             return;
         }
-        var inputFact = ctx.getDataFlowFact(inputs[0]);
+        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact != null;
 
-        for (var ptrRef: inputFact) {
-            long newOff = ptrRef.offset + getSigned(inputs[1]);
+        for (var symExpr: inputFact) {
+            long newOff = symExpr.offset + getSigned(inputs[1]);
             if (OffsetSanityCheck(newOff)) {
-                ctx.updateDataFlowFacts(pcodeOp.getOutput(), ptrRef.base, newOff);
-                ctx.updateInterested(pcodeOp.getOutput());
+                ctx.addDataFlowFact(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
+                ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
             }
         }
     }
@@ -207,9 +208,9 @@ public class PCodeVisitor {
     private void handleMultiEqual(PcodeOp pcodeOp) {
         // TODO: a too simple implementation, need to be improved
         var output = pcodeOp.getOutput();
-        var outputFact = ctx.getDataFlowFact(output);
+        var outputFact = ctx.getIntraDataFlowFacts(funcNode, output);
         for (var input: pcodeOp.getInputs()) {
-            var inputFact = ctx.getDataFlowFact(input);
+            var inputFact = ctx.getIntraDataFlowFacts(funcNode, input);
             assert inputFact != null;
             outputFact.merge(inputFact);
         }
@@ -238,11 +239,13 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(1);
         var output = pcodeOp.getOutput();
 
+        // TODO: handle the ComplexType
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
-        for (var ptrRef : ctx.getDataFlowFact(input)) {
-            ctx.updateLoadStoreMap(ptrRef, outDT, true);
+        for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, input)) {
+            var type = new PrimitiveType(outDT);
+            ctx.updateLoadStoreMap(funcNode, output.getAddress(), symExpr, type, true);
         }
 
         // TODO: tracing the dataflow of load op's output varnode?
@@ -257,8 +260,9 @@ public class PCodeVisitor {
         var storedAddrVn = pcodeOp.getInput(1);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
-        for (var ptrRef : ctx.getDataFlowFact(storedAddrVn)) {
-            ctx.updateLoadStoreMap(ptrRef, storedValueDT, false);
+        for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
+            var type = new PrimitiveType(storedValueDT);
+            ctx.updateLoadStoreMap(funcNode, storedAddrVn.getAddress(), symExpr, type, false);
         }
     }
 

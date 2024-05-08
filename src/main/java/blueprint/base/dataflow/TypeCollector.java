@@ -6,35 +6,22 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 
-public class TypeBuilder {
-
-    /**
-     * fieldMap stores the possible data types and corresponding accessed time of each fields in the structure.
-     * For Example:
-     * <p>
-     * fieldMap {
-     *     Offset_1 -> FieldEntry,
-     *     Offset_2 -> FieldEntry,
-     *     ...
-     * }
-     * </p>
-     */
+public class TypeCollector {
     public final TreeMap<Long, FieldEntry> fieldMap;
     public final UUID uuid;
     public final String shortUUID;
 
-    public TypeBuilder() {
+    public TypeCollector() {
         fieldMap = new TreeMap<>();
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
     }
 
-    public void addPrimitive(long offset, DataType dt) {
+    public void addPrimitive(long offset, DataType dt, int count) {
         FieldEntry entry = fieldMap.computeIfAbsent(offset, k -> new FieldEntry());
-        entry.primitiveTypeMap.merge(dt, 1, Integer::sum);
     }
 
-    public void addTypeBuilder(long offset, TypeBuilder builder) {
+    public void addTypeBuilder(long offset, TypeCollector builder) {
         FieldEntry entry = fieldMap.computeIfAbsent(offset, k -> new FieldEntry());
         entry.typeBuilderMap.merge(builder, 1, Integer::sum);
     }
@@ -53,7 +40,7 @@ public class TypeBuilder {
      * Merge dataflow facts from other TypeBuilder.
      * @param other other TypeBuilder instance.
      */
-    public void merge(TypeBuilder other) {
+    public void merge(TypeCollector other) {
         other.fieldMap.forEach((offset, otherEntry) -> {
             FieldEntry entry =  fieldMap.computeIfAbsent(offset, k -> new FieldEntry());
 
