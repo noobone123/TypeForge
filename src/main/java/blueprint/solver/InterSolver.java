@@ -23,8 +23,6 @@ public class InterSolver {
 
     Context interCtx;
 
-    Set<TypeCollector> allTypes = new HashSet<>();
-
     /**
      * Following 2 maps are used to store the relationship between HighVariable and TypeBuilder
      */
@@ -36,7 +34,7 @@ public class InterSolver {
 
     public InterSolver(CallGraph cg) {
         this.cg = cg;
-        this.interCtx = new Context();
+        this.interCtx = new Context(this.cg);
         buildWorkListTest();
     }
 

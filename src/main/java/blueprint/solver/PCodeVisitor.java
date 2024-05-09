@@ -1,5 +1,6 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.type.PrimitiveType;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
@@ -93,6 +94,12 @@ public class PCodeVisitor {
                         handleStore(pcode);
                     }
                 }
+                case PcodeOp.CALL -> {
+                    if (ctx.isInterestedPCode(funcNode, pcode)) {
+                        Logging.debug("[PCode] " + pcode);
+                        handleCall(pcode);
+                    }
+                }
             }
         }
 
@@ -151,7 +158,7 @@ public class PCodeVisitor {
             if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
                 var inputOffset = symExpr.offset;
                 var outputOffset = 0;
-                ctx.updateIntraSymbolAliasMap(inputSymbol, inputOffset, outputSymbol, outputOffset);
+                ctx.updateSymbolAliasMap(inputSymbol, inputOffset, outputSymbol, outputOffset);
             }
         }
     }
@@ -212,6 +219,26 @@ public class PCodeVisitor {
         var inputs = pcodeOp.getInputs();
         for (var input : inputs) {
             ctx.mergeSymbolExpr(funcNode, input, output, false);
+        }
+    }
+
+
+    private void handleCall(PcodeOp pcodeOp) {
+        var calleeAddr = pcodeOp.getInput(0).getAddress();
+        var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
+        if (!ctx.isFunctionSolved(calleeNode)) {
+            Logging.warn("Callee function is not solved yet: " + calleeNode.value.getName());
+            return;
+        }
+
+        // TODO: how to handle cases when arguments and parameters are inconsistency?
+        for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
+            var argVn = pcodeOp.getInput(inputIdx);
+            var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
+            for (var symExpr : argFacts) {
+                var param = calleeNode.parameters.get(inputIdx - 1);
+                ctx.updateSymbolAliasMap(symExpr, new SymbolExpr(param, 0));
+            }
         }
     }
 

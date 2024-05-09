@@ -4,6 +4,7 @@ import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.type.ComplexType;
 import blueprint.base.dataflow.type.GeneralType;
+import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
@@ -65,8 +66,10 @@ public class Context {
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
     public HashMap<HighSymbol, ComplexType> symbol2ComplexType;
     public UnionFind<SymbolExpr> symbolAliasMap;
+    public CallGraph callGraph;
 
-    public Context() {
+    public Context(CallGraph cg) {
+        this.callGraph = cg;
         this.intraCtxMap = new HashMap<>();
         this.symbol2ComplexType = new HashMap<>();
         this.symbolAliasMap = new UnionFind<>();
@@ -210,11 +213,16 @@ public class Context {
     }
 
 
-    public void updateIntraSymbolAliasMap(HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
+    public void updateSymbolAliasMap(HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
         var se1 = new SymbolExpr(sym1, off1);
         var se2 = new SymbolExpr(sym2, off2);
         symbolAliasMap.union(se1, se2);
         Logging.debug(String.format("[Alias] %s -> %s", se1, se2));
+    }
+
+    public void updateSymbolAliasMap(SymbolExpr sym1, SymbolExpr sym2) {
+        symbolAliasMap.union(sym1, sym2);
+        Logging.debug(String.format("[Alias] %s -> %s", sym1, sym2));
     }
 
     /**
@@ -249,6 +257,16 @@ public class Context {
                 complexType.addField(offset, type);
             }
         });
+
+        var components = symbolAliasMap.getComponents();
+        components.forEach((root, component) -> {
+            Logging.info("[Alias] " + root + " -> " + component);
+        });
+    }
+
+
+    public boolean isFunctionSolved(FunctionNode funcNode) {
+        return intraCtxMap.containsKey(funcNode);
     }
 
 

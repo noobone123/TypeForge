@@ -36,6 +36,6 @@ public class SymbolExpr {
 
     @Override
     public String toString() {
-        return String.format("%s + 0x%d", baseSymbol.getName(), offset);
+        return String.format("%s: %s + 0x%d", baseSymbol.getHighFunction().getFunction().getName(), baseSymbol.getName(), offset);
     }
 }
