@@ -52,8 +52,6 @@ public class Context {
         public HashSet<AccessPoint> allLoads;
         public HashSet<AccessPoint> allStores;
 
-        public UnionFind<SymbolExpr> intraAliasMap;
-
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
             this.tracedVarnodes = new HashSet<>();
@@ -61,18 +59,17 @@ public class Context {
             this.dataFlowFacts = new HashMap<>();
             this.allLoads = new HashSet<>();
             this.allStores = new HashSet<>();
-            this.intraAliasMap = new UnionFind<>();
         }
     }
 
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
-    public UnionFind<SymbolExpr> symbolAliasMap;
     public HashMap<HighSymbol, ComplexType> symbol2ComplexType;
+    public UnionFind<SymbolExpr> symbolAliasMap;
 
     public Context() {
         this.intraCtxMap = new HashMap<>();
-        this.symbolAliasMap = new UnionFind<>();
         this.symbol2ComplexType = new HashMap<>();
+        this.symbolAliasMap = new UnionFind<>();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -92,19 +89,18 @@ public class Context {
     public void addTracedVarnode(FunctionNode funcNode, Varnode vn) {
         var tracedVns = intraCtxMap.get(funcNode).tracedVarnodes;
         if (tracedVns.add(vn)) {
-            Logging.debug("[Interested] Add traced varnode: " + vn);
+            Logging.debug("[DataFlow] Add traced varnode: " + vn);
         }
     }
 
-
     /**
-     * Add DataFlowFact to the current context.
+     * create a new SymbolExpr and add it to the dataFlowFacts
      * @param funcNode the current function node
      * @param vn the varnode which holds the dataflow fact
      * @param highSym the base HighSymbol of the dataflow fact
      * @param offset the offset of the SymbolExpr
      */
-    public void addDataFlowFact(FunctionNode funcNode, Varnode vn, HighSymbol highSym, long offset) {
+    public void addNewSymbolExpr(FunctionNode funcNode, Varnode vn, HighSymbol highSym, long offset) {
         var intraCtx = intraCtxMap.get(funcNode);
         if (intraCtx == null) {
             Logging.error("Failed to get intraContext for " + funcNode.value.getName());
@@ -114,8 +110,36 @@ public class Context {
         var curDataFlowFact = intraCtx.dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(intraCtx.dataFlowFactKSize));
 
         if (curDataFlowFact.add(symbolExpr)) {
-            Logging.debug("[DataFlow] " + vn + " -> " + curDataFlowFact);
+            Logging.debug("[DataFlow] New " + vn + " -> " + curDataFlowFact);
         }
+    }
+
+
+    /**
+     * Merge the dataflow facts from input to output
+     * @param funcNode the current function node
+     * @param input the input varnode
+     * @param output the output varnode
+     * @param isStrongUpdate if true, the output varnode's dataflow facts will be cleared before merging
+     */
+    public void mergeSymbolExpr(FunctionNode funcNode, Varnode input, Varnode output, boolean isStrongUpdate) {
+        var intraCtx = intraCtxMap.get(funcNode);
+        assert intraCtx != null;
+        var dataFlowFacts = intraCtx.dataFlowFacts;
+        var inputFacts = dataFlowFacts.get(input);
+
+        if (inputFacts == null) {
+            Logging.warn("Failed to get dataflow fact for " + input);
+            return;
+        }
+
+        var outputFacts = dataFlowFacts.computeIfAbsent(output, k -> new KSet<>(intraCtx.dataFlowFactKSize));
+        if (isStrongUpdate) {
+            outputFacts.clear();
+        }
+
+        outputFacts.merge(inputFacts);
+        Logging.debug("[DataFlow] Merge " + output + " -> " + outputFacts);
     }
 
     /**
@@ -138,7 +162,7 @@ public class Context {
             // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
             for (var vn: highVar.getInstances()) {
                 addTracedVarnode(funcNode, vn);
-                addDataFlowFact(funcNode, vn, symbol, 0);
+                addNewSymbolExpr(funcNode, vn, symbol, 0);
             }
         }
     }
@@ -149,6 +173,7 @@ public class Context {
      * @param pcode the PCodeOp
      * @return true to do abstract interpretation on this PCodeOp
      */
+    // TODO: trivial, remove this function in the future
     public boolean isInterestedPCode(FunctionNode funcNode, PcodeOpAST pcode) {
         var intraCtx = intraCtxMap.get(funcNode);
         for (var vn: pcode.getInputs()) {
@@ -185,8 +210,7 @@ public class Context {
     }
 
 
-    public void updateIntraSymbolAliasMap(FunctionNode funcNode, HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
-        var symbolAliasMap = intraCtxMap.get(funcNode).intraAliasMap;
+    public void updateIntraSymbolAliasMap(HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
         var se1 = new SymbolExpr(sym1, off1);
         var se2 = new SymbolExpr(sym2, off2);
         symbolAliasMap.union(se1, se2);
@@ -196,6 +220,7 @@ public class Context {
     /**
      * Build the complex data type for the HighSymbol based on the load/store maps calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
+     * // TODO: 先按照各自的 Symbol 都生成对应的 ComplexType，之后按照 Alias 关系合并，在合并过程中考虑 pCodeOp 的重复带来的影响即可
      */
     public void buildComplexType(FunctionNode funcNode) {
         var intraCtx = intraCtxMap.get(funcNode);

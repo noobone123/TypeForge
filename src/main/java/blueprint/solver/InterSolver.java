@@ -61,12 +61,11 @@ public class InterSolver {
             // collect data-flow facts from its callee functions.
             if (!funcNode.isLeaf) {
                 Logging.info("Non-leaf function: " + funcNode.value.getName());
-                // var ctx = mergeCalleeFacts(funcNode);
-                // intraSolver = new IntraSolver(funcNode, ctx);
             } else {
                 Logging.info("Leaf function: " + funcNode.value.getName());
-                interCtx.createIntraContext(funcNode);
             }
+            interCtx.createIntraContext(funcNode);
+
             IntraSolver intraSolver = new IntraSolver(funcNode, interCtx);
             intraSolver.solve();
 
@@ -209,9 +208,9 @@ public class InterSolver {
         FunctionNode funcNode = cg.getNodebyAddr(addr);
         workList.add(funcNode);
 
-//        addr = FunctionHelper.getAddress(0x00119337);
-//        funcNode = cg.getNodebyAddr(addr);
-//        workList.add(funcNode);
+        addr = FunctionHelper.getAddress(0x00119337);
+        funcNode = cg.getNodebyAddr(addr);
+        workList.add(funcNode);
 //
 //        addr = FunctionHelper.getAddress(0x0011a70a);
 //        funcNode = cg.getNodebyAddr(addr);

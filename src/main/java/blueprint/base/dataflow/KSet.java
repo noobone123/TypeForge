@@ -48,4 +48,9 @@ public class KSet<E> implements Iterable<E> {
     public Iterator<E> iterator() {
         return set.iterator();
     }
+
+    public void clear() {
+        set.clear();
+    }
+
 }

@@ -44,7 +44,8 @@ public class FunctionNode extends NodeBase<Function> {
             var lineTokens = line.getAllTokens();
             tokens.addAll(lineTokens);
         }
-        syncPrototype();
+        updatePrototype();
+        updateLocalVariables();
     }
 
     /**
@@ -53,7 +54,7 @@ public class FunctionNode extends NodeBase<Function> {
      * This information can be found in `HighFunction` and we can utilize `HighFunctionDBUtil.commitParamsToDatabase`
      * to sync this information to database.
      */
-    private void syncPrototype() {
+    private void updatePrototype() {
         if (hFunc == null) {
             Logging.warn("HighFunction is not set");
             return;
@@ -86,7 +87,7 @@ public class FunctionNode extends NodeBase<Function> {
      * Parse local variables from HighFunction.
      * !IMPORTANT: This method should be called after `parsePrototype` method.
      */
-    private void parseLocalVariable() {
+    private void updateLocalVariables() {
         var localSymMap = hFunc.getLocalSymbolMap();
         for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();

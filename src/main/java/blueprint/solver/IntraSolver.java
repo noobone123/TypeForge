@@ -33,6 +33,9 @@ public class IntraSolver {
         for (var symbol : funcNode.parameters) {
             ctx.addTracedSymbol(funcNode, symbol);
         }
+        for (var symbol : funcNode.localVariables) {
+            ctx.addTracedSymbol(funcNode, symbol);
+        }
 
         // initialize the data-flow facts
         ctx.initIntraDataFlowFacts(funcNode);

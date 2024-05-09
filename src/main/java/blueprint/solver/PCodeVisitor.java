@@ -121,13 +121,14 @@ public class PCodeVisitor {
         var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact != null;
 
+        ctx.addTracedVarnode(funcNode, output);
+
         for (var symExpr: inputFact) {
             newOff = symExpr.offset +
                 (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
 
             if (OffsetSanityCheck(newOff)) {
-                ctx.addDataFlowFact(funcNode, output, symExpr.baseSymbol, newOff);
-                ctx.addTracedVarnode(funcNode, output);
+                ctx.addNewSymbolExpr(funcNode, output, symExpr.baseSymbol, newOff);
             }
         }
     }
@@ -140,9 +141,9 @@ public class PCodeVisitor {
         var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputVn);
         assert inputFact != null;
 
+        ctx.addTracedVarnode(funcNode, outputVn);
         for (var symExpr: inputFact) {
-            ctx.addDataFlowFact(funcNode, outputVn, symExpr.baseSymbol, symExpr.offset);
-            ctx.addTracedVarnode(funcNode, outputVn);
+            ctx.addNewSymbolExpr(funcNode, outputVn, symExpr.baseSymbol, symExpr.offset);
 
             // TODO: is this setSymbolAlias robust enough?
             var inputSymbol = inputVn.getHigh().getSymbol();
@@ -150,7 +151,7 @@ public class PCodeVisitor {
             if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
                 var inputOffset = symExpr.offset;
                 var outputOffset = 0;
-                ctx.updateIntraSymbolAliasMap(funcNode, inputSymbol, inputOffset, outputSymbol, outputOffset);
+                ctx.updateIntraSymbolAliasMap(inputSymbol, inputOffset, outputSymbol, outputOffset);
             }
         }
     }
@@ -171,12 +172,12 @@ public class PCodeVisitor {
 
         var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact != null;
+        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
 
         for (var symExpr: inputFact) {
             long newOff = symExpr.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
             if (OffsetSanityCheck(newOff)) {
-                ctx.addDataFlowFact(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
-                ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+                ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
             }
         }
     }
@@ -195,24 +196,22 @@ public class PCodeVisitor {
         var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact != null;
 
+        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+
         for (var symExpr: inputFact) {
             long newOff = symExpr.offset + getSigned(inputs[1]);
             if (OffsetSanityCheck(newOff)) {
-                ctx.addDataFlowFact(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
-                ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+                ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
             }
         }
     }
 
 
     private void handleMultiEqual(PcodeOp pcodeOp) {
-        // TODO: a too simple implementation, need to be improved
         var output = pcodeOp.getOutput();
-        var outputFact = ctx.getIntraDataFlowFacts(funcNode, output);
-        for (var input: pcodeOp.getInputs()) {
-            var inputFact = ctx.getIntraDataFlowFacts(funcNode, input);
-            assert inputFact != null;
-            outputFact.merge(inputFact);
+        var inputs = pcodeOp.getInputs();
+        for (var input : inputs) {
+            ctx.mergeSymbolExpr(funcNode, input, output, false);
         }
     }
 
