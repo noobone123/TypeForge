@@ -15,6 +15,7 @@ import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
+import java.util.function.Consumer;
 
 /**
  * The context used to store the relationship between HighSymbol and TypeBuilder.
@@ -232,36 +233,50 @@ public class Context {
      */
     public void buildComplexType(FunctionNode funcNode) {
         var intraCtx = intraCtxMap.get(funcNode);
-        intraCtx.allLoads.forEach(load -> {
-            var pcodeOp = load.pcodeOp;
-            var symExpr = load.symExpr;
-            var type = load.type;
-            var highSym = symExpr.baseSymbol;
-            var offset = symExpr.offset;
 
-            if (intraCtx.tracedSymbols.contains(highSym)) {
-                var complexType = symbol2ComplexType.computeIfAbsent(highSym, k -> new ComplexType());
-                complexType.addField(offset, type);
+        // Step 1: Create initial ComplexTypes for all involved HighSymbols
+        HashSet<HighSymbol> involvedSymbols = new HashSet<>(intraCtx.tracedSymbols);
+        Map<HighSymbol, ComplexType> initialComplexTypes = new HashMap<>();
+        Consumer<AccessPoint> createComplexType = access -> {
+            var highSym = access.symExpr.baseSymbol;
+            if (involvedSymbols.contains(highSym)) {
+                var complexType = initialComplexTypes.computeIfAbsent(highSym, k -> new ComplexType());
+                complexType.addField(access.symExpr.offset, access.type);
             }
-        });
+        };
+        intraCtx.allLoads.forEach(createComplexType);
+        intraCtx.allStores.forEach(createComplexType);
 
-        intraCtx.allStores.forEach(store -> {
-            var pcodeOp = store.pcodeOp;
-            var symExpr = store.symExpr;
-            var type = store.type;
-            var highSym = symExpr.baseSymbol;
-            var offset = symExpr.offset;
+        // Step 2: Merge ComplexTypes based on aliasing and distinct PCodeOps
+        Map<HighSymbol, ComplexType> mergedComplexTypes = new HashMap<>();
+        Map<HighSymbol, Set<AccessPoint>> symbolToAccessPoints = new HashMap<>();
+        intraCtx.allLoads.forEach(load -> symbolToAccessPoints.computeIfAbsent(load.symExpr.baseSymbol, k -> new HashSet<>()).add(load));
+        intraCtx.allStores.forEach(store -> symbolToAccessPoints.computeIfAbsent(store.symExpr.baseSymbol, k -> new HashSet<>()).add(store));
 
-            if (intraCtx.tracedSymbols.contains(highSym)) {
-                var complexType = symbol2ComplexType.computeIfAbsent(highSym, k -> new ComplexType());
-                complexType.addField(offset, type);
+        for (var component : symbolAliasMap.getComponents().values()) {
+            ComplexType mergedType = new ComplexType();
+            Set<PcodeOp> usedPcodeOps = new HashSet<>();
+
+            for (SymbolExpr symExpr : component) {
+                HighSymbol highSym = symExpr.baseSymbol;
+                if (!initialComplexTypes.containsKey(highSym)) continue;
+                var accessPoints = symbolToAccessPoints.getOrDefault(highSym, Collections.emptySet());
+
+                for (var ap : accessPoints) {
+                    if (!usedPcodeOps.contains(ap.pcodeOp)) {
+                        mergedType.addField(ap.symExpr.offset, ap.type);
+                        usedPcodeOps.add(ap.pcodeOp);
+                    }
+                }
             }
-        });
 
-        var components = symbolAliasMap.getComponents();
-        components.forEach((root, component) -> {
-            Logging.info("[Alias] " + root + " -> " + component);
-        });
+            for (SymbolExpr symExpr : component) {
+                mergedComplexTypes.put(symExpr.baseSymbol, mergedType);
+            }
+        }
+
+        // Step 3: Update references to point to the merged ComplexTypes
+        symbol2ComplexType.putAll(mergedComplexTypes);
     }
 
 
