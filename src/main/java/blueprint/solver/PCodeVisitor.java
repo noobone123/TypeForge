@@ -192,11 +192,19 @@ public class PCodeVisitor {
             // we can manually recover them by checking the register
             if (inputs[0].isRegister()) {
                 var reg = Global.currentProgram.getRegister(inputs[0]);
-                var sym = inputs[1].getHigh().getSymbol();
+                var offsetSym = inputs[1].getHigh().getSymbol(); // for example: memset's ptr in network_init function in lighttpd
                 var regName = reg.getName();
-                if (regName.equals("RSP") && sym != null) {
-                    ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), sym, 0);
+                if (regName.equals("RSP") && offsetSym != null) {
+                    var offsetSymExpr = new SymbolExpr(offsetSym, 0);
+                    var facts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
+                    if (facts == null) {
+                        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), offsetSymExpr);
+                    } else {
+                        for (var fact : facts) {
+                            ctx.updateSymbolAliasMap(fact, offsetSymExpr);
+                        }
+                    }
                 }
             }
 
@@ -315,6 +323,7 @@ public class PCodeVisitor {
                     for (var symExpr : symExprs) {
                         if (symExpr.offset == 0) {
                             var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.baseSymbol, k -> new ComplexTypeConstraint());
+                            Logging.info("memset: " + symExpr);
                             constraint.setSize(lengthArg.getOffset());
                         }
                     }

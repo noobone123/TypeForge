@@ -94,6 +94,19 @@ public class Context {
         }
     }
 
+    public void addNewSymbolExpr(FunctionNode funcNode, Varnode vn, SymbolExpr symbolExpr) {
+        var intraCtx = intraCtxMap.get(funcNode);
+        if (intraCtx == null) {
+            Logging.error("Failed to get intraContext for " + funcNode.value.getName());
+            return;
+        }
+        var curDataFlowFact = intraCtx.dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(intraCtx.dataFlowFactKSize));
+
+        if (curDataFlowFact.add(symbolExpr)) {
+            Logging.debug("[DataFlow] New " + vn + " -> " + curDataFlowFact);
+        }
+    }
+
 
     /**
      * Merge the dataflow facts from input to output
