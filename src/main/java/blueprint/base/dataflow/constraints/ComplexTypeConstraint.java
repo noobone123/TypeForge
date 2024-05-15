@@ -1,7 +1,9 @@
 package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoint;
+import blueprint.utils.Logging;
 import ghidra.program.model.pcode.PcodeOp;
+import groovy.util.logging.Log;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -24,7 +26,7 @@ public class ComplexTypeConstraint implements TypeDescriptor {
     public final TreeMap<Long, HashSet<String>> tags;
 
     public final HashSet<AccessPoint> accessPoints;
-    public int size = 0;
+    public long size = 0;
 
     public final UUID uuid;
     public final String shortUUID;
@@ -79,6 +81,13 @@ public class ComplexTypeConstraint implements TypeDescriptor {
             this.tags.putIfAbsent(offset, new HashSet<>());
             this.tags.get(offset).addAll(tagSet);
         });
+    }
+
+    public void setSize(long size) {
+        if (size != this.size) {
+            this.size = size;
+            Logging.info(String.format("ComplexType_%s setting new size: %d", shortUUID, size));
+        }
     }
 
 

@@ -1,6 +1,7 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.constraints.ComplexTypeConstraint;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
@@ -232,8 +233,7 @@ public class PCodeVisitor {
         var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
 
         if (calleeNode.isExternal) {
-            // TODO: handle External functions
-            Logging.info("External function call: " + calleeNode.value.getName());
+            handleExternalCall(pcodeOp, calleeNode);
             return;
         }
 
@@ -302,6 +302,27 @@ public class PCodeVisitor {
             ctx.createAccessPoint(funcNode, pcodeOp, symExpr, type, false);
         }
     }
+
+    private void handleExternalCall(PcodeOp pcodeOp, FunctionNode calleeNode) {
+        var externalFuncName = calleeNode.value.getName();
+        Logging.info("External function call: " + externalFuncName);
+
+        switch (externalFuncName) {
+            case "memset" -> {
+                var lengthArg = pcodeOp.getInput(3);
+                if (lengthArg.isConstant()) {
+                    var symExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
+                    for (var symExpr : symExprs) {
+                        if (symExpr.offset == 0) {
+                            var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.baseSymbol, k -> new ComplexTypeConstraint());
+                            constraint.setSize(lengthArg.getOffset());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
 
     /**
      * Check if the offset is sane to be a structure offset
