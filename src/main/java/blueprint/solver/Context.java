@@ -11,7 +11,6 @@ import blueprint.base.dataflow.SymbolExpr;
 
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
-import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
@@ -165,6 +164,7 @@ public class Context {
 
             // Initialize the dataFlowFacts using the interested varnodes and add
             // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
+            // TODO: this may cause flow-insensitive, ... we can improve it in the future
             for (var vn: highVar.getInstances()) {
                 addTracedVarnode(funcNode, vn);
                 addNewSymbolExpr(funcNode, vn, symbol, 0);
@@ -172,21 +172,10 @@ public class Context {
         }
     }
 
-    /**
-     * If current PCodeOp's input varnode in tracedVarnodes, then it is an interested PCodeOp.
-     * @param funcNode the current function node
-     * @param pcode the PCodeOp
-     * @return true to do abstract interpretation on this PCodeOp
-     */
-    // TODO: trivial, remove this function in the future
-    public boolean isInterestedPCode(FunctionNode funcNode, PcodeOpAST pcode) {
+
+    public boolean isInterestedVn(FunctionNode funcNode, Varnode vn) {
         var intraCtx = intraCtxMap.get(funcNode);
-        for (var vn: pcode.getInputs()) {
-            if (intraCtx.tracedVarnodes.contains(vn)) {
-                return true;
-            }
-        }
-        return false;
+        return intraCtx.tracedVarnodes.contains(vn);
     }
 
 

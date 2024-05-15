@@ -4,6 +4,7 @@ import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.type.PrimitiveType;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
@@ -53,52 +54,36 @@ public class PCodeVisitor {
 
             switch (opCode) {
                 case PcodeOp.INT_ADD, PcodeOp.INT_SUB -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handleAddOrSub(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handleAddOrSub(pcode);
                 }
                 case PcodeOp.COPY, PcodeOp.CAST -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handleAssign(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handleAssign(pcode);
                 }
                 case PcodeOp.PTRADD -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handlePtrAdd(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handlePtrAdd(pcode);
                 }
                 case PcodeOp.PTRSUB -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handlePtrSub(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handlePtrSub(pcode);
                 }
                 case PcodeOp.MULTIEQUAL -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handleMultiEqual(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handleMultiEqual(pcode);
                 }
                 case PcodeOp.LOAD -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handleLoad(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handleLoad(pcode);
                 }
                 case PcodeOp.STORE -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handleStore(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handleStore(pcode);
                 }
                 case PcodeOp.CALL -> {
-                    if (ctx.isInterestedPCode(funcNode, pcode)) {
-                        Logging.debug("[PCode] " + pcode);
-                        handleCall(pcode);
-                    }
+                    Logging.debug("[PCode] " + pcode);
+                    handleCall(pcode);
                 }
             }
         }
@@ -145,6 +130,10 @@ public class PCodeVisitor {
         var inputVn = pcodeOp.getInput(0);
         var outputVn = pcodeOp.getOutput();
 
+        if (!ctx.isInterestedVn(funcNode, inputVn)) {
+            return;
+        }
+
         var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputVn);
         assert inputFact != null;
 
@@ -162,7 +151,6 @@ public class PCodeVisitor {
             }
         }
     }
-
 
     /**
      * Handle PTRADD operation. In PTRADD operation,
@@ -197,18 +185,34 @@ public class PCodeVisitor {
      */
     private void handlePtrSub(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
-        if (!inputs[1].isConstant()) {
-            return;
-        }
-        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
-        assert inputFact != null;
 
-        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+        if (!ctx.isInterestedVn(funcNode, inputs[0])) {
+            // Some HighSymbol's corresponding HighVariable can not be resolved due to ghidra's internal implementation,
+            // we can manually recover them by checking the register
+            if (inputs[0].isRegister()) {
+                var reg = Global.currentProgram.getRegister(inputs[0]);
+                var sym = inputs[1].getHigh().getSymbol();
+                var regName = reg.getName();
+                if (regName.equals("RSP") && sym != null) {
+                    ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), sym, 0);
+                }
+            }
 
-        for (var symExpr: inputFact) {
-            long newOff = symExpr.offset + getSigned(inputs[1]);
-            if (OffsetSanityCheck(newOff)) {
-                ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
+        } else {
+            if (!inputs[1].isConstant()) {
+                return;
+            }
+            var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
+            assert inputFact != null;
+
+            ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+
+            for (var symExpr: inputFact) {
+                long newOff = symExpr.offset + getSigned(inputs[1]);
+                if (OffsetSanityCheck(newOff)) {
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
+                }
             }
         }
     }
@@ -230,6 +234,7 @@ public class PCodeVisitor {
             Logging.warn("Callee function is not solved yet: " + calleeNode.value.getName());
             return;
         }
+        Logging.info("Callee function: " + calleeNode.value.getName() + " is solved");
 
         // TODO: how to handle cases when arguments and parameters are inconsistency?
         for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
