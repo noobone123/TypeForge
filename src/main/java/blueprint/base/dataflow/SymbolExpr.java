@@ -13,11 +13,8 @@ public class SymbolExpr {
     public long offset;
 
     public SymbolExpr(HighSymbol base, long off) {
-        this.baseSymbol = base;
-        if (this.baseSymbol == null) {
-            Logging.warn("Base Varnode has no HighSymbol: " + base);
-        }
-        offset = off;
+        this.baseSymbol = Objects.requireNonNull(base, "Base symbol must not be null");
+        this.offset = off;
     }
 
     @Override

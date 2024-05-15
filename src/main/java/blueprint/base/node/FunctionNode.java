@@ -26,6 +26,8 @@ public class FunctionNode extends NodeBase<Function> {
     public boolean isLeaf = false;
 
     public boolean isMeaningful = false;
+    public boolean isExternal = false;
+    public boolean isNormal = false;
 
     public HighFunction hFunc = null;
     public ArrayList<ClangLine> lines;

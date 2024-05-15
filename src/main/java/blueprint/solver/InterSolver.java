@@ -1,17 +1,13 @@
 package blueprint.solver;
 
-import blueprint.base.dataflow.TypeCollector;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.*;
 
 import ghidra.program.model.address.Address;
 import ghidra.program.model.pcode.HighVariable;
-import ghidra.program.model.pcode.*;
 
 import java.util.*;
-
-import static blueprint.utils.DecompilerHelper.getSigned;
 
 public class InterSolver {
 
@@ -22,12 +18,6 @@ public class InterSolver {
     Set<FunctionNode> solvedFunc = new HashSet<>();
 
     Context interCtx;
-
-    /**
-     * Following 2 maps are used to store the relationship between HighVariable and TypeBuilder
-     */
-    Map<TypeCollector, Set<HighVariable>> typeToVars = new HashMap<>();
-    Map<HighVariable, TypeCollector> varToType = new HashMap<>();
 
     /** The call graph of the whole program */
     CallGraph cg;

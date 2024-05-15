@@ -122,6 +122,14 @@ public class CallGraph extends GraphBase<Function> {
                 funcNode.isMeaningful = true;
             }
 
+            if (FunctionHelper.isNormalFunction(funcNode.value)) {
+                funcNode.isNormal = true;
+            }
+
+            if (funcNode.value.isExternal() || funcNode.value.isThunk()) {
+                funcNode.isExternal = true;
+            }
+
             addrToNode.put(funcNode.value.getEntryPoint(), funcNode);
         }
     }

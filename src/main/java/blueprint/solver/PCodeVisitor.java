@@ -1,7 +1,7 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.SymbolExpr;
-import blueprint.base.dataflow.type.PrimitiveType;
+import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
@@ -88,7 +88,7 @@ public class PCodeVisitor {
             }
         }
 
-        ctx.buildComplexType(funcNode);
+        ctx.buildComplexTypeConstraints();
     }
 
     /**
@@ -230,6 +230,13 @@ public class PCodeVisitor {
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
         var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
+
+        if (calleeNode.isExternal) {
+            // TODO: handle External functions
+            Logging.info("External function call: " + calleeNode.value.getName());
+            return;
+        }
+
         if (!ctx.isFunctionSolved(calleeNode)) {
             Logging.warn("Callee function is not solved yet: " + calleeNode.value.getName());
             return;
@@ -270,13 +277,12 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(1);
         var output = pcodeOp.getOutput();
 
-        // TODO: handle the ComplexType
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, input)) {
-            var type = new PrimitiveType(outDT);
-            ctx.updateLoadStoreMap(funcNode, pcodeOp, symExpr, type, true);
+            var type = new PrimitiveTypeDescriptor(outDT);
+            ctx.createAccessPoint(funcNode, pcodeOp, symExpr, type, true);
         }
 
         // TODO: tracing the dataflow of load op's output varnode?
@@ -292,8 +298,8 @@ public class PCodeVisitor {
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
-            var type = new PrimitiveType(storedValueDT);
-            ctx.updateLoadStoreMap(funcNode, pcodeOp, symExpr, type, false);
+            var type = new PrimitiveTypeDescriptor(storedValueDT);
+            ctx.createAccessPoint(funcNode, pcodeOp, symExpr, type, false);
         }
     }
 

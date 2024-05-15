@@ -1,19 +1,19 @@
-package blueprint.base.dataflow.type;
+package blueprint.base.dataflow.constraints;
 
 import ghidra.program.model.data.DataType;
 
-public class PrimitiveType implements GeneralType {
+public class PrimitiveTypeDescriptor implements TypeDescriptor {
     private final DataType type;
     private final String typeName;
 
-    public PrimitiveType(DataType type) {
+    public PrimitiveTypeDescriptor(DataType type) {
         this.type = type;
         this.typeName = type.getName();
     }
 
 
     @Override
-    public String getTypeName() {
+    public String getName() {
         return typeName;
     }
 
@@ -31,8 +31,8 @@ public class PrimitiveType implements GeneralType {
 
     @Override
     public boolean equals(Object obj) {
-        if (obj instanceof PrimitiveType) {
-            return this.type.equals(((PrimitiveType) obj).type);
+        if (obj instanceof PrimitiveTypeDescriptor) {
+            return this.type.equals(((PrimitiveTypeDescriptor) obj).type);
         }
         return false;
     }
