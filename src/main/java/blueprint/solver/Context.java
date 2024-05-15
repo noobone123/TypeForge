@@ -15,7 +15,6 @@ import ghidra.program.model.pcode.PcodeOpAST;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
-import java.util.function.Consumer;
 
 /**
  * The context used to store the relationship between HighSymbol and TypeBuilder.
@@ -26,11 +25,13 @@ public class Context {
         public final PcodeOp pcodeOp;
         public final SymbolExpr symExpr;
         public final GeneralType type;
+        public final boolean isLoad;
 
-        public AccessPoint(PcodeOp pcodeOp, SymbolExpr symExpr, GeneralType type) {
+        public AccessPoint(PcodeOp pcodeOp, SymbolExpr symExpr, GeneralType type, boolean isLoad) {
             this.pcodeOp = pcodeOp;
             this.symExpr = symExpr;
             this.type = type;
+            this.isLoad = isLoad;
         }
 
         @Override
@@ -50,30 +51,30 @@ public class Context {
         public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
         public int dataFlowFactKSize = 10;
 
-        /** These 2 maps are used to record the DataType's load/store operation on traced varnodes */
-        public HashSet<AccessPoint> allLoads;
-        public HashSet<AccessPoint> allStores;
+        /** This map is used to record the DataType's load/store operation on traced varnodes */
+        public HashMap<HighSymbol, Set<AccessPoint>> symbolToAccessPoints;
 
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
             this.tracedVarnodes = new HashSet<>();
             this.allSymbolExprs = new HashSet<>();
             this.dataFlowFacts = new HashMap<>();
-            this.allLoads = new HashSet<>();
-            this.allStores = new HashSet<>();
+            this.symbolToAccessPoints = new HashMap<>();
         }
     }
 
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
-    public HashMap<HighSymbol, ComplexType> symbol2ComplexType;
-    public UnionFind<SymbolExpr> symbolAliasMap;
+    public HashMap<HighSymbol, ComplexType> globalSymToComplexType;
+    public UnionFind<SymbolExpr> globalSymAliasMap;
+    public HashMap<HighSymbol, Set<AccessPoint>> globalSymToAccessPoints;
     public CallGraph callGraph;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
         this.intraCtxMap = new HashMap<>();
-        this.symbol2ComplexType = new HashMap<>();
-        this.symbolAliasMap = new UnionFind<>();
+        this.globalSymToComplexType = new HashMap<>();
+        this.globalSymAliasMap = new UnionFind<>();
+        this.globalSymToAccessPoints = new HashMap<>();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -191,13 +192,12 @@ public class Context {
 
     public void updateLoadStoreMap(FunctionNode funcNode, PcodeOp pcodeOp, SymbolExpr symExpr, GeneralType type, boolean isLoad) {
         var intraCtx = intraCtxMap.get(funcNode);
+        var accessPoint = new AccessPoint(pcodeOp, symExpr, type, isLoad);
+        intraCtx.symbolToAccessPoints.computeIfAbsent(symExpr.baseSymbol, k -> new HashSet<>()).add(accessPoint);
+        globalSymToAccessPoints.computeIfAbsent(symExpr.baseSymbol, k -> new HashSet<>()).add(accessPoint);
         if (isLoad) {
-            var access = new AccessPoint(pcodeOp, symExpr, type);
-            intraCtx.allLoads.add(access);
             Logging.debug(String.format("[Load] Found load operation: %s -> %s", symExpr, type));
         } else {
-            var access = new AccessPoint(pcodeOp, symExpr, type);
-            intraCtx.allStores.add(access);
             Logging.debug(String.format("[Store] Found store operation: %s -> %s", symExpr, type));
         }
     }
@@ -217,66 +217,64 @@ public class Context {
     public void updateSymbolAliasMap(HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
         var se1 = new SymbolExpr(sym1, off1);
         var se2 = new SymbolExpr(sym2, off2);
-        symbolAliasMap.union(se1, se2);
+        globalSymAliasMap.union(se1, se2);
         Logging.debug(String.format("[Alias] %s -> %s", se1, se2));
     }
 
     public void updateSymbolAliasMap(SymbolExpr sym1, SymbolExpr sym2) {
-        symbolAliasMap.union(sym1, sym2);
+        globalSymAliasMap.union(sym1, sym2);
         Logging.debug(String.format("[Alias] %s -> %s", sym1, sym2));
     }
 
     /**
      * Build the complex data type for the HighSymbol based on the load/store maps calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
-     * // TODO: 先按照各自的 Symbol 都生成对应的 ComplexType，之后按照 Alias 关系合并，在合并过程中考虑 pCodeOp 的重复带来的影响即可
+     * // TODO: buildComplexType may can also be called when all functions are solved, which can save time, currently we call it in the end of each function to debug
      */
     public void buildComplexType(FunctionNode funcNode) {
         var intraCtx = intraCtxMap.get(funcNode);
 
-        // Step 1: Create initial ComplexTypes for all involved HighSymbols
-        HashSet<HighSymbol> involvedSymbols = new HashSet<>(intraCtx.tracedSymbols);
-        Map<HighSymbol, ComplexType> initialComplexTypes = new HashMap<>();
-        Consumer<AccessPoint> createComplexType = access -> {
-            var highSym = access.symExpr.baseSymbol;
-            if (involvedSymbols.contains(highSym)) {
-                var complexType = initialComplexTypes.computeIfAbsent(highSym, k -> new ComplexType());
-                complexType.addField(access.symExpr.offset, access.type);
+        // Step 1: Create initial ComplexTypes for all involved HighSymbols in current IntraContext
+        Map<HighSymbol, ComplexType> initalComplexTypes = new HashMap<>();
+        intraCtx.symbolToAccessPoints.forEach((highSym, accessPoints) -> {
+            if (intraCtx.tracedSymbols.contains(highSym)) {
+                var complexType = initalComplexTypes.computeIfAbsent(highSym, k -> new ComplexType());
+                for (AccessPoint access : accessPoints) {
+                    complexType.addField(access.symExpr.offset, access.type);
+                }
             }
-        };
-        intraCtx.allLoads.forEach(createComplexType);
-        intraCtx.allStores.forEach(createComplexType);
+        });
 
-        // Step 2: Merge ComplexTypes based on aliasing and distinct PCodeOps
-        Map<HighSymbol, ComplexType> mergedComplexTypes = new HashMap<>();
-        Map<HighSymbol, Set<AccessPoint>> symbolToAccessPoints = new HashMap<>();
-        intraCtx.allLoads.forEach(load -> symbolToAccessPoints.computeIfAbsent(load.symExpr.baseSymbol, k -> new HashSet<>()).add(load));
-        intraCtx.allStores.forEach(store -> symbolToAccessPoints.computeIfAbsent(store.symExpr.baseSymbol, k -> new HashSet<>()).add(store));
-
-        for (var component : symbolAliasMap.getComponents().values()) {
+        // Step 2: Merge ComplexTypes based on aliasing and distinct PCodeOps, merging is Inter-procedural
+        Map<HighSymbol, ComplexType> mergedComplexTypes = new HashMap<>(initalComplexTypes);
+        globalSymAliasMap.getComponents().values().forEach(component -> {
+            Logging.debug("[Alias] Merging component: " + component);
             ComplexType mergedType = new ComplexType();
             Set<PcodeOp> usedPcodeOps = new HashSet<>();
 
             for (SymbolExpr symExpr : component) {
                 HighSymbol highSym = symExpr.baseSymbol;
-                if (!initialComplexTypes.containsKey(highSym)) continue;
-                var accessPoints = symbolToAccessPoints.getOrDefault(highSym, Collections.emptySet());
-
-                for (var ap : accessPoints) {
-                    if (!usedPcodeOps.contains(ap.pcodeOp)) {
+                var aps = globalSymToAccessPoints.get(highSym);
+                if (aps == null) {
+                    Logging.warn("No access points for " + highSym.getName());
+                    continue;
+                }
+                for (var ap : aps) {
+                    if (usedPcodeOps.add(ap.pcodeOp)) {
                         mergedType.addField(ap.symExpr.offset, ap.type);
-                        usedPcodeOps.add(ap.pcodeOp);
                     }
                 }
             }
 
+            // Assign the merged type to all symbols in the component
             for (SymbolExpr symExpr : component) {
                 mergedComplexTypes.put(symExpr.baseSymbol, mergedType);
+                Logging.debug("[Alias] " + symExpr + " -> " + mergedType.getTypeName());
             }
-        }
+        });
 
         // Step 3: Update references to point to the merged ComplexTypes
-        symbol2ComplexType.putAll(mergedComplexTypes);
+        globalSymToComplexType.putAll(mergedComplexTypes);
     }
 
 
@@ -288,7 +286,7 @@ public class Context {
     public void dumpIntraComplexType(FunctionNode funcNode) {
         var intraCtx = intraCtxMap.get(funcNode);
         for (var highSym: intraCtx.tracedSymbols) {
-            var complexType = symbol2ComplexType.get(highSym);
+            var complexType = globalSymToComplexType.get(highSym);
             if (complexType != null) {
                 Logging.info("[ComplexType] " + highSym.getName() + " -> " + complexType);
             }

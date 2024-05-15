@@ -66,4 +66,21 @@ public class ComplexType implements GeneralType {
         return false;
     }
 
+    public void merge(ComplexType other) {
+        // Merging fields from other ComplexType
+        other.fieldMap.forEach((offset, typeMap) -> {
+            if (!this.fieldMap.containsKey(offset)) {
+                this.fieldMap.put(offset, new HashMap<>(typeMap));
+            } else {
+                typeMap.forEach((type, count) ->
+                        this.fieldMap.get(offset).merge(type, count, Integer::sum));
+            }
+        });
+
+        // Optional: Merging tags if necessary
+        other.tags.forEach((offset, tagSet) -> {
+            this.tags.putIfAbsent(offset, new HashSet<>());
+            this.tags.get(offset).addAll(tagSet);
+        });
+    }
 }
