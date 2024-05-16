@@ -200,8 +200,8 @@ public class InterSolver {
         funcNode = cg.getNodebyAddr(addr);
         workList.add(funcNode);
 
-//        addr = FunctionHelper.getAddress(0x0011a70a);
-//        funcNode = cg.getNodebyAddr(addr);
-//        workList.add(funcNode);
+        addr = FunctionHelper.getAddress(0x0011a70a);
+        funcNode = cg.getNodebyAddr(addr);
+        workList.add(funcNode);
     }
 }

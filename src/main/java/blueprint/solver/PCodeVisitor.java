@@ -127,7 +127,7 @@ public class PCodeVisitor {
             } else {
                 newOff = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
                 if (OffsetSanityCheck(newOff)) {
-                    var newExpr = new SymbolExpr(symExpr.getNestedExpr(), newOff);
+                    var newExpr = new SymbolExpr(symExpr, newOff);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
                 }
             }
@@ -191,7 +191,7 @@ public class PCodeVisitor {
             } else {
                 long newOff = getSigned(inputs[1]) * getSigned(inputs[2]);
                 if (OffsetSanityCheck(newOff)) {
-                    var newExpr = new SymbolExpr(symExpr.getNestedExpr(), newOff);
+                    var newExpr = new SymbolExpr(symExpr, newOff);
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
             }
@@ -247,7 +247,7 @@ public class PCodeVisitor {
                 } else {
                     long newOff = getSigned(inputs[1]);
                     if (OffsetSanityCheck(newOff)) {
-                        var newExpr = new SymbolExpr(symExpr.getNestedExpr(), newOff);
+                        var newExpr = new SymbolExpr(symExpr, newOff);
                         ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                     }
                 }
