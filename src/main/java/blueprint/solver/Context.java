@@ -77,23 +77,8 @@ public class Context {
      * create a new SymbolExpr and add it to the dataFlowFacts
      * @param funcNode the current function node
      * @param vn the varnode which holds the dataflow fact
-     * @param highSym the base HighSymbol of the dataflow fact
-     * @param offset the offset of the SymbolExpr
+     * @param symbolExpr the new symbolExpr
      */
-    public void addNewSymbolExpr(FunctionNode funcNode, Varnode vn, HighSymbol highSym, long offset) {
-        var intraCtx = intraCtxMap.get(funcNode);
-        if (intraCtx == null) {
-            Logging.error("Failed to get intraContext for " + funcNode.value.getName());
-            return;
-        }
-        var symbolExpr = new SymbolExpr(highSym, offset);
-        var curDataFlowFact = intraCtx.dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(intraCtx.dataFlowFactKSize));
-
-        if (curDataFlowFact.add(symbolExpr)) {
-            Logging.debug("[DataFlow] New " + vn + " -> " + curDataFlowFact);
-        }
-    }
-
     public void addNewSymbolExpr(FunctionNode funcNode, Varnode vn, SymbolExpr symbolExpr) {
         var intraCtx = intraCtxMap.get(funcNode);
         if (intraCtx == null) {
@@ -156,7 +141,8 @@ public class Context {
             // TODO: this may cause flow-insensitive, ... we can improve it in the future
             for (var vn: highVar.getInstances()) {
                 addTracedVarnode(funcNode, vn);
-                addNewSymbolExpr(funcNode, vn, symbol, 0);
+                var symExpr = new SymbolExpr(symbol, 0);
+                addNewSymbolExpr(funcNode, vn, symExpr);
             }
         }
     }
@@ -169,11 +155,11 @@ public class Context {
 
     public void createAccessPoint(FunctionNode funcNode, PcodeOp pcodeOp, SymbolExpr symExpr, TypeDescriptor type, boolean isLoad) {
         var accessPoint = new AccessPoint(pcodeOp, symExpr, type, isLoad);
-        symToConstraints.computeIfAbsent(symExpr.baseSymbol, k -> new ComplexTypeConstraint()).addAccessPoint(accessPoint);
+        symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint()).addAccessPoint(accessPoint);
         if (isLoad) {
-            Logging.debug(String.format("[Load] Found load operation: %s -> %s", symExpr, type));
+            Logging.info(String.format("[Load] Found load operation: %s -> %s", symExpr, type));
         } else {
-            Logging.debug(String.format("[Store] Found store operation: %s -> %s", symExpr, type));
+            Logging.info(String.format("[Store] Found store operation: %s -> %s", symExpr, type));
         }
     }
 
@@ -214,7 +200,7 @@ public class Context {
 
             // TODO: handle cases when symExpr's offset is not 0
             for (var symExpr: component) {
-                var highSym = symExpr.baseSymbol;
+                var highSym = symExpr.getBaseSymbol();
                 var otherConstraint = symToConstraints.get(highSym);
                 if (otherConstraint != null) {
                     newConstraint.mergeAccessPoints(otherConstraint);
@@ -222,7 +208,7 @@ public class Context {
             }
 
             for (var symExpr: component) {
-                symToConstraints.put(symExpr.baseSymbol, newConstraint);
+                symToConstraints.put(symExpr.getBaseSymbol(), newConstraint);
                 Logging.debug("[Alias] " + symExpr + " -> " + newConstraint.getName());
             }
         });
@@ -231,7 +217,7 @@ public class Context {
         // Step2: build the fieldMap using the merged access points
         var constraintsSet = new HashSet<>(symToConstraints.values());
         for (var constraint: constraintsSet) {
-            constraint.buildFieldConstraint();
+            constraint.buildConstraint();
         }
     }
 

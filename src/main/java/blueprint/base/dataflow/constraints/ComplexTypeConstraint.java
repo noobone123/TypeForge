@@ -1,14 +1,12 @@
 package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoint;
+import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
 import ghidra.program.model.pcode.PcodeOp;
-import groovy.util.logging.Log;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.TreeMap;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class ComplexTypeConstraint implements TypeDescriptor {
     /**
@@ -53,15 +51,43 @@ public class ComplexTypeConstraint implements TypeDescriptor {
     }
 
     public void mergeAccessPoints(ComplexTypeConstraint other) {
-        HashSet<PcodeOp> exists = new HashSet<>();
-        accessPoints.forEach(ap -> exists.add(ap.pcodeOp));
+        accessPoints.addAll(other.accessPoints);
+    }
 
-        for (var ap: other.accessPoints) {
-            if (!exists.contains(ap.pcodeOp)) {
-                accessPoints.add(ap);
-                exists.add(ap.pcodeOp);
+
+    public void buildConstraint() {
+        Map<PcodeOp, Set<AccessPoint>> groupedAP = accessPoints.stream()
+                .collect(Collectors.groupingBy(
+                        ap -> ap.pcodeOp,
+                        Collectors.toSet()
+                ));
+
+        groupedAP.replaceAll((pcodeOp, apSet) -> new HashSet<>(apSet.stream()
+                .collect(Collectors.toMap(
+                        ap -> ap.symExpr,
+                        ap -> ap,
+                        (ap1, ap2) -> ap1
+                ))
+                .values())
+        );
+
+        groupedAP.forEach((pcodeOp, apSet) -> {
+            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means loop?
+            if (apSet.size() > 1) {
+                Logging.warn("Multiple AccessPoints in the same PcodeOp");
+                Logging.warn(apSet.toString());
             }
-        }
+
+            apSet.forEach(ap -> {
+                SymbolExpr symExpr = ap.symExpr;
+                // TODO: consider the nested SymbolExpr
+                if (symExpr.isNested()) {
+                    Logging.warn("Nested SymbolExpr in AccessPoint");
+                } else {
+                    addField(symExpr.getOffset(), ap.type);
+                }
+            });
+        });
     }
 
 
@@ -88,13 +114,6 @@ public class ComplexTypeConstraint implements TypeDescriptor {
             this.size = size;
             Logging.info(String.format("ComplexType_%s setting new size: %d", shortUUID, size));
         }
-    }
-
-
-    public void buildFieldConstraint() {
-        accessPoints.forEach(ap -> {
-            addField(ap.symExpr.offset, ap.type);
-        });
     }
 
 

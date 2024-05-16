@@ -16,6 +16,7 @@ public class AccessPoint {
         this.isLoad = isLoad;
     }
 
+
     @Override
     public String toString() {
         return String.format("%s -> %s", symExpr, type);

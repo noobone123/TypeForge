@@ -117,11 +117,19 @@ public class PCodeVisitor {
         ctx.addTracedVarnode(funcNode, output);
 
         for (var symExpr: inputFact) {
-            newOff = symExpr.offset +
-                (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
-
-            if (OffsetSanityCheck(newOff)) {
-                ctx.addNewSymbolExpr(funcNode, output, symExpr.baseSymbol, newOff);
+            if (!symExpr.isNested()) {
+                newOff = symExpr.getOffset() +
+                        (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
+                if (OffsetSanityCheck(newOff)) {
+                    var newExpr = new SymbolExpr(symExpr.getBaseSymbol(), newOff);
+                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
+                }
+            } else {
+                newOff = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
+                if (OffsetSanityCheck(newOff)) {
+                    var newExpr = new SymbolExpr(symExpr.getNestedExpr(), newOff);
+                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
+                }
             }
         }
     }
@@ -140,18 +148,21 @@ public class PCodeVisitor {
 
         ctx.addTracedVarnode(funcNode, outputVn);
         for (var symExpr: inputFact) {
-            ctx.addNewSymbolExpr(funcNode, outputVn, symExpr.baseSymbol, symExpr.offset);
-
             // TODO: is this setSymbolAlias robust enough?
             var inputSymbol = inputVn.getHigh().getSymbol();
             var outputSymbol = outputVn.getHigh().getSymbol();
             if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
-                var inputOffset = symExpr.offset;
+                var inputOffset = symExpr.getOffset();
                 var outputOffset = 0;
                 ctx.updateSymbolAliasMap(inputSymbol, inputOffset, outputSymbol, outputOffset);
             }
+            // If not a = b pattern, we can directly add the new symbol expression into the output varnode
+            else {
+                ctx.addNewSymbolExpr(funcNode, outputVn, symExpr);
+            }
         }
     }
+
 
     /**
      * Handle PTRADD operation. In PTRADD operation,
@@ -171,9 +182,18 @@ public class PCodeVisitor {
         ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
 
         for (var symExpr: inputFact) {
-            long newOff = symExpr.offset + getSigned(inputs[1]) * getSigned(inputs[2]);
-            if (OffsetSanityCheck(newOff)) {
-                ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
+            if (!symExpr.isNested()) {
+                long newOff = symExpr.getOffset() + getSigned(inputs[1]) * getSigned(inputs[2]);
+                if (OffsetSanityCheck(newOff)) {
+                    var newExpr = new SymbolExpr(symExpr.getBaseSymbol(), newOff);
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                }
+            } else {
+                long newOff = getSigned(inputs[1]) * getSigned(inputs[2]);
+                if (OffsetSanityCheck(newOff)) {
+                    var newExpr = new SymbolExpr(symExpr.getNestedExpr(), newOff);
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                }
             }
         }
     }
@@ -218,9 +238,18 @@ public class PCodeVisitor {
             ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
 
             for (var symExpr: inputFact) {
-                long newOff = symExpr.offset + getSigned(inputs[1]);
-                if (OffsetSanityCheck(newOff)) {
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), symExpr.baseSymbol, newOff);
+                if (!symExpr.isNested()) {
+                    long newOff = symExpr.getOffset() + getSigned(inputs[1]);
+                    if (OffsetSanityCheck(newOff)) {
+                        var newExpr = new SymbolExpr(symExpr.getBaseSymbol(), newOff);
+                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                    }
+                } else {
+                    long newOff = getSigned(inputs[1]);
+                    if (OffsetSanityCheck(newOff)) {
+                        var newExpr = new SymbolExpr(symExpr.getNestedExpr(), newOff);
+                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                    }
                 }
             }
         }
@@ -288,12 +317,14 @@ public class PCodeVisitor {
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
-        for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, input)) {
+        var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
+        for (var symExpr : dataFlowFacts) {
             var type = new PrimitiveTypeDescriptor(outDT);
             ctx.createAccessPoint(funcNode, pcodeOp, symExpr, type, true);
-        }
 
-        // TODO: tracing the dataflow of load op's output varnode?
+            var newExpr = new SymbolExpr(symExpr, true);
+            ctx.addNewSymbolExpr(funcNode, output, newExpr);
+        }
     }
 
     /**
@@ -321,8 +352,8 @@ public class PCodeVisitor {
                 if (lengthArg.isConstant()) {
                     var symExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
                     for (var symExpr : symExprs) {
-                        if (symExpr.offset == 0) {
-                            var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.baseSymbol, k -> new ComplexTypeConstraint());
+                        if (symExpr.getOffset() == 0) {
+                            var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint());
                             Logging.info("memset: " + symExpr);
                             constraint.setSize(lengthArg.getOffset());
                         }

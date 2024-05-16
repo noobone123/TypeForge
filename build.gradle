@@ -63,11 +63,21 @@ repositories {
 	// dropped into the lib/ directory.
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html for more info.
 	// Ex: mavenCentral()
+	mavenCentral()
 }
 
 dependencies {
 	// Any external dependencies added here will automatically be copied to the lib/ directory when
-	// this extension is built.	
+	// this extension is built.
+	testImplementation('org.junit.jupiter:junit-jupiter-api:5.8.2')
+	testRuntimeOnly('org.junit.jupiter:junit-jupiter-engine:5.8.2')
+
+	testImplementation 'org.mockito:mockito-core:4.0.0'
+	testImplementation 'org.mockito:mockito-junit-jupiter:4.0.0'
+}
+
+test {
+	useJUnitPlatform()
 }
 
 // Exclude additional files from the built extension
