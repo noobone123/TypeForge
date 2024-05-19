@@ -54,5 +54,12 @@ public class SymbolExprTest {
         assertEquals(expr4.getRepresentation(), "0x8");
         assertEquals(expr5.getRepresentation(), "0x10");
         assertEquals(expr6.getRepresentation(), "0x18");
+
+        var expr7 = expr1.add(expr4);
+        var expr8 = expr2.add(expr5);
+        var expr9 = expr3.add(expr6);
+        assertEquals(expr7.getRepresentation(), "mock_1 + 0x8");
+        assertEquals(expr8.getRepresentation(), "mock_2 + 0x10");
+        assertEquals(expr9.getRepresentation(), "mock_3 + 0x18");
     }
 }

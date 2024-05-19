@@ -184,7 +184,7 @@ public class SymbolExpr {
             sb.append(rootSym.getName());
         }
         if (constant != 0) {
-            sb.append(" + ").append(constant);
+            sb.append("0x").append(Long.toHexString(constant));
         }
         if (dereference) {
             sb.append(String.format("*(%s)", nestedExpr.getRepresentation()));
