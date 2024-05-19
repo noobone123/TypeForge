@@ -74,6 +74,10 @@ public class PCodeVisitor {
                     Logging.debug("[PCode] " + pcode);
                     handleMultiEqual(pcode);
                 }
+                case PcodeOp.INT_ZEXT -> {
+                    Logging.debug("[PCode] " + pcode);
+                    handleIntZext(pcode);
+                }
                 case PcodeOp.LOAD -> {
                     Logging.debug("[PCode] " + pcode);
                     handleLoad(pcode);
@@ -89,7 +93,7 @@ public class PCodeVisitor {
             }
         }
 
-        ctx.buildComplexTypeConstraints();
+        // ctx.buildComplexTypeConstraints();
     }
 
     /**
@@ -105,8 +109,8 @@ public class PCodeVisitor {
     private void handleAddOrSub(PcodeOpAST pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
-        long newOff;
 
+        // TODO: handle the case where input1 is not constant
         if (!inputs[1].isConstant()) {
             return;
         }
@@ -117,19 +121,11 @@ public class PCodeVisitor {
         ctx.addTracedVarnode(funcNode, output);
 
         for (var symExpr: inputFact) {
-            if (!symExpr.isNested()) {
-                newOff = symExpr.getOffset() +
-                        (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
-                if (OffsetSanityCheck(newOff)) {
-                    var newExpr = new SymbolExpr(symExpr.getBaseSymbol(), newOff);
-                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
-                }
-            } else {
-                newOff = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
-                if (OffsetSanityCheck(newOff)) {
-                    var newExpr = new SymbolExpr(symExpr, newOff);
-                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
-                }
+            var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
+            if (OffsetSanityCheck(delta)) {
+                var deltaSym = new SymbolExpr.Builder().constant(delta).build();
+                var newExpr = symExpr.add(deltaSym);
+                ctx.addNewSymbolExpr(funcNode, output, newExpr);
             }
         }
     }
@@ -152,9 +148,9 @@ public class PCodeVisitor {
             var inputSymbol = inputVn.getHigh().getSymbol();
             var outputSymbol = outputVn.getHigh().getSymbol();
             if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
-                var inputOffset = symExpr.getOffset();
-                var outputOffset = 0;
-                ctx.updateSymbolAliasMap(inputSymbol, inputOffset, outputSymbol, outputOffset);
+                var inputSymExpr = new SymbolExpr.Builder().rootSymbol(inputSymbol).build();
+                var outputSymExpr = new SymbolExpr.Builder().rootSymbol(outputSymbol).build();
+                ctx.updateSymbolAliasMap(inputSymExpr, outputSymExpr);
             }
             // If not a = b pattern, we can directly add the new symbol expression into the output varnode
             else {
@@ -182,18 +178,11 @@ public class PCodeVisitor {
         ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
 
         for (var symExpr: inputFact) {
-            if (!symExpr.isNested()) {
-                long newOff = symExpr.getOffset() + getSigned(inputs[1]) * getSigned(inputs[2]);
-                if (OffsetSanityCheck(newOff)) {
-                    var newExpr = new SymbolExpr(symExpr.getBaseSymbol(), newOff);
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
-                }
-            } else {
-                long newOff = getSigned(inputs[1]) * getSigned(inputs[2]);
-                if (OffsetSanityCheck(newOff)) {
-                    var newExpr = new SymbolExpr(symExpr, newOff);
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
-                }
+            var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
+            if (OffsetSanityCheck(delta)) {
+                var deltaSym = new SymbolExpr.Builder().constant(delta).build();
+                var newExpr = symExpr.add(deltaSym);
+                ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
             }
         }
     }
@@ -215,8 +204,12 @@ public class PCodeVisitor {
                 var offsetSym = inputs[1].getHigh().getSymbol(); // for example: memset's ptr in network_init function in lighttpd
                 var regName = reg.getName();
                 if (regName.equals("RSP") && offsetSym != null) {
-                    var offsetSymExpr = new SymbolExpr(offsetSym, 0);
+                    var offsetSymExpr = new SymbolExpr.Builder().rootSymbol(offsetSym).build();
                     var facts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
+                    // For Example:
+                    // 114_(unique, 0x3200, 8)[noHighSym], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16700_(const, 0xffffffffffffff58, 8)[local_a8]
+                    // 133_(unique, 0x3200, 8)[local_28], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16702_(const, 0xffffffffffffff58, 8)[local_a8]
+                    // 133_(unique, 0x3200, 8) and 114_(unique, 0x3200, 8) are actually the same symbol, but ghidra internal can not resolve it, so we manually recover it
                     if (facts == null) {
                         ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
                         ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), offsetSymExpr);
@@ -238,18 +231,11 @@ public class PCodeVisitor {
             ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
 
             for (var symExpr: inputFact) {
-                if (!symExpr.isNested()) {
-                    long newOff = symExpr.getOffset() + getSigned(inputs[1]);
-                    if (OffsetSanityCheck(newOff)) {
-                        var newExpr = new SymbolExpr(symExpr.getBaseSymbol(), newOff);
-                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
-                    }
-                } else {
-                    long newOff = getSigned(inputs[1]);
-                    if (OffsetSanityCheck(newOff)) {
-                        var newExpr = new SymbolExpr(symExpr, newOff);
-                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
-                    }
+                var delta = getSigned(inputs[1]);
+                if (OffsetSanityCheck(delta)) {
+                    var deltaSym = new SymbolExpr.Builder().constant(delta).build();
+                    var newExpr = symExpr.add(deltaSym);
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
             }
         }
@@ -262,6 +248,17 @@ public class PCodeVisitor {
         for (var input : inputs) {
             ctx.mergeSymbolExpr(funcNode, input, output, false);
         }
+    }
+
+
+    private void handleIntZext(PcodeOp pcodeOp) {
+        var input = pcodeOp.getInput(0);
+        var output = pcodeOp.getOutput();
+        var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
+        for (var symExpr : inputFacts) {
+            // If Nested, means the symbol maybe a pointer expression
+        }
+        return;
     }
 
 
@@ -286,7 +283,8 @@ public class PCodeVisitor {
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var symExpr : argFacts) {
                 var param = calleeNode.parameters.get(inputIdx - 1);
-                ctx.updateSymbolAliasMap(symExpr, new SymbolExpr(param, 0));
+                var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
+                ctx.updateSymbolAliasMap(symExpr, paramExpr);
             }
         }
     }
@@ -322,7 +320,7 @@ public class PCodeVisitor {
             var type = new PrimitiveTypeDescriptor(outDT);
             ctx.createAccessPoint(funcNode, pcodeOp, symExpr, type, true);
 
-            var newExpr = new SymbolExpr(symExpr, true);
+            var newExpr = new SymbolExpr.Builder().dereference(symExpr).build();
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
     }
@@ -352,10 +350,10 @@ public class PCodeVisitor {
                 if (lengthArg.isConstant()) {
                     var symExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
                     for (var symExpr : symExprs) {
-                        if (symExpr.getOffset() == 0) {
-                            var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint());
+                        if (!symExpr.hasOffset()) {
+                            // var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint());
                             Logging.info("memset: " + symExpr);
-                            constraint.setSize(lengthArg.getOffset());
+                            // constraint.setSize(lengthArg.getOffset());
                         }
                     }
                 }

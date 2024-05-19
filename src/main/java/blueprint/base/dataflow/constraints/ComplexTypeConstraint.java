@@ -55,40 +55,40 @@ public class ComplexTypeConstraint implements TypeDescriptor {
     }
 
 
-    public void buildConstraint() {
-        Map<PcodeOp, Set<AccessPoint>> groupedAP = accessPoints.stream()
-                .collect(Collectors.groupingBy(
-                        ap -> ap.pcodeOp,
-                        Collectors.toSet()
-                ));
-
-        groupedAP.replaceAll((pcodeOp, apSet) -> new HashSet<>(apSet.stream()
-                .collect(Collectors.toMap(
-                        ap -> ap.symExpr,
-                        ap -> ap,
-                        (ap1, ap2) -> ap1
-                ))
-                .values())
-        );
-
-        groupedAP.forEach((pcodeOp, apSet) -> {
-            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means loop?
-            if (apSet.size() > 1) {
-                Logging.warn("Multiple AccessPoints in the same PcodeOp");
-                Logging.warn(apSet.toString());
-            }
-
-            apSet.forEach(ap -> {
-                SymbolExpr symExpr = ap.symExpr;
-                // TODO: consider the nested SymbolExpr
-                if (symExpr.isNested()) {
-                    Logging.warn("Nested SymbolExpr in AccessPoint");
-                } else {
-                    addField(symExpr.getOffset(), ap.type);
-                }
-            });
-        });
-    }
+//    public void buildConstraint() {
+//        Map<PcodeOp, Set<AccessPoint>> groupedAP = accessPoints.stream()
+//                .collect(Collectors.groupingBy(
+//                        ap -> ap.pcodeOp,
+//                        Collectors.toSet()
+//                ));
+//
+//        groupedAP.replaceAll((pcodeOp, apSet) -> new HashSet<>(apSet.stream()
+//                .collect(Collectors.toMap(
+//                        ap -> ap.symExpr,
+//                        ap -> ap,
+//                        (ap1, ap2) -> ap1
+//                ))
+//                .values())
+//        );
+//
+//        groupedAP.forEach((pcodeOp, apSet) -> {
+//            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means loop?
+//            if (apSet.size() > 1) {
+//                Logging.warn("Multiple AccessPoints in the same PcodeOp");
+//                Logging.warn(apSet.toString());
+//            }
+//
+//            apSet.forEach(ap -> {
+//                SymbolExpr symExpr = ap.symExpr;
+//                // TODO: consider the nested SymbolExpr
+//                if (symExpr.isNested()) {
+//                    Logging.warn("Nested SymbolExpr in AccessPoint");
+//                } else {
+//                    addField(symExpr.getOffset(), ap.type);
+//                }
+//            });
+//        });
+//    }
 
 
     public void merge(ComplexTypeConstraint other) {

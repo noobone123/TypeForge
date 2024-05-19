@@ -141,7 +141,10 @@ public class Context {
             // TODO: this may cause flow-insensitive, ... we can improve it in the future
             for (var vn: highVar.getInstances()) {
                 addTracedVarnode(funcNode, vn);
-                var symExpr = new SymbolExpr(symbol, 0);
+                var symExpr = new SymbolExpr.Builder()
+                                .rootSymbol(symbol)
+                                .build();
+
                 addNewSymbolExpr(funcNode, vn, symExpr);
             }
         }
@@ -152,10 +155,9 @@ public class Context {
         return intraCtx.tracedVarnodes.contains(vn);
     }
 
-
     public void createAccessPoint(FunctionNode funcNode, PcodeOp pcodeOp, SymbolExpr symExpr, TypeDescriptor type, boolean isLoad) {
         var accessPoint = new AccessPoint(pcodeOp, symExpr, type, isLoad);
-        symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint()).addAccessPoint(accessPoint);
+        // symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint()).addAccessPoint(accessPoint);
         if (isLoad) {
             Logging.info(String.format("[Load] Found load operation: %s -> %s", symExpr, type));
         } else {
@@ -174,14 +176,6 @@ public class Context {
         return res;
     }
 
-
-    public void updateSymbolAliasMap(HighSymbol sym1, long off1, HighSymbol sym2, long off2) {
-        var se1 = new SymbolExpr(sym1, off1);
-        var se2 = new SymbolExpr(sym2, off2);
-        symAliasMap.union(se1, se2);
-        Logging.debug(String.format("[Alias] %s -> %s", se1, se2));
-    }
-
     public void updateSymbolAliasMap(SymbolExpr sym1, SymbolExpr sym2) {
         symAliasMap.union(sym1, sym2);
         Logging.debug(String.format("[Alias] %s -> %s", sym1, sym2));
@@ -192,34 +186,34 @@ public class Context {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     // TODO: this method should be called after all functions are solved, now it is called after each function is solved for debugging
-    public void buildComplexTypeConstraints() {
-        // Step1: merge constraint's access points using the alias map
-        symAliasMap.getComponents().values().forEach(component -> {
-            Logging.debug("[Alias] Merging component: " + component);
-            ComplexTypeConstraint newConstraint = new ComplexTypeConstraint();
-
-            // TODO: handle cases when symExpr's offset is not 0
-            for (var symExpr: component) {
-                var highSym = symExpr.getBaseSymbol();
-                var otherConstraint = symToConstraints.get(highSym);
-                if (otherConstraint != null) {
-                    newConstraint.mergeAccessPoints(otherConstraint);
-                }
-            }
-
-            for (var symExpr: component) {
-                symToConstraints.put(symExpr.getBaseSymbol(), newConstraint);
-                Logging.debug("[Alias] " + symExpr + " -> " + newConstraint.getName());
-            }
-        });
-
-
-        // Step2: build the fieldMap using the merged access points
-        var constraintsSet = new HashSet<>(symToConstraints.values());
-        for (var constraint: constraintsSet) {
-            constraint.buildConstraint();
-        }
-    }
+//    public void buildComplexTypeConstraints() {
+//        // Step1: merge constraint's access points using the alias map
+//        symAliasMap.getComponents().values().forEach(component -> {
+//            Logging.debug("[Alias] Merging component: " + component);
+//            ComplexTypeConstraint newConstraint = new ComplexTypeConstraint();
+//
+//            // TODO: handle cases when symExpr's offset is not 0
+//            for (var symExpr: component) {
+//                var highSym = symExpr.getBaseSymbol();
+//                var otherConstraint = symToConstraints.get(highSym);
+//                if (otherConstraint != null) {
+//                    newConstraint.mergeAccessPoints(otherConstraint);
+//                }
+//            }
+//
+//            for (var symExpr: component) {
+//                symToConstraints.put(symExpr.getBaseSymbol(), newConstraint);
+//                Logging.debug("[Alias] " + symExpr + " -> " + newConstraint.getName());
+//            }
+//        });
+//
+//
+//        // Step2: build the fieldMap using the merged access points
+//        var constraintsSet = new HashSet<>(symToConstraints.values());
+//        for (var constraint: constraintsSet) {
+//            constraint.buildConstraint();
+//        }
+//    }
 
 
     public boolean isFunctionSolved(FunctionNode funcNode) {

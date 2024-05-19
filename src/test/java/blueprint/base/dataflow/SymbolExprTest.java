@@ -15,35 +15,44 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 public class SymbolExprTest {
     @Mock
-    private HighSymbol mockHighSymbol;
+    private HighSymbol mockHighSymbol1;
+    @Mock
+    private HighSymbol mockHighSymbol2;
+    @Mock
+    private HighSymbol mockHighSymbol3;
 
     @BeforeEach
     public void setUp() {
-        when(mockHighSymbol.getName()).thenReturn("mock");
+        when(mockHighSymbol1.getName()).thenReturn("mock_1");
+        when(mockHighSymbol2.getName()).thenReturn("mock_2");
+        when(mockHighSymbol3.getName()).thenReturn("mock_3");
     }
 
     @Test
     public void test() {
-        var expr1 = new SymbolExpr(mockHighSymbol, 0);
-        var expr2 = new SymbolExpr(mockHighSymbol, 8);
-        var expr3 = new SymbolExpr(expr1, true);
-        var expr4 = new SymbolExpr(expr2, true);
-        var expr5 = new SymbolExpr(expr3, true);
-        var expr6 = new SymbolExpr(expr4, true);
-        var expr7 = new SymbolExpr(expr4, 16);
-        var expr8 = new SymbolExpr(expr7, 16);
-        var expr9 = new SymbolExpr(expr8, true);
-        var expr10 = new SymbolExpr(expr4, 0x10);
+        var expr1 = new SymbolExpr.Builder()
+                        .rootSymbol(mockHighSymbol1)
+                        .build();
 
-        assertEquals(expr1.getRepresentation(), "mock");
-        assertEquals(expr2.getRepresentation(), "mock + 0x8");
-        assertEquals(expr3.getRepresentation(), "*(mock)");
-        assertEquals(expr4.getRepresentation(), "*(mock + 0x8)");
-        assertEquals(expr5.getRepresentation(), "*(*(mock))");
-        assertEquals(expr6.getRepresentation(), "*(*(mock + 0x8))");
-        assertEquals(expr7.getRepresentation(), "*(mock + 0x8) + 0x10");
-        assertEquals(expr8.getRepresentation(), "*(mock + 0x8) + 0x20");
-        assertEquals(expr9.getRepresentation(), "*(*(mock + 0x8) + 0x20)");
-        assertEquals(expr10.getRepresentation(), "*(mock + 0x8) + 0x10");
+        var expr2 = new SymbolExpr.Builder()
+                        .rootSymbol(mockHighSymbol2)
+                        .build();
+
+        var expr3 = new SymbolExpr.Builder()
+                        .rootSymbol(mockHighSymbol3)
+                        .build();
+
+
+        assertEquals(expr1.getRepresentation(), "mock_1");
+        assertEquals(expr2.getRepresentation(), "mock_2");
+        assertEquals(expr3.getRepresentation(), "mock_3");
+
+        var expr4 = new SymbolExpr.Builder().constant(0x8).build();
+        var expr5 = new SymbolExpr.Builder().constant(0x10).build();
+        var expr6 = new SymbolExpr.Builder().constant(0x18).build();
+
+        assertEquals(expr4.getRepresentation(), "0x8");
+        assertEquals(expr5.getRepresentation(), "0x10");
+        assertEquals(expr6.getRepresentation(), "0x18");
     }
 }

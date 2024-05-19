@@ -3,6 +3,11 @@ package blueprint.base.dataflow;
 import blueprint.base.dataflow.constraints.TypeDescriptor;
 import ghidra.program.model.pcode.PcodeOp;
 
+/**
+ * AccessPoint records access of a SymbolExpr in Ghidra's Pcodes.
+ * access type can be load, store or ...
+ * an access always associates with a TypeDescriptor.
+ */
 public class AccessPoint {
     public final PcodeOp pcodeOp;
     public final SymbolExpr symExpr;
@@ -15,7 +20,6 @@ public class AccessPoint {
         this.type = type;
         this.isLoad = isLoad;
     }
-
 
     @Override
     public String toString() {
