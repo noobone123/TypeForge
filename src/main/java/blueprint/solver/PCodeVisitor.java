@@ -92,8 +92,6 @@ public class PCodeVisitor {
                 }
             }
         }
-
-        // ctx.buildComplexTypeConstraints();
     }
 
     /**
@@ -144,15 +142,16 @@ public class PCodeVisitor {
 
         ctx.addTracedVarnode(funcNode, outputVn);
         for (var symExpr: inputFact) {
-            // TODO: is this setSymbolAlias robust enough?
             var inputSymbol = inputVn.getHigh().getSymbol();
             var outputSymbol = outputVn.getHigh().getSymbol();
+            // TODO: only handle the case where assignment satisfies the a = b pattern
             if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
                 var inputSymExpr = new SymbolExpr.Builder().rootSymbol(inputSymbol).build();
                 var outputSymExpr = new SymbolExpr.Builder().rootSymbol(outputSymbol).build();
                 ctx.updateSymbolAliasMap(inputSymExpr, outputSymExpr);
             }
-            // If not a = b pattern, we can directly add the new symbol expression into the output varnode
+            // TODO: If not a = b pattern, we can directly add the new symbol expression into the output varnode
+            // TODO: what about the case where a = b + 0x10, or a + 0x10 = b ?
             else {
                 ctx.addNewSymbolExpr(funcNode, outputVn, symExpr);
             }

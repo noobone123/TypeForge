@@ -40,7 +40,7 @@ public class Context {
     public CallGraph callGraph;
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
     public AccessPointSet apSet;
-    public HashMap<HighSymbol, ComplexTypeConstraint> symToConstraints;
+    public HashMap<SymbolExpr, ComplexTypeConstraint> symToConstraints;
     public UnionFind<SymbolExpr> symAliasMap;
 
     public Context(CallGraph cg) {
@@ -178,75 +178,63 @@ public class Context {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     // TODO: this method should be called after all functions are solved, now it is called after each function is solved for debugging
-//    public void buildComplexTypeConstraints() {
-//        // Step1: merge constraint's access points using the alias map
-//        symAliasMap.getComponents().values().forEach(component -> {
-//            Logging.debug("[Alias] Merging component: " + component);
-//            ComplexTypeConstraint newConstraint = new ComplexTypeConstraint();
-//
-//            // TODO: handle cases when symExpr's offset is not 0
-//            for (var symExpr: component) {
-//                var highSym = symExpr.getBaseSymbol();
-//                var otherConstraint = symToConstraints.get(highSym);
-//                if (otherConstraint != null) {
-//                    newConstraint.mergeAccessPoints(otherConstraint);
-//                }
-//            }
-//
-//            for (var symExpr: component) {
-//                symToConstraints.put(symExpr.getBaseSymbol(), newConstraint);
-//                Logging.debug("[Alias] " + symExpr + " -> " + newConstraint.getName());
-//            }
-//        });
-//
-//
-//        // Step2: build the fieldMap using the merged access points
-//        var constraintsSet = new HashSet<>(symToConstraints.values());
-//        for (var constraint: constraintsSet) {
-//            constraint.buildConstraint();
-//        }
-//    }
+    public void buildConstraints() {
+        // Step1: group all AccessPoints by the representative root symbol
+        var rootExprToAPs = apSet.groupByRepresentativeRootSymbol();
+        Set<SymbolExpr> visited = new HashSet<>();
+
+        rootExprToAPs.forEach((rootExpr, APs) -> {
+            if (visited.contains(rootExpr)) {
+                return;
+            }
+
+            if (!rootExpr.isRootSymbol()) {
+                Logging.error("The rootExpr is not a root symbol: " + rootExpr);
+                return;
+            }
+
+            // Step2: merge the AccessPoints from the same alias cluster
+            var mergedAPs = new HashSet<>(APs);
+            var aliasCluster = symAliasMap.getCluster(rootExpr);
+            Logging.debug("[Alias] " + aliasCluster);
+
+            for (var aliasSym: aliasCluster) {
+                if (aliasSym == rootExpr) {
+                    continue;
+                }
+                var aliasAPs = rootExprToAPs.get(aliasSym);
+                if (aliasAPs != null) {
+                    mergedAPs.addAll(aliasAPs);
+                }
+            }
+
+            // Step3: build the ComplexTypeConstraint
+            var constraint = new ComplexTypeConstraint();
+
+            // Step4: update the symToConstraints map according to the alias cluster
+            for (var aliasSym: aliasCluster) {
+                symToConstraints.put(aliasSym, constraint);
+                visited.add(aliasSym);
+                Logging.debug("[Alias] " + aliasSym + " -> " + constraint.getName());
+            }
+
+            constraint.buildConstraint(mergedAPs);
+        });
+    }
 
 
     public boolean isFunctionSolved(FunctionNode funcNode) {
         return intraCtxMap.containsKey(funcNode);
     }
 
-
     public void dumpIntraComplexType(FunctionNode funcNode) {
         var intraCtx = intraCtxMap.get(funcNode);
         for (var highSym: intraCtx.tracedSymbols) {
-            var complexType = symToConstraints.get(highSym);
+            var symExpr = new SymbolExpr.Builder().rootSymbol(highSym).build();
+            var complexType = symToConstraints.get(symExpr);
             if (complexType != null) {
                 Logging.info("[TypeConstraints] " + highSym.getName() + " -> " + complexType);
             }
         }
     }
-
-//    /**
-//     * Merge the TypeBuilder of the other intraSolver's context to the current context.
-//     * @param other the callee intraSolver's context
-//     * @param from the HighSymbol in the other context
-//     * @param to the HighSymbol in the current context
-//     * @param offset the offset of `to` highSymbol's field
-//     * @return true if the merge is successful
-//     */
-//    public boolean updateTypeBuilderFromCallee(Context other, HighSymbol from, HighSymbol to, long offset) {
-//        if (!other.typeBuilderMap.containsKey(from)) {
-//            Logging.error("No HighSymbol in the other context");
-//            return false;
-//        }
-//
-//        var otherTypeBuilder = other.typeBuilderMap.get(from);
-//        if (offset == 0) {
-//            typeBuilderMap.put(to, otherTypeBuilder);
-//            otherTypeBuilder.addTag(0, "ARGUMENT");
-//        } else {
-//            var typeBuilder = typeBuilderMap.computeIfAbsent(to, k -> new TypeCollector());
-//            typeBuilder.addTypeBuilder(offset, otherTypeBuilder);
-//            typeBuilder.addTag(offset, "ARGUMENT");
-//        }
-//
-//        return true;
-//    }
 }

@@ -52,6 +52,10 @@ public class SymbolExpr {
         return offsetExpr != null;
     }
 
+    public long getConstant() {
+        return constant;
+    }
+
     public boolean isConstant() {
         return constant != 0;
     }
@@ -104,6 +108,67 @@ public class SymbolExpr {
         }
         return new Builder().dereference(this).build();
     }
+
+
+    public SymbolExpr getRootSymExpr() {
+        if (isRootSymbol()) {
+            return this;
+        }
+        if (baseExpr != null) {
+            return baseExpr.getRootSymExpr();
+        }
+        Logging.error(String.format("[SymbolExpr] Cannot find representative root SymExpr for %s", this));
+        return null;
+    }
+
+
+    public String getRepresentation() {
+        StringBuilder sb = new StringBuilder();
+        if (baseExpr != null) {
+            sb.append(baseExpr.getRepresentation());
+        }
+        if (indexExpr != null) {
+            sb.append(" + ").append(indexExpr.getRepresentation()).append(" * ").append(scaleExpr.getRepresentation());
+        }
+        if (offsetExpr != null) {
+            sb.append(" + ").append(offsetExpr.getRepresentation());
+        }
+        if (rootSym != null) {
+            sb.append(rootSym.getName());
+        }
+        if (constant != 0) {
+            sb.append("0x").append(Long.toHexString(constant));
+        }
+        if (dereference) {
+            sb.append(String.format("*(%s)", nestedExpr.getRepresentation()));
+        }
+        return sb.toString();
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(baseExpr, indexExpr, scaleExpr, offsetExpr, rootSym, constant, dereference, nestedExpr);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof SymbolExpr that)) return false;
+        return constant == that.constant &&
+                dereference == that.dereference &&
+                Objects.equals(baseExpr, that.baseExpr) &&
+                Objects.equals(indexExpr, that.indexExpr) &&
+                Objects.equals(scaleExpr, that.scaleExpr) &&
+                Objects.equals(offsetExpr, that.offsetExpr) &&
+                Objects.equals(rootSym, that.rootSym) &&
+                Objects.equals(nestedExpr, that.nestedExpr);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("%s", getRepresentation());
+    }
+
 
     /**
      * Builder Pattern for creating SymbolExpr
@@ -172,52 +237,5 @@ public class SymbolExpr {
             }
             return new SymbolExpr(this);
         }
-    }
-
-    public String getRepresentation() {
-        StringBuilder sb = new StringBuilder();
-        if (baseExpr != null) {
-            sb.append(baseExpr.getRepresentation());
-        }
-        if (indexExpr != null) {
-            sb.append(" + ").append(indexExpr.getRepresentation()).append(" * ").append(scaleExpr.getRepresentation());
-        }
-        if (offsetExpr != null) {
-            sb.append(" + ").append(offsetExpr.getRepresentation());
-        }
-        if (rootSym != null) {
-            sb.append(rootSym.getName());
-        }
-        if (constant != 0) {
-            sb.append("0x").append(Long.toHexString(constant));
-        }
-        if (dereference) {
-            sb.append(String.format("*(%s)", nestedExpr.getRepresentation()));
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(baseExpr, indexExpr, scaleExpr, offsetExpr, rootSym, constant, dereference, nestedExpr);
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof SymbolExpr that)) return false;
-        return constant == that.constant &&
-                dereference == that.dereference &&
-                Objects.equals(baseExpr, that.baseExpr) &&
-                Objects.equals(indexExpr, that.indexExpr) &&
-                Objects.equals(scaleExpr, that.scaleExpr) &&
-                Objects.equals(offsetExpr, that.offsetExpr) &&
-                Objects.equals(rootSym, that.rootSym) &&
-                Objects.equals(nestedExpr, that.nestedExpr);
-    }
-
-    @Override
-    public String toString() {
-        return String.format("%s", getRepresentation());
     }
 }

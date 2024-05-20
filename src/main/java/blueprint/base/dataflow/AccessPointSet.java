@@ -2,10 +2,13 @@ package blueprint.base.dataflow;
 
 import blueprint.base.dataflow.constraints.TypeDescriptor;
 import blueprint.utils.Logging;
+import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AccessPointSet {
     /**
@@ -33,10 +36,14 @@ public class AccessPointSet {
     }
 
 
-    Set<AP> apSet;
+    private final Set<AP> apSet;
 
     public AccessPointSet() {
         apSet = new HashSet<>();
+    }
+
+    public Set<AP> getAccessPoints() {
+        return apSet;
     }
 
     public void addAccessPoint(PcodeOp pcodeOp, SymbolExpr symExpr, TypeDescriptor type, boolean isLoad) {
@@ -46,6 +53,15 @@ public class AccessPointSet {
         } else {
             Logging.info(String.format("[Store] Found store operation: %s -> %s", symExpr, type));
         }
+    }
+
+    public Map<SymbolExpr, Set<AP>> groupByRepresentativeRootSymbol() {
+        return apSet.stream()
+                .collect(
+                        Collectors.groupingBy(
+                                ap -> ap.symExpr.getRootSymExpr(),
+                                Collectors.toSet()
+                        ));
     }
 }
 
