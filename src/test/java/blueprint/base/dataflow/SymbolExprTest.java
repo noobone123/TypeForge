@@ -4,6 +4,8 @@ import static org.mockito.Mockito.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 import blueprint.utils.Logging;
+import ghidra.program.model.listing.Function;
+import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,6 +22,10 @@ public class SymbolExprTest {
     private HighSymbol mockHighSymbol2;
     @Mock
     private HighSymbol mockHighSymbol3;
+    @Mock
+    private HighFunction mockHighFunc;
+    @Mock
+    private Function mockFunc;
 
     @BeforeEach
     public void setUp() {
@@ -29,6 +35,11 @@ public class SymbolExprTest {
         when(mockHighSymbol1.getName()).thenReturn("mock_1");
         when(mockHighSymbol2.getName()).thenReturn("mock_2");
         when(mockHighSymbol3.getName()).thenReturn("mock_3");
+        when(mockHighSymbol1.getHighFunction()).thenReturn(mockHighFunc);
+        when(mockHighSymbol2.getHighFunction()).thenReturn(mockHighFunc);
+        when(mockHighSymbol3.getHighFunction()).thenReturn(mockHighFunc);
+        when(mockHighFunc.getFunction()).thenReturn(mockFunc);
+        when(mockFunc.getName()).thenReturn("mock_func");
     }
 
     @Test

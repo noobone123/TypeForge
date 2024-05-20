@@ -1,5 +1,6 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.ComplexTypeConstraint;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
@@ -78,6 +79,10 @@ public class PCodeVisitor {
                     Logging.debug("[PCode] " + pcode);
                     handleIntZext(pcode);
                 }
+                case PcodeOp.INT_MULT -> {
+                    Logging.debug("[PCode] " + pcode);
+                    handleIntMult(pcode);
+                }
                 case PcodeOp.LOAD -> {
                     Logging.debug("[PCode] " + pcode);
                     handleLoad(pcode);
@@ -108,24 +113,31 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
 
-        // TODO: handle the case where input1 is not constant
-        if (!inputs[1].isConstant()) {
-            return;
-        }
-
-        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
-        assert inputFact != null;
-
         ctx.addTracedVarnode(funcNode, output);
+        var inputFact_0 = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
+        assert inputFact_0 != null;
 
-        for (var symExpr: inputFact) {
-            var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
-            if (OffsetSanityCheck(delta)) {
-                var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                var newExpr = symExpr.add(deltaSym);
-                ctx.addNewSymbolExpr(funcNode, output, newExpr);
+
+        if (inputs[1].isConstant()) {
+            for (var symExpr: inputFact_0) {
+                var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
+                if (OffsetSanityCheck(delta)) {
+                    var deltaSym = new SymbolExpr.Builder().constant(delta).build();
+                    var newExpr = symExpr.add(deltaSym);
+                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
+                }
+            }
+        } else {
+            var inputFact_1 = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
+            for (var symExpr: inputFact_0) {
+                for (var symExpr_1: inputFact_1) {
+                    var newExpr = symExpr.add(symExpr_1);
+                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
+                }
             }
         }
+
+
     }
 
 
@@ -141,6 +153,7 @@ public class PCodeVisitor {
         assert inputFact != null;
 
         ctx.addTracedVarnode(funcNode, outputVn);
+
         for (var symExpr: inputFact) {
             var inputSymbol = inputVn.getHigh().getSymbol();
             var outputSymbol = outputVn.getHigh().getSymbol();
@@ -174,6 +187,7 @@ public class PCodeVisitor {
 
         var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact != null;
+
         ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
 
         for (var symExpr: inputFact) {
@@ -244,6 +258,7 @@ public class PCodeVisitor {
     private void handleMultiEqual(PcodeOp pcodeOp) {
         var output = pcodeOp.getOutput();
         var inputs = pcodeOp.getInputs();
+        ctx.addTracedVarnode(funcNode, output);
         for (var input : inputs) {
             ctx.mergeSymbolExpr(funcNode, input, output, false);
         }
@@ -253,9 +268,44 @@ public class PCodeVisitor {
     private void handleIntZext(PcodeOp pcodeOp) {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
+        ctx.addTracedVarnode(funcNode, output);
         var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : inputFacts) {
-            // If Nested, means the symbol maybe a pointer expression
+            // TODO: IntZext need add access point?
+            ctx.addNewSymbolExpr(funcNode, output, symExpr);
+        }
+    }
+
+
+    private void handleIntMult(PcodeOp pcodeOp) {
+        var output = pcodeOp.getOutput();
+        var input0 = pcodeOp.getInput(0);
+        var input1 = pcodeOp.getInput(1);
+
+        if (!ctx.isInterestedVn(funcNode, input0) && !ctx.isInterestedVn(funcNode, input1)) {
+            return;
+        }
+
+        // TODO: handle the case where input0 or input1 is not constant
+        if (!input0.isConstant() && !input1.isConstant()) {
+            Logging.warn(String.format("[PCode] INT_MULT: %s * %s can not resolve", input0, input1));
+            return;
+        }
+
+        KSet<SymbolExpr> inputFacts;
+        long size = 0;
+        if (input0.isConstant()) {
+            inputFacts = ctx.getIntraDataFlowFacts(funcNode, input1);
+            size = input0.getOffset();
+        } else {
+            inputFacts = ctx.getIntraDataFlowFacts(funcNode, input0);
+            size = input1.getOffset();
+        }
+
+        var sizeExpr = new SymbolExpr.Builder().constant(size).build();
+        for (var symExpr : inputFacts) {
+            var newExpr = new SymbolExpr.Builder().index(symExpr).scale(sizeExpr).build();
+            ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
     }
 
@@ -312,6 +362,8 @@ public class PCodeVisitor {
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
+
+        ctx.addTracedVarnode(funcNode, output);
 
         var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : dataFlowFacts) {

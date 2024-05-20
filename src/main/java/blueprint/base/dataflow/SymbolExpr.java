@@ -35,12 +35,6 @@ public class SymbolExpr {
         this.dereference = builder.dereference;
         this.nestedExpr = builder.nestedExpr;
 
-        if (!isConstant()) {
-            this.function = getRootSymExpr().getRootSymbol().getHighFunction().getFunction();
-        } else {
-            this.funcName = "Constant";
-        }
-
         if (this.dereference && this.nestedExpr == null) {
             Logging.error("[SymbolExpr] Dereference expression must have a nested expression.");
         }
@@ -49,18 +43,16 @@ public class SymbolExpr {
             Logging.error("[SymbolExpr] Dereference expression cannot have offset.");
         }
 
+        if (!isConstant()) {
+            this.function = getRootSymExpr().getRootSymbol().getHighFunction().getFunction();
+            this.funcName = this.function.getName();
+        } else {
+            this.funcName = "Constant";
+        }
     }
 
     public SymbolExpr getBase() {
         return baseExpr;
-    }
-
-    public SymbolExpr getIndex() {
-        return indexExpr;
-    }
-
-    public SymbolExpr getScale() {
-        return scaleExpr;
     }
 
     public SymbolExpr getOffset() {
@@ -76,11 +68,11 @@ public class SymbolExpr {
     }
 
     public boolean isConstant() {
-        return constant != 0;
+        return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym == null && constant != 0;
     }
 
     public boolean isRootSymbol() {
-        return rootSym != null;
+        return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym != null && constant == 0;
     }
 
     public HighSymbol getRootSymbol() {
@@ -128,8 +120,15 @@ public class SymbolExpr {
             builder.dereference = false;
             builder.nestedExpr = null;
         }
+        // this: a * 0x10, a * b, ...
+        // other: a , b ,...
+        // result: a + a * 0x10, a + a * b
+        else if (this.indexExpr != null && this.baseExpr == null) {
+            assert this.scaleExpr != null && this.offsetExpr == null;
+            builder.base(other).index(this.indexExpr).scale(this.scaleExpr);
+        }
         else {
-            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this, other));
+            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this.getRepresentation(), other.getRepresentation()));
         }
 
         return builder.build();
@@ -153,6 +152,9 @@ public class SymbolExpr {
         else if (baseExpr != null) {
             return baseExpr.getRootSymExpr();
         }
+        else if (indexExpr != null) {
+            return indexExpr.getRootSymExpr();
+        }
         Logging.error(String.format("[SymbolExpr] Cannot find representative root SymExpr for %s", this));
         return null;
     }
@@ -163,11 +165,17 @@ public class SymbolExpr {
         if (baseExpr != null) {
             sb.append(baseExpr.getRepresentation());
         }
+        if (baseExpr != null && indexExpr != null) {
+            sb.append(" + ");
+        }
         if (indexExpr != null) {
-            sb.append(" + ").append(indexExpr.getRepresentation()).append(" * ").append(scaleExpr.getRepresentation());
+            sb.append(indexExpr.getRepresentation()).append(" * ").append(scaleExpr.getRepresentation());
+        }
+        if ((baseExpr != null || indexExpr != null) && offsetExpr != null) {
+            sb.append(" + ");
         }
         if (offsetExpr != null) {
-            sb.append(" + ").append(offsetExpr.getRepresentation());
+            sb.append(offsetExpr.getRepresentation());
         }
         if (rootSym != null) {
             sb.append(rootSym.getName());
