@@ -56,48 +56,53 @@ public class SymbolExpr {
         return constant != 0;
     }
 
+    public boolean isRootSymbol() {
+        return rootSym != null;
+    }
+
     public SymbolExpr add(SymbolExpr other) {
+        // ensure that the constant value is always on the right side
+        if (this.isConstant() && !other.isConstant()) {
+            return other.add(this);
+        }
+
         Builder builder = new Builder();
-
-        // Base Expressions
-        if (this.baseExpr != null || other.baseExpr != null) {
-            builder.base(new SymbolExpr.Builder()
-                    .base(this.baseExpr != null ? this.baseExpr : other.baseExpr)
-                    .build());
+        // this: a
+        // other: b, 0x10, b + 0x10
+        // result: a + b, a + 0x10, a + (b + 0x10)
+        if (this.isRootSymbol()) {
+            builder.base(this).offset(other);
         }
-
-        // Index Expressions
-        if (this.indexExpr != null || other.indexExpr != null) {
-            if (this.indexExpr != null && other.indexExpr != null) {
-                // handle case when both have index expressions
-                builder.index(new SymbolExpr.Builder()
-                        .index(this.indexExpr)
-                        .scale(this.scaleExpr)
-                        .build());
-            } else {
-                builder.index(this.indexExpr != null ? this.indexExpr : other.indexExpr);
-                builder.scale(this.scaleExpr != null ? this.scaleExpr : other.scaleExpr);
-            }
+        // this: 0x10
+        // other : 0x8
+        // result : 0x18
+        else if (this.isConstant() && other.isConstant()) {
+            builder.constant(this.constant + other.constant);
         }
-
-        // Offset Expressions
-        if (this.offsetExpr != null || other.offsetExpr != null) {
-            if (this.offsetExpr != null && other.offsetExpr != null) {
-                // Combine offsets recursively
-                builder.offset(this.offsetExpr.add(other.offsetExpr));
-            } else {
-                builder.offset(this.offsetExpr != null ? this.offsetExpr : other.offsetExpr);
-            }
+        // this: a + b, a + 0x10
+        // other: 0x10
+        // result: a + b + 0x10, a + 0x20
+        else if (this.hasOffset()) {
+            builder.other(this).offset(this.offsetExpr.add(other));
         }
-
-        // Aggregate constants
-        long newConstant = this.constant + other.constant;
-        builder.constant(newConstant);
-
-        // Aggregate root symbol
-        builder.rootSymbol(this.rootSym != null ? this.rootSym : other.rootSym);
+        // this: *(a), *(a + 0x10)
+        // other: b, 0x10
+        // result: *(a) + 0x10, *(a + 0x10) + b
+        else if (!this.hasOffset() && this.dereference) {
+            builder.base(this).offset(other);
+        }
+        else {
+            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this, other));
+        }
 
         return builder.build();
+    }
+
+    public SymbolExpr dereference() {
+        if (this.isConstant()) {
+            throw new IllegalArgumentException("Cannot dereference a constant value.");
+        }
+        return new Builder().dereference(this).build();
     }
 
     /**
