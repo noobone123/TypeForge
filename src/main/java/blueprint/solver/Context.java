@@ -1,6 +1,6 @@
 package blueprint.solver;
 
-import blueprint.base.dataflow.AccessPoint;
+import blueprint.base.dataflow.AccessPointSet;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.constraints.ComplexTypeConstraint;
@@ -26,8 +26,6 @@ public class Context {
         public final HashSet<HighSymbol> tracedSymbols;
         public final HashSet<Varnode> tracedVarnodes;
 
-        public final HashSet<SymbolExpr> allSymbolExprs;
-
         /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
         public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
         public int dataFlowFactKSize = 10;
@@ -35,19 +33,20 @@ public class Context {
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
             this.tracedVarnodes = new HashSet<>();
-            this.allSymbolExprs = new HashSet<>();
             this.dataFlowFacts = new HashMap<>();
         }
     }
 
+    public CallGraph callGraph;
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
+    public AccessPointSet apSet;
     public HashMap<HighSymbol, ComplexTypeConstraint> symToConstraints;
     public UnionFind<SymbolExpr> symAliasMap;
-    public CallGraph callGraph;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
         this.intraCtxMap = new HashMap<>();
+        this.apSet = new AccessPointSet();
         this.symToConstraints = new HashMap<>();
         this.symAliasMap = new UnionFind<>();
     }
@@ -155,16 +154,9 @@ public class Context {
         return intraCtx.tracedVarnodes.contains(vn);
     }
 
-    public void createAccessPoint(FunctionNode funcNode, PcodeOp pcodeOp, SymbolExpr symExpr, TypeDescriptor type, boolean isLoad) {
-        var accessPoint = new AccessPoint(pcodeOp, symExpr, type, isLoad);
-        // symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint()).addAccessPoint(accessPoint);
-        if (isLoad) {
-            Logging.info(String.format("[Load] Found load operation: %s -> %s", symExpr, type));
-        } else {
-            Logging.info(String.format("[Store] Found store operation: %s -> %s", symExpr, type));
-        }
+    public void addAccessPoint(PcodeOp pcodeOp, SymbolExpr symExpr, TypeDescriptor type, boolean isLoad) {
+        apSet.addAccessPoint(pcodeOp, symExpr, type, isLoad);
     }
-
 
     public KSet<SymbolExpr> getIntraDataFlowFacts(FunctionNode funcNode, Varnode vn) {
         var intraCtx = intraCtxMap.get(funcNode);

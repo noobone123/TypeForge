@@ -258,7 +258,6 @@ public class PCodeVisitor {
         for (var symExpr : inputFacts) {
             // If Nested, means the symbol maybe a pointer expression
         }
-        return;
     }
 
 
@@ -318,7 +317,7 @@ public class PCodeVisitor {
         var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : dataFlowFacts) {
             var type = new PrimitiveTypeDescriptor(outDT);
-            ctx.createAccessPoint(funcNode, pcodeOp, symExpr, type, true);
+            ctx.addAccessPoint(pcodeOp, symExpr, type, true);
 
             var newExpr = new SymbolExpr.Builder().dereference(symExpr).build();
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
@@ -336,7 +335,7 @@ public class PCodeVisitor {
 
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
             var type = new PrimitiveTypeDescriptor(storedValueDT);
-            ctx.createAccessPoint(funcNode, pcodeOp, symExpr, type, false);
+            ctx.addAccessPoint(pcodeOp, symExpr, type, false);
         }
     }
 

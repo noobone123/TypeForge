@@ -1,6 +1,6 @@
 package blueprint.base.dataflow.constraints;
 
-import blueprint.base.dataflow.AccessPoint;
+import blueprint.base.dataflow.AccessPointSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
 import ghidra.program.model.pcode.PcodeOp;
@@ -22,15 +22,12 @@ public class ComplexTypeConstraint implements TypeDescriptor {
      */
     public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
     public final TreeMap<Long, HashSet<String>> tags;
-
-    public final HashSet<AccessPoint> accessPoints;
     public long size = 0;
 
     public final UUID uuid;
     public final String shortUUID;
 
     public ComplexTypeConstraint() {
-        accessPoints = new HashSet<>();
         fieldMap = new TreeMap<>();
         tags = new TreeMap<>();
         uuid = UUID.randomUUID();
@@ -40,18 +37,6 @@ public class ComplexTypeConstraint implements TypeDescriptor {
     public void addField(long offset, TypeDescriptor type) {
         fieldMap.putIfAbsent(offset, new HashMap<>());
         fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
-    }
-
-    public void addAccessPoint(AccessPoint ap) {
-        accessPoints.add(ap);
-    }
-
-    public HashSet<AccessPoint> getAccessPoints() {
-        return accessPoints;
-    }
-
-    public void mergeAccessPoints(ComplexTypeConstraint other) {
-        accessPoints.addAll(other.accessPoints);
     }
 
 
