@@ -1,6 +1,7 @@
 package blueprint.base.dataflow;
 
 import blueprint.utils.Logging;
+import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.symbol.Symbol;
 
@@ -21,6 +22,9 @@ public class SymbolExpr {
     private boolean dereference = false;
     private SymbolExpr nestedExpr = null;
 
+    private Function function = null;
+    private String funcName = null;
+
     public SymbolExpr(Builder builder) {
         this.baseExpr = builder.baseExpr;
         this.indexExpr = builder.indexExpr;
@@ -30,6 +34,21 @@ public class SymbolExpr {
         this.constant = builder.constant;
         this.dereference = builder.dereference;
         this.nestedExpr = builder.nestedExpr;
+
+        if (!isConstant()) {
+            this.function = getRootSymExpr().getRootSymbol().getHighFunction().getFunction();
+        } else {
+            this.funcName = "Constant";
+        }
+
+        if (this.dereference && this.nestedExpr == null) {
+            Logging.error("[SymbolExpr] Dereference expression must have a nested expression.");
+        }
+
+        if (this.hasOffset() && this.dereference) {
+            Logging.error("[SymbolExpr] Dereference expression cannot have offset.");
+        }
+
     }
 
     public SymbolExpr getBase() {
@@ -64,6 +83,18 @@ public class SymbolExpr {
         return rootSym != null;
     }
 
+    public HighSymbol getRootSymbol() {
+        return rootSym;
+    }
+
+    public boolean isDereference() {
+        return dereference;
+    }
+
+    public SymbolExpr getNestedExpr() {
+        return nestedExpr;
+    }
+
     public SymbolExpr add(SymbolExpr other) {
         // ensure that the constant value is always on the right side
         if (this.isConstant() && !other.isConstant()) {
@@ -94,6 +125,8 @@ public class SymbolExpr {
         // result: *(a) + 0x10, *(a + 0x10) + b
         else if (!this.hasOffset() && this.dereference) {
             builder.base(this).offset(other);
+            builder.dereference = false;
+            builder.nestedExpr = null;
         }
         else {
             Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this, other));
@@ -114,7 +147,10 @@ public class SymbolExpr {
         if (isRootSymbol()) {
             return this;
         }
-        if (baseExpr != null) {
+        else if (isDereference() && nestedExpr != null) {
+            return nestedExpr.getRootSymExpr();
+        }
+        else if (baseExpr != null) {
             return baseExpr.getRootSymExpr();
         }
         Logging.error(String.format("[SymbolExpr] Cannot find representative root SymExpr for %s", this));
@@ -166,7 +202,7 @@ public class SymbolExpr {
 
     @Override
     public String toString() {
-        return String.format("%s", getRepresentation());
+        return String.format("%s: %s", funcName, getRepresentation());
     }
 
 
