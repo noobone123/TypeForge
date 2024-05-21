@@ -180,6 +180,7 @@ public class Context {
         Logging.debug(String.format("[Alias] %s -> %s", sym1, sym2));
     }
 
+
     /**
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
@@ -231,10 +232,10 @@ public class Context {
 
 
     public boolean isFunctionSolved(FunctionNode funcNode) {
-        return intraCtxMap.containsKey(funcNode);
+        return solvedFunc.contains(funcNode);
     }
 
-    public void dumpIntraComplexType(FunctionNode funcNode) {
+    public void dumpConstraints(FunctionNode funcNode) {
         var intraCtx = intraCtxMap.get(funcNode);
         for (var highSym: intraCtx.tracedSymbols) {
             var symExpr = new SymbolExpr.Builder().rootSymbol(highSym).build();

@@ -9,6 +9,7 @@ import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
+import groovy.util.logging.Log;
 
 import java.util.*;
 
@@ -445,6 +446,13 @@ public class PCodeVisitor {
                         }
                     }
                 }
+            }
+
+            case "memcpy" -> {
+                var dstVn = pcodeOp.getInput(1);
+                var srcVn = pcodeOp.getInput(2);
+                var lengthVn = pcodeOp.getInput(3);
+                Logging.info("memcpy: " + srcVn + " -> " + dstVn + " length: " + lengthVn);
             }
         }
     }

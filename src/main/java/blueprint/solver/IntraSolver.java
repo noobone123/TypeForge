@@ -51,8 +51,9 @@ public class IntraSolver {
         visitor.prepare();
         visitor.run();
 
+        Logging.info("Solved function: " + funcNode.value.getName());
         ctx.buildConstraints();
-        ctx.dumpIntraComplexType(funcNode);
+        ctx.dumpConstraints(funcNode);
     }
 
     /**

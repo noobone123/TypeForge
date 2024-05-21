@@ -98,8 +98,12 @@ public class SymbolExpr {
     }
 
     public SymbolExpr add(SymbolExpr other) {
-        // ensure that the constant value is always on the right side
+        // ensure that the constant value is always on the right side of the expression
         if (this.isConstant() && !other.isConstant()) {
+            return other.add(this);
+        }
+        // ensure that the index * scale is always on the right side of base
+        if (this.indexExpr != null && this.baseExpr == null) {
             return other.add(this);
         }
 
@@ -122,25 +126,25 @@ public class SymbolExpr {
         else if (this.hasOffset()) {
             builder.other(this).offset(this.offsetExpr.add(other));
         }
-        // this: *(a), *(a + 0x10)
-        // other: b, 0x10
-        // result: *(a) + 0x10, *(a + 0x10) + b
-        else if (!this.hasOffset() && (this.dereference || this.reference)) {
-            builder.dereference = false;
-            builder.reference = false;
-            builder.nestedExpr = null;
-            if (other.indexExpr != null) {
-                builder.base(this).index(other.indexExpr).scale(other.scaleExpr);
-            } else {
-                builder.base(this).offset(other);
+        else if (!this.hasOffset()) {
+            // this: *(a), *(a + 0x10)
+            if (this.dereference || this.reference) {
+                builder.dereference = false;
+                builder.reference = false;
+                builder.nestedExpr = null;
+                // other: b * 0x10, ...
+                if (other.indexExpr != null) {
+                    builder.base(this).index(other.indexExpr).scale(other.scaleExpr);
+                }
+                // other: b, ...
+                else {
+                    builder.base(this).offset(other);
+                }
             }
-        }
-        // this: a * 0x10, a * b, ...
-        // other: a , b ,...
-        // result: a + a * 0x10, a + a * b
-        else if (this.indexExpr != null && this.baseExpr == null) {
-            assert this.scaleExpr != null && this.offsetExpr == null;
-            builder.base(other).index(this.indexExpr).scale(this.scaleExpr);
+            // this: a * 0x10, a + b * 0x10, ...
+            else {
+                builder.other(this).offset(other);
+            }
         }
         else {
             Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this.getRepresentation(), other.getRepresentation()));

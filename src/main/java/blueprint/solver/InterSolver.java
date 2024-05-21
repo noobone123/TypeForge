@@ -24,16 +24,6 @@ public class InterSolver {
             FunctionNode funcNode = ctx.workList.poll();
             funcNode.decompile();
             DecompilerHelper.dumpHighPcode(funcNode.hFunc);
-            // Logging.info(funcNode.getC());
-//            for (var token: funcNode.tokens) {
-//                if (token.getText().equals("local_a8")) {
-//                    Logging.info("Found local_a8");
-//                    Logging.info(String.valueOf(token.getHighSymbol(funcNode.hFunc).getName()));
-//                } else if (token.getText().equals(("local_148"))) {
-//                    Logging.info("Found local_148");
-//                    Logging.info(String.valueOf(token.getHighSymbol(funcNode.hFunc).getName()));
-//                }
-//            }
 
             // If the function is not a leaf function, we should
             // collect data-flow facts from its callee functions.
