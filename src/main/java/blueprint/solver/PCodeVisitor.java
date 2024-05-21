@@ -78,6 +78,10 @@ public class PCodeVisitor {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleIntZext(pcode);
                 }
+                case PcodeOp.INT_SEXT -> {
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    handleIntSext(pcode);
+                }
                 case PcodeOp.INT_MULT -> {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleIntMult(pcode);
@@ -271,10 +275,32 @@ public class PCodeVisitor {
     private void handleIntZext(PcodeOp pcodeOp) {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
+
+        if (!ctx.isInterestedVn(funcNode, input)) {
+            return;
+        }
+
         ctx.addTracedVarnode(funcNode, output);
         var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : inputFacts) {
-            // TODO: IntZext need add access point?
+            // TODO: IntZext need add constraint ?
+            ctx.addNewSymbolExpr(funcNode, output, symExpr);
+        }
+    }
+
+
+    private void handleIntSext(PcodeOp pcodeOp) {
+        var input = pcodeOp.getInput(0);
+        var output = pcodeOp.getOutput();
+
+        if (!ctx.isInterestedVn(funcNode, input)) {
+            return;
+        }
+
+        ctx.addTracedVarnode(funcNode, output);
+        var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
+        for (var symExpr : inputFacts) {
+            // TODO: IntSext need add constraint ?
             ctx.addNewSymbolExpr(funcNode, output, symExpr);
         }
     }

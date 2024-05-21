@@ -38,6 +38,11 @@ public class Context {
     }
 
     public CallGraph callGraph;
+    /** The workList queue of the whole program */
+    public Queue<FunctionNode> workList;
+    /** The set of solved functions */
+    public Set<FunctionNode> solvedFunc;
+
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
     public AccessPointSet apSet;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
@@ -45,6 +50,8 @@ public class Context {
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
+        this.workList = new LinkedList<>();
+        this.solvedFunc = new HashSet<>();
         this.intraCtxMap = new HashMap<>();
         this.apSet = new AccessPointSet();
         this.symExprToConstraints = new HashMap<>();

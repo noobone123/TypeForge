@@ -5,33 +5,23 @@ import blueprint.base.node.FunctionNode;
 import blueprint.utils.*;
 
 import ghidra.program.model.address.Address;
-import ghidra.program.model.pcode.HighVariable;
-
-import java.util.*;
 
 public class InterSolver {
-
-    /** The workList queue of the whole program */
-    Queue<FunctionNode> workList = new LinkedList<>();
-
-    /** The set of solved functions */
-    Set<FunctionNode> solvedFunc = new HashSet<>();
-
-    Context interCtx;
+    Context ctx;
 
     /** The call graph of the whole program */
     CallGraph cg;
 
     public InterSolver(CallGraph cg) {
         this.cg = cg;
-        this.interCtx = new Context(this.cg);
+        this.ctx = new Context(this.cg);
         buildWorkListTest();
     }
 
 
     public void run() {
-        while (!workList.isEmpty()) {
-            FunctionNode funcNode = workList.poll();
+        while (!ctx.workList.isEmpty()) {
+            FunctionNode funcNode = ctx.workList.poll();
             funcNode.decompile();
             DecompilerHelper.dumpHighPcode(funcNode.hFunc);
             // Logging.info(funcNode.getC());
@@ -52,12 +42,12 @@ public class InterSolver {
             } else {
                 Logging.info("Leaf function: " + funcNode.value.getName());
             }
-            interCtx.createIntraContext(funcNode);
+            ctx.createIntraContext(funcNode);
 
-            IntraSolver intraSolver = new IntraSolver(funcNode, interCtx);
+            IntraSolver intraSolver = new IntraSolver(funcNode, ctx);
             intraSolver.solve();
 
-            solvedFunc.add(funcNode);
+            ctx.solvedFunc.add(funcNode);
         }
     }
 
@@ -77,14 +67,14 @@ public class InterSolver {
 
         Address addr = FunctionHelper.getAddress(0x00119249);
         FunctionNode funcNode = cg.getNodebyAddr(addr);
-        workList.add(funcNode);
+        ctx.workList.add(funcNode);
 
         addr = FunctionHelper.getAddress(0x00119337);
         funcNode = cg.getNodebyAddr(addr);
-        workList.add(funcNode);
+        ctx.workList.add(funcNode);
 
         addr = FunctionHelper.getAddress(0x0011a70a);
         funcNode = cg.getNodebyAddr(addr);
-        workList.add(funcNode);
+        ctx.workList.add(funcNode);
     }
 }

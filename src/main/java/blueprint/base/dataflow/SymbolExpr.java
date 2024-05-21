@@ -126,10 +126,14 @@ public class SymbolExpr {
         // other: b, 0x10
         // result: *(a) + 0x10, *(a + 0x10) + b
         else if (!this.hasOffset() && (this.dereference || this.reference)) {
-            builder.base(this).offset(other);
             builder.dereference = false;
             builder.reference = false;
             builder.nestedExpr = null;
+            if (other.indexExpr != null) {
+                builder.base(this).index(other.indexExpr).scale(other.scaleExpr);
+            } else {
+                builder.base(this).offset(other);
+            }
         }
         // this: a * 0x10, a * b, ...
         // other: a , b ,...
