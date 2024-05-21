@@ -21,6 +21,7 @@ public class FunctionNode extends NodeBase<Function> {
     public List<HighSymbol> parameters = new LinkedList<>();
     public VariableStorage returnStorage = null;
     public Set<HighSymbol> localVariables = new HashSet<>();
+    public Set<HighSymbol> globalVariables = new HashSet<>();
 
     /** Whether the function is a leaf node in the call graph */
     public boolean isLeaf = false;
@@ -48,6 +49,7 @@ public class FunctionNode extends NodeBase<Function> {
         }
         updatePrototype();
         updateLocalVariables();
+        updateGlobalVariables();
     }
 
     /**
@@ -99,6 +101,15 @@ public class FunctionNode extends NodeBase<Function> {
             localVariables.add(sym);
         }
     }
+
+    private void updateGlobalVariables() {
+        var globalSymMap = hFunc.getGlobalSymbolMap();
+        for (Iterator<HighSymbol> it = globalSymMap.getSymbols(); it.hasNext(); ) {
+            var sym = it.next();
+            globalVariables.add(sym);
+        }
+    }
+
 
     /**
      * Decompile current function

@@ -3,7 +3,7 @@ package blueprint.solver;
 import blueprint.base.dataflow.AccessPointSet;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.UnionFind;
-import blueprint.base.dataflow.constraints.ComplexTypeConstraint;
+import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.constraints.TypeDescriptor;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
@@ -40,14 +40,14 @@ public class Context {
     public CallGraph callGraph;
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
     public AccessPointSet apSet;
-    public HashMap<SymbolExpr, ComplexTypeConstraint> symToConstraints;
+    public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
     public UnionFind<SymbolExpr> symAliasMap;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
         this.intraCtxMap = new HashMap<>();
         this.apSet = new AccessPointSet();
-        this.symToConstraints = new HashMap<>();
+        this.symExprToConstraints = new HashMap<>();
         this.symAliasMap = new UnionFind<>();
     }
 
@@ -209,11 +209,11 @@ public class Context {
             }
 
             // Step3: build the ComplexTypeConstraint
-            var constraint = new ComplexTypeConstraint();
+            var constraint = new TypeConstraint();
 
             // Step4: update the symToConstraints map according to the alias cluster
             for (var aliasSym: aliasCluster) {
-                symToConstraints.put(aliasSym, constraint);
+                symExprToConstraints.put(aliasSym, constraint);
                 visited.add(aliasSym);
                 Logging.debug("[Alias] " + aliasSym + " -> " + constraint.getName());
             }
@@ -231,7 +231,7 @@ public class Context {
         var intraCtx = intraCtxMap.get(funcNode);
         for (var highSym: intraCtx.tracedSymbols) {
             var symExpr = new SymbolExpr.Builder().rootSymbol(highSym).build();
-            var complexType = symToConstraints.get(symExpr);
+            var complexType = symExprToConstraints.get(symExpr);
             if (complexType != null) {
                 Logging.info("[TypeConstraints] " + highSym.getName() + " -> " + complexType);
             }

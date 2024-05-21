@@ -4,12 +4,11 @@ import blueprint.base.dataflow.AccessPointSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
 import ghidra.program.model.pcode.PcodeOp;
-import ghidra.program.model.pcode.PcodeOpAST;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class ComplexTypeConstraint implements TypeDescriptor {
+public class TypeConstraint implements TypeDescriptor {
     /**
      * For a complexType, the fieldMap is a map from the offset of the field to the field's type.
      * Be careful that there maybe multiple dataTypes at the same offset in the fieldMap because of the union or array.
@@ -28,7 +27,7 @@ public class ComplexTypeConstraint implements TypeDescriptor {
     public final UUID uuid;
     public final String shortUUID;
 
-    public ComplexTypeConstraint() {
+    public TypeConstraint() {
         fieldMap = new TreeMap<>();
         tags = new TreeMap<>();
         uuid = UUID.randomUUID();
@@ -62,7 +61,7 @@ public class ComplexTypeConstraint implements TypeDescriptor {
         );
 
         groupedAP.forEach((pcodeOp, group) -> {
-            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means loop?
+            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means merge from different paths?
             if (group.size() > 1) {
                 Logging.warn("Multiple AccessPoints in the same PcodeOp");
                 Logging.warn(group.toString());
@@ -89,7 +88,7 @@ public class ComplexTypeConstraint implements TypeDescriptor {
     }
 
 
-    public void merge(ComplexTypeConstraint other) {
+    public void merge(TypeConstraint other) {
         // Merging fields from other ComplexType
         other.fieldMap.forEach((offset, typeMap) -> {
             if (!this.fieldMap.containsKey(offset)) {
@@ -139,8 +138,8 @@ public class ComplexTypeConstraint implements TypeDescriptor {
 
     @Override
     public boolean equals(Object obj) {
-        if (obj instanceof ComplexTypeConstraint) {
-            return this.uuid.equals(((ComplexTypeConstraint) obj).uuid);
+        if (obj instanceof TypeConstraint) {
+            return this.uuid.equals(((TypeConstraint) obj).uuid);
         }
         return false;
     }

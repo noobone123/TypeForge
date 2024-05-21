@@ -3,7 +3,6 @@ package blueprint.base.dataflow;
 import blueprint.utils.Logging;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighSymbol;
-import ghidra.program.model.symbol.Symbol;
 
 import java.util.Objects;
 
@@ -20,10 +19,11 @@ public class SymbolExpr {
     private HighSymbol rootSym = null;
     private long constant = 0;
     private boolean dereference = false;
+    private boolean reference = false;
     private SymbolExpr nestedExpr = null;
 
     private Function function = null;
-    private String funcName = null;
+    private String prefix = null;
 
     public SymbolExpr(Builder builder) {
         this.baseExpr = builder.baseExpr;
@@ -33,6 +33,7 @@ public class SymbolExpr {
         this.rootSym = builder.rootSym;
         this.constant = builder.constant;
         this.dereference = builder.dereference;
+        this.reference = builder.reference;
         this.nestedExpr = builder.nestedExpr;
 
         if (this.dereference && this.nestedExpr == null) {
@@ -44,10 +45,15 @@ public class SymbolExpr {
         }
 
         if (!isConstant()) {
-            this.function = getRootSymExpr().getRootSymbol().getHighFunction().getFunction();
-            this.funcName = this.function.getName();
+            var rootSymbol = getRootSymExpr().getRootSymbol();
+            if (!rootSymbol.isGlobal()) {
+                this.function = rootSymbol.getHighFunction().getFunction();
+                this.prefix = this.function.getName();
+            } else {
+                this.prefix = "Global";
+            }
         } else {
-            this.funcName = "Constant";
+            this.prefix = "Constant";
         }
     }
 
@@ -83,6 +89,10 @@ public class SymbolExpr {
         return dereference;
     }
 
+    public boolean isReference() {
+        return reference;
+    }
+
     public SymbolExpr getNestedExpr() {
         return nestedExpr;
     }
@@ -115,9 +125,10 @@ public class SymbolExpr {
         // this: *(a), *(a + 0x10)
         // other: b, 0x10
         // result: *(a) + 0x10, *(a + 0x10) + b
-        else if (!this.hasOffset() && this.dereference) {
+        else if (!this.hasOffset() && (this.dereference || this.reference)) {
             builder.base(this).offset(other);
             builder.dereference = false;
+            builder.reference = false;
             builder.nestedExpr = null;
         }
         // this: a * 0x10, a * b, ...
@@ -141,12 +152,22 @@ public class SymbolExpr {
         return new Builder().dereference(this).build();
     }
 
+    public SymbolExpr reference() {
+        if (this.isConstant()) {
+            throw new IllegalArgumentException("Cannot reference a constant value.");
+        }
+        return new Builder().reference(this).build();
+    }
+
 
     public SymbolExpr getRootSymExpr() {
         if (isRootSymbol()) {
             return this;
         }
         else if (isDereference() && nestedExpr != null) {
+            return nestedExpr.getRootSymExpr();
+        }
+        else if (isReference() && nestedExpr != null) {
             return nestedExpr.getRootSymExpr();
         }
         else if (baseExpr != null) {
@@ -186,12 +207,15 @@ public class SymbolExpr {
         if (dereference) {
             sb.append(String.format("*(%s)", nestedExpr.getRepresentation()));
         }
+        if (reference) {
+            sb.append(String.format("&(%s)", nestedExpr.getRepresentation()));
+        }
         return sb.toString();
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(baseExpr, indexExpr, scaleExpr, offsetExpr, rootSym, constant, dereference, nestedExpr);
+        return Objects.hash(baseExpr, indexExpr, scaleExpr, offsetExpr, rootSym, constant, dereference, reference, nestedExpr);
     }
 
     @Override
@@ -200,6 +224,7 @@ public class SymbolExpr {
         if (!(o instanceof SymbolExpr that)) return false;
         return constant == that.constant &&
                 dereference == that.dereference &&
+                reference == that.reference &&
                 Objects.equals(baseExpr, that.baseExpr) &&
                 Objects.equals(indexExpr, that.indexExpr) &&
                 Objects.equals(scaleExpr, that.scaleExpr) &&
@@ -210,7 +235,7 @@ public class SymbolExpr {
 
     @Override
     public String toString() {
-        return String.format("%s: %s", funcName, getRepresentation());
+        return String.format("%s: %s", prefix, getRepresentation());
     }
 
 
@@ -225,6 +250,7 @@ public class SymbolExpr {
         private HighSymbol rootSym = null;
         private long constant = 0;
         private boolean dereference = false;
+        private boolean reference = false;
         private SymbolExpr nestedExpr = null;
 
         public Builder base(SymbolExpr base) {
@@ -263,6 +289,12 @@ public class SymbolExpr {
             return this;
         }
 
+        public Builder reference(SymbolExpr nested) {
+            this.reference = true;
+            this.nestedExpr = nested;
+            return this;
+        }
+
         public Builder other(SymbolExpr other) {
             this.baseExpr = other.baseExpr;
             this.indexExpr = other.indexExpr;
@@ -271,6 +303,7 @@ public class SymbolExpr {
             this.rootSym = other.rootSym;
             this.constant = other.constant;
             this.dereference = other.dereference;
+            this.reference = other.reference;
             this.nestedExpr = other.nestedExpr;
             return this;
         }

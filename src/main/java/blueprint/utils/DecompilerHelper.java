@@ -127,7 +127,7 @@ public class DecompilerHelper {
     }
 
 
-    protected static String getVarnodeString(VarnodeAST v) {
+    public static String getVarnodeString(VarnodeAST v) {
         String retstr = "";
         retstr += v.getUniqueId() + "_";
         retstr += v.toString();

@@ -2,7 +2,6 @@ package blueprint.solver;
 
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
-import blueprint.base.dataflow.constraints.ComplexTypeConstraint;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
@@ -56,43 +55,43 @@ public class PCodeVisitor {
 
             switch (opCode) {
                 case PcodeOp.INT_ADD, PcodeOp.INT_SUB -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAddOrSub(pcode);
                 }
                 case PcodeOp.COPY, PcodeOp.CAST -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAssign(pcode);
                 }
                 case PcodeOp.PTRADD -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handlePtrAdd(pcode);
                 }
                 case PcodeOp.PTRSUB -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handlePtrSub(pcode);
                 }
                 case PcodeOp.MULTIEQUAL -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleMultiEqual(pcode);
                 }
                 case PcodeOp.INT_ZEXT -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleIntZext(pcode);
                 }
                 case PcodeOp.INT_MULT -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleIntMult(pcode);
                 }
                 case PcodeOp.LOAD -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleLoad(pcode);
                 }
                 case PcodeOp.STORE -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleStore(pcode);
                 }
                 case PcodeOp.CALL -> {
-                    Logging.debug("[PCode] " + pcode);
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleCall(pcode);
                 }
             }
@@ -136,8 +135,6 @@ public class PCodeVisitor {
                 }
             }
         }
-
-
     }
 
 
@@ -208,49 +205,55 @@ public class PCodeVisitor {
      */
     private void handlePtrSub(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
+        var base = inputs[0];
 
-        if (!ctx.isInterestedVn(funcNode, inputs[0])) {
-            // Some HighSymbol's corresponding HighVariable can not be resolved due to ghidra's internal implementation,
-            // we can manually recover them by checking the register
-            if (inputs[0].isRegister()) {
-                var reg = Global.currentProgram.getRegister(inputs[0]);
-                var offsetSym = inputs[1].getHigh().getSymbol(); // for example: memset's ptr in network_init function in lighttpd
-                var regName = reg.getName();
-                if (regName.equals("RSP") && offsetSym != null) {
-                    var offsetSymExpr = new SymbolExpr.Builder().rootSymbol(offsetSym).build();
-                    var facts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
+        if (base.isRegister()) {
+            var reg = Global.currentProgram.getRegister(base);
+            // may be a reference of a local variable
+            if (reg.getName().equals("RSP")) {
+                var refSym = inputs[1].getHigh().getSymbol();
+                if (refSym != null) {
+                    var refSymExpr = new SymbolExpr.Builder().rootSymbol(refSym).build().reference();
+                    var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
                     // For Example:
                     // 114_(unique, 0x3200, 8)[noHighSym], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16700_(const, 0xffffffffffffff58, 8)[local_a8]
                     // 133_(unique, 0x3200, 8)[local_28], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16702_(const, 0xffffffffffffff58, 8)[local_a8]
                     // 133_(unique, 0x3200, 8) and 114_(unique, 0x3200, 8) are actually the same symbol, but ghidra internal can not resolve it, so we manually recover it
-                    if (facts == null) {
+                    // 114_(unique, 0x3200, 8)[noHighSym] has no initial Facts but 133_(unique, 0x3200, 8)[local_28] has initial Facts
+                    if (outputFacts == null) {
                         ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), offsetSymExpr);
+                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), refSymExpr);
                     } else {
-                        for (var fact : facts) {
-                            ctx.updateSymbolAliasMap(fact, offsetSymExpr);
+                        for (var fact : outputFacts) {
+                            ctx.updateSymbolAliasMap(fact, refSymExpr);
                         }
                     }
                 }
             }
+        }
 
-        } else {
-            if (!inputs[1].isConstant()) {
-                return;
-            }
-            var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
-            assert inputFact != null;
+        else if (base.isConstant()) {
+            // In this case, Maybe an Address of a global variable
+            if (base.getOffset() == 0 && inputs[1].isConstant()) {
+                var globalSym = inputs[1].getHigh().getSymbol();
+                if (globalSym != null) {
+                    var globalSymExpr = new SymbolExpr.Builder().rootSymbol(globalSym).build();
+                    var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
-            ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-
-            for (var symExpr: inputFact) {
-                var delta = getSigned(inputs[1]);
-                if (OffsetSanityCheck(delta)) {
-                    var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = symExpr.add(deltaSym);
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                    if (outputFacts == null) {
+                        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), globalSymExpr);
+                    } else {
+                        for (var fact : outputFacts) {
+                            ctx.updateSymbolAliasMap(fact, globalSymExpr);
+                        }
+                    }
                 }
             }
+        }
+
+        else {
+            Logging.warn("[PCode] PTRSUB: " + base + " is not a constant or register");
         }
     }
 
@@ -313,6 +316,10 @@ public class PCodeVisitor {
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
         var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
+        var returnVn = pcodeOp.getOutput();
+        if (returnVn != null) {
+            Logging.info("[PCode] Return value: " + returnVn);
+        }
 
         if (calleeNode.isExternal) {
             handleExternalCall(pcodeOp, calleeNode);
@@ -328,6 +335,11 @@ public class PCodeVisitor {
         // TODO: how to handle cases when arguments and parameters are inconsistency?
         for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
             var argVn = pcodeOp.getInput(inputIdx);
+            if (!ctx.isInterestedVn(funcNode, argVn)) {
+                Logging.warn("[PCode] Argument is not interested: " + argVn);
+                continue;
+            }
+
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var symExpr : argFacts) {
                 var param = calleeNode.parameters.get(inputIdx - 1);
@@ -423,5 +435,24 @@ public class PCodeVisitor {
         }
         // TODO: 0x2000 is a reasonable limit for a structure ?
         else return offset <= 0x2000;
+    }
+
+
+    private String getPCodeRepresentation(PcodeOp pcodeOp) {
+        StringBuilder result = new StringBuilder();
+        VarnodeAST outVn = (VarnodeAST) pcodeOp.getOutput();
+        if (outVn != null) {
+            result.append(DecompilerHelper.getVarnodeString(outVn));
+        } else {
+            result.append("---");
+        }
+
+        result.append("  ").append(pcodeOp.getMnemonic());
+        //Output Pcode op's input Varnodes
+        for (int i = 0; i < pcodeOp.getNumInputs(); ++i) {
+            result.append("  ").append(DecompilerHelper.getVarnodeString((VarnodeAST)pcodeOp.getInput(i)));
+        }
+
+        return result.toString();
     }
 }
