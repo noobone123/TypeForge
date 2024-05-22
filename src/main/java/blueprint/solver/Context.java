@@ -1,6 +1,6 @@
 package blueprint.solver;
 
-import blueprint.base.dataflow.AccessPointSet;
+import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.constraints.TypeConstraint;
@@ -44,7 +44,7 @@ public class Context {
     public Set<FunctionNode> solvedFunc;
 
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
-    public AccessPointSet apSet;
+    public AccessPoints AP;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
     public UnionFind<SymbolExpr> symAliasMap;
 
@@ -53,7 +53,7 @@ public class Context {
         this.workList = new LinkedList<>();
         this.solvedFunc = new HashSet<>();
         this.intraCtxMap = new HashMap<>();
-        this.apSet = new AccessPointSet();
+        this.AP = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
         this.symAliasMap = new UnionFind<>();
     }
@@ -161,8 +161,8 @@ public class Context {
         return intraCtx.tracedVarnodes.contains(vn);
     }
 
-    public void addAccessPoint(PcodeOp pcodeOp, SymbolExpr symExpr, TypeDescriptor type, boolean isLoad) {
-        apSet.addAccessPoint(pcodeOp, symExpr, type, isLoad);
+    public void addAccessPoint(SymbolExpr symExpr, PcodeOp pcodeOp, TypeDescriptor type, AccessPoints.AccessType accType ) {
+        AP.addAccessPoint(symExpr, pcodeOp, type, accType);
     }
 
     public KSet<SymbolExpr> getIntraDataFlowFacts(FunctionNode funcNode, Varnode vn) {
@@ -176,8 +176,10 @@ public class Context {
     }
 
     public void updateSymbolAliasMap(SymbolExpr sym1, SymbolExpr sym2) {
-        symAliasMap.union(sym1, sym2);
-        Logging.debug(String.format("[Alias] %s -> %s", sym1, sym2));
+        if (!sym1.equals(sym2)) {
+            symAliasMap.union(sym1, sym2);
+            Logging.info(String.format("[Alias] %s == %s", sym1, sym2));
+        }
     }
 
 
@@ -187,47 +189,61 @@ public class Context {
      */
     // TODO: this method should be called after all functions are solved, now it is called after each function is solved for debugging
     public void buildConstraints() {
-        // Step1: group all AccessPoints by the representative root symbol
-        var rootExprToAPs = apSet.groupByRepresentativeRootSymbol();
-        Set<SymbolExpr> visited = new HashSet<>();
+        for (var symExpr : AP.getSymbolExprs()) {
+            parseSymbolExpr(symExpr);
+        }
+//        // Step1: group all AccessPoints by the representative root symbol
+//        var rootExprToAPs = apSet.groupByRepresentativeRootSymbol();
+//        Set<SymbolExpr> visited = new HashSet<>();
+//
+//        rootExprToAPs.forEach((rootExpr, APs) -> {
+//            if (visited.contains(rootExpr)) {
+//                return;
+//            }
+//
+//            if (!rootExpr.isRootSymbol()) {
+//                Logging.error("The rootExpr is not a root symbol: " + rootExpr);
+//                return;
+//            }
+//
+//            // Step2: merge the AccessPoints from the same alias cluster
+//            var mergedAPs = new HashSet<>(APs);
+//            var aliasCluster = symAliasMap.getCluster(rootExpr);
+//            Logging.debug("[Alias] " + aliasCluster);
+//
+//            for (var aliasSym: aliasCluster) {
+//                if (aliasSym == rootExpr) {
+//                    continue;
+//                }
+//                var aliasAPs = rootExprToAPs.get(aliasSym);
+//                if (aliasAPs != null) {
+//                    mergedAPs.addAll(aliasAPs);
+//                }
+//            }
+//
+//            // Step3: build the ComplexTypeConstraint
+//            var constraint = new TypeConstraint();
+//
+//            // Step4: update the symToConstraints map according to the alias cluster
+//            for (var aliasSym: aliasCluster) {
+//                symExprToConstraints.put(aliasSym, constraint);
+//                visited.add(aliasSym);
+//                Logging.debug("[Alias] " + aliasSym + " -> " + constraint.getName());
+//            }
+//
+//            constraint.buildConstraint(mergedAPs);
+//        });
+    }
 
-        rootExprToAPs.forEach((rootExpr, APs) -> {
-            if (visited.contains(rootExpr)) {
-                return;
-            }
 
-            if (!rootExpr.isRootSymbol()) {
-                Logging.error("The rootExpr is not a root symbol: " + rootExpr);
-                return;
-            }
-
-            // Step2: merge the AccessPoints from the same alias cluster
-            var mergedAPs = new HashSet<>(APs);
-            var aliasCluster = symAliasMap.getCluster(rootExpr);
-            Logging.debug("[Alias] " + aliasCluster);
-
-            for (var aliasSym: aliasCluster) {
-                if (aliasSym == rootExpr) {
-                    continue;
-                }
-                var aliasAPs = rootExprToAPs.get(aliasSym);
-                if (aliasAPs != null) {
-                    mergedAPs.addAll(aliasAPs);
-                }
-            }
-
-            // Step3: build the ComplexTypeConstraint
-            var constraint = new TypeConstraint();
-
-            // Step4: update the symToConstraints map according to the alias cluster
-            for (var aliasSym: aliasCluster) {
-                symExprToConstraints.put(aliasSym, constraint);
-                visited.add(aliasSym);
-                Logging.debug("[Alias] " + aliasSym + " -> " + constraint.getName());
-            }
-
-            constraint.buildConstraint(mergedAPs);
-        });
+    private void parseSymbolExpr(SymbolExpr symExpr) {
+        SymbolExpr base = null;
+        SymbolExpr index = null;
+        SymbolExpr scale = null;
+        SymbolExpr offset = null;
+        if (symExpr.hasOffset()) {
+            Logging.info("[SymbolExpr] " + symExpr);
+        }
     }
 
 

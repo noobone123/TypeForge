@@ -25,6 +25,8 @@ public class SymbolExpr {
     private Function function = null;
     private String prefix = null;
 
+    private boolean isGlobal = false;
+
     public SymbolExpr(Builder builder) {
         this.baseExpr = builder.baseExpr;
         this.indexExpr = builder.indexExpr;
@@ -37,11 +39,11 @@ public class SymbolExpr {
         this.nestedExpr = builder.nestedExpr;
 
         if (this.dereference && this.nestedExpr == null) {
-            Logging.error("[SymbolExpr] Dereference expression must have a nested expression.");
+            throw new IllegalArgumentException("Dereference expression must have a nested expression.");
         }
 
         if (this.hasOffset() && this.dereference) {
-            Logging.error("[SymbolExpr] Dereference expression cannot have offset.");
+            throw new IllegalArgumentException("Dereference expression cannot have offset.");
         }
 
         if (!isConstant()) {
@@ -51,6 +53,7 @@ public class SymbolExpr {
                 this.prefix = this.function.getName();
             } else {
                 this.prefix = "Global";
+                this.isGlobal = true;
             }
         } else {
             this.prefix = "Constant";
@@ -95,6 +98,10 @@ public class SymbolExpr {
 
     public SymbolExpr getNestedExpr() {
         return nestedExpr;
+    }
+
+    public boolean isGlobal() {
+        return isGlobal;
     }
 
     public SymbolExpr add(SymbolExpr other) {

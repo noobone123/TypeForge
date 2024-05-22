@@ -1,5 +1,6 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
@@ -156,19 +157,16 @@ public class PCodeVisitor {
 
         ctx.addTracedVarnode(funcNode, outputVn);
 
-        for (var symExpr: inputFact) {
-            var inputSymbol = inputVn.getHigh().getSymbol();
-            var outputSymbol = outputVn.getHigh().getSymbol();
-            // TODO: only handle the case where assignment satisfies the a = b pattern
-            if (inputSymbol != null && outputSymbol != null && inputSymbol != outputSymbol) {
-                var inputSymExpr = new SymbolExpr.Builder().rootSymbol(inputSymbol).build();
-                var outputSymExpr = new SymbolExpr.Builder().rootSymbol(outputSymbol).build();
-                ctx.updateSymbolAliasMap(inputSymExpr, outputSymExpr);
+        for (var inputSymExpr: inputFact) {
+            // If output has already held symbolExpr, we can update the symbol alias map
+            var outputFacts = ctx.getIntraDataFlowFacts(funcNode, outputVn);
+            if (outputFacts != null) {
+                for (var outputSymExpr: outputFacts) {
+                    ctx.updateSymbolAliasMap(outputSymExpr, inputSymExpr);
+                }
             }
-            // TODO: If not a = b pattern, we can directly add the new symbol expression into the output varnode
-            // TODO: what about the case where a = b + 0x10, or a + 0x10 = b ?
             else {
-                ctx.addNewSymbolExpr(funcNode, outputVn, symExpr);
+                ctx.addNewSymbolExpr(funcNode, outputVn, inputSymExpr);
             }
         }
     }
@@ -369,6 +367,11 @@ public class PCodeVisitor {
 
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var symExpr : argFacts) {
+                // If the argument is not a simple expression, we need to add it as an access point
+                if (!symExpr.isRootSymbol() && !symExpr.isConstant()) {
+                    ctx.addAccessPoint(symExpr, pcodeOp, null, AccessPoints.AccessType.ARGUMENT);
+                }
+
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.updateSymbolAliasMap(symExpr, paramExpr);
@@ -407,7 +410,7 @@ public class PCodeVisitor {
         var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : dataFlowFacts) {
             var type = new PrimitiveTypeDescriptor(outDT);
-            ctx.addAccessPoint(pcodeOp, symExpr, type, true);
+            ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
 
             var newExpr = new SymbolExpr.Builder().dereference(symExpr).build();
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
@@ -425,7 +428,7 @@ public class PCodeVisitor {
 
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
             var type = new PrimitiveTypeDescriptor(storedValueDT);
-            ctx.addAccessPoint(pcodeOp, symExpr, type, false);
+            ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
         }
     }
 
@@ -443,6 +446,11 @@ public class PCodeVisitor {
                             // var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint());
                             Logging.info("memset: " + symExpr);
                             // constraint.setSize(lengthArg.getOffset());
+                        }
+
+                        // If the argument is not a simple expression, we need to add it as an access point
+                        if (!symExpr.isRootSymbol() && !symExpr.isConstant()) {
+                            ctx.addAccessPoint(symExpr, pcodeOp, null, AccessPoints.AccessType.ARGUMENT);
                         }
                     }
                 }

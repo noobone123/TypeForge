@@ -1,6 +1,6 @@
 package blueprint.base.dataflow.constraints;
 
-import blueprint.base.dataflow.AccessPointSet;
+import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
 import ghidra.program.model.pcode.PcodeOp;
@@ -40,52 +40,52 @@ public class TypeConstraint implements TypeDescriptor {
     }
 
 
-    public void buildConstraint(Set<AccessPointSet.AP> apSet) {
-        Logging.info("Building ComplexType Constraint");
-
-        // Group AccessPoints by PcodeOp
-        Map<PcodeOp, Set<AccessPointSet.AP>> groupedAP = apSet.stream()
-                .collect(Collectors.groupingBy(
-                        ap -> ap.pcodeOp,
-                        Collectors.toSet()
-                ));
-
-        // remove duplicated AccessPoints with the same SymbolExpr in each group
-        groupedAP.replaceAll((pcodeOp, group) -> new HashSet<>(group.stream()
-                .collect(Collectors.toMap(
-                        ap -> ap.symExpr,
-                        ap -> ap,
-                        (ap1, ap2) -> ap1
-                ))
-                .values())
-        );
-
-        groupedAP.forEach((pcodeOp, group) -> {
-            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means merge from different paths?
-            if (group.size() > 1) {
-                Logging.warn("Multiple AccessPoints in the same PcodeOp");
-                Logging.warn(group.toString());
-            }
-
-            group.forEach(ap -> {
-                SymbolExpr symExpr = ap.symExpr;
-
-                // e.g.: a, b, c, ...
-                if (symExpr.isRootSymbol()) {
-                    addField(0, ap.type);
-                }
-                // e.g.: a + 0x10, b + 0x10, ...
-                else if (symExpr.getBase().isRootSymbol() && symExpr.getOffset().isConstant()) {
-                    long offset = symExpr.getOffset().getConstant();
-                    addField(offset, ap.type);
-                }
-                // TODO: consider more complex cases
-                else {
-                    Logging.warn("[TypeConstraint] Unsupported SymbolExpr: " + symExpr);
-                }
-            });
-        });
-    }
+//    public void buildConstraint(Set<AccessPoints.AP> apSet) {
+//        Logging.info("Building ComplexType Constraint");
+//
+//        // Group AccessPoints by PcodeOp
+//        Map<PcodeOp, Set<AccessPoints.AP>> groupedAP = apSet.stream()
+//                .collect(Collectors.groupingBy(
+//                        ap -> ap.pcodeOp,
+//                        Collectors.toSet()
+//                ));
+//
+//        // remove duplicated AccessPoints with the same SymbolExpr in each group
+//        groupedAP.replaceAll((pcodeOp, group) -> new HashSet<>(group.stream()
+//                .collect(Collectors.toMap(
+//                        ap -> ap.symExpr,
+//                        ap -> ap,
+//                        (ap1, ap2) -> ap1
+//                ))
+//                .values())
+//        );
+//
+//        groupedAP.forEach((pcodeOp, group) -> {
+//            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means merge from different paths?
+//            if (group.size() > 1) {
+//                Logging.warn("Multiple AccessPoints in the same PcodeOp");
+//                Logging.warn(group.toString());
+//            }
+//
+//            group.forEach(ap -> {
+//                SymbolExpr symExpr = ap.symExpr;
+//
+//                // e.g.: a, b, c, ...
+//                if (symExpr.isRootSymbol()) {
+//                    addField(0, ap.type);
+//                }
+//                // e.g.: a + 0x10, b + 0x10, ...
+//                else if (symExpr.getBase().isRootSymbol() && symExpr.getOffset().isConstant()) {
+//                    long offset = symExpr.getOffset().getConstant();
+//                    addField(offset, ap.type);
+//                }
+//                // TODO: consider more complex cases
+//                else {
+//                    Logging.warn("[TypeConstraint] Unsupported SymbolExpr: " + symExpr);
+//                }
+//            });
+//        });
+//    }
 
 
     public void merge(TypeConstraint other) {
