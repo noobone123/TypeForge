@@ -22,6 +22,9 @@ public class TypeConstraint implements TypeDescriptor {
      */
     public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
     public final TreeMap<Long, HashSet<String>> tags;
+
+    /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
+    public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
     public long size = 0;
 
     public final UUID uuid;
@@ -30,63 +33,39 @@ public class TypeConstraint implements TypeDescriptor {
     public TypeConstraint() {
         fieldMap = new TreeMap<>();
         tags = new TreeMap<>();
+        accessOffsets = new HashMap<>();
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
     }
+
+
+    public void build() {
+        accessOffsets.forEach((ap, offsets) -> {
+            if (offsets.size() > 1) {
+                for (var offset : offsets) {
+                    addTag(offset, "SAME_ACCESS");
+                }
+            }
+        });
+    }
+
+
+    public void addOffsetConstraint(long offset, AccessPoints.AP ap) {
+        accessOffsets.putIfAbsent(ap, new HashSet<>());
+        accessOffsets.get(ap).add(offset);
+        addField(offset, ap.dataType);
+    }
+
 
     public void addField(long offset, TypeDescriptor type) {
         fieldMap.putIfAbsent(offset, new HashMap<>());
         fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
     }
 
-
-//    public void buildConstraint(Set<AccessPoints.AP> apSet) {
-//        Logging.info("Building ComplexType Constraint");
-//
-//        // Group AccessPoints by PcodeOp
-//        Map<PcodeOp, Set<AccessPoints.AP>> groupedAP = apSet.stream()
-//                .collect(Collectors.groupingBy(
-//                        ap -> ap.pcodeOp,
-//                        Collectors.toSet()
-//                ));
-//
-//        // remove duplicated AccessPoints with the same SymbolExpr in each group
-//        groupedAP.replaceAll((pcodeOp, group) -> new HashSet<>(group.stream()
-//                .collect(Collectors.toMap(
-//                        ap -> ap.symExpr,
-//                        ap -> ap,
-//                        (ap1, ap2) -> ap1
-//                ))
-//                .values())
-//        );
-//
-//        groupedAP.forEach((pcodeOp, group) -> {
-//            // TODO: if PCodeOp is the same, but the SymbolExpr is different, maybe means merge from different paths?
-//            if (group.size() > 1) {
-//                Logging.warn("Multiple AccessPoints in the same PcodeOp");
-//                Logging.warn(group.toString());
-//            }
-//
-//            group.forEach(ap -> {
-//                SymbolExpr symExpr = ap.symExpr;
-//
-//                // e.g.: a, b, c, ...
-//                if (symExpr.isRootSymbol()) {
-//                    addField(0, ap.type);
-//                }
-//                // e.g.: a + 0x10, b + 0x10, ...
-//                else if (symExpr.getBase().isRootSymbol() && symExpr.getOffset().isConstant()) {
-//                    long offset = symExpr.getOffset().getConstant();
-//                    addField(offset, ap.type);
-//                }
-//                // TODO: consider more complex cases
-//                else {
-//                    Logging.warn("[TypeConstraint] Unsupported SymbolExpr: " + symExpr);
-//                }
-//            });
-//        });
-//    }
-
+    public void addTag(long offset, String tag) {
+        tags.putIfAbsent(offset, new HashSet<>());
+        tags.get(offset).add(tag);
+    }
 
     public void merge(TypeConstraint other) {
         // Merging fields from other ComplexType
@@ -125,7 +104,12 @@ public class TypeConstraint implements TypeDescriptor {
         fieldMap.forEach((offset, typeMap) -> {
             sb.append("0x").append(Long.toHexString(offset)).append(" : {");
             typeMap.forEach((type, count) -> sb.append(type.getName()).append(" : ").append(count).append(", "));
-            sb.append("}, \n");
+            sb.append("},   ");
+            if (tags.containsKey(offset)) {
+                sb.append("Tags: ");
+                tags.get(offset).forEach(tag -> sb.append(tag).append(", "));
+            }
+            sb.append("\n");
         });
         sb.append("}");
         return sb.toString();

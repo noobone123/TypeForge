@@ -192,6 +192,11 @@ public class Context {
         for (var symExpr : AP.getSymbolExprs()) {
             parseSymbolExpr(symExpr);
         }
+
+        for (var constraint : symExprToConstraints.values()) {
+            constraint.build();
+        }
+
 //        // Step1: group all AccessPoints by the representative root symbol
 //        var rootExprToAPs = apSet.groupByRepresentativeRootSymbol();
 //        Set<SymbolExpr> visited = new HashSet<>();
@@ -235,15 +240,42 @@ public class Context {
 //        });
     }
 
+    private void parseSymbolExpr(SymbolExpr expr) {
+        if (expr == null) return;
 
-    private void parseSymbolExpr(SymbolExpr symExpr) {
-        SymbolExpr base = null;
-        SymbolExpr index = null;
-        SymbolExpr scale = null;
-        SymbolExpr offset = null;
-        if (symExpr.hasOffset()) {
-            Logging.info("[SymbolExpr] " + symExpr);
+        Logging.info("[SymExpr] Parsing " + expr);
+        var base = expr.getBase();
+        var offset = expr.getOffset();
+        var index = expr.getIndex();
+        var scale = expr.getScale();
+
+        // simplest case: a
+        if (expr.isRootSymExpr()) {
+            var constraint = getConstraint(expr);
+            var APs = AP.getAccessPoints(expr);
+            for (var ap: APs) {
+                constraint.addOffsetConstraint(0, ap);
+            }
         }
+
+        // simplest case: a + 0x10
+        else if (base != null && base.isRootSymExpr() && offset.isConstant()) {
+            var constraint = getConstraint(base);
+            var offsetValue = offset.getConstant();
+            var APs = AP.getAccessPoints(expr);
+            for (var ap: APs) {
+                constraint.addOffsetConstraint(offsetValue, ap);
+            }
+        }
+    }
+
+    private TypeConstraint getConstraint(SymbolExpr symExpr) {
+        if (symExprToConstraints.containsKey(symExpr)) {
+            return symExprToConstraints.get(symExpr);
+        }
+        var constraint = new TypeConstraint();
+        symExprToConstraints.put(symExpr, constraint);
+        return constraint;
     }
 
 
@@ -255,9 +287,9 @@ public class Context {
         var intraCtx = intraCtxMap.get(funcNode);
         for (var highSym: intraCtx.tracedSymbols) {
             var symExpr = new SymbolExpr.Builder().rootSymbol(highSym).build();
-            var complexType = symExprToConstraints.get(symExpr);
-            if (complexType != null) {
-                Logging.info("[TypeConstraints] " + highSym.getName() + " -> " + complexType);
+            var constraint = symExprToConstraints.get(symExpr);
+            if (constraint != null) {
+                Logging.info("[TypeConstraints] " + highSym.getName() + " -> " + constraint);
             }
         }
     }

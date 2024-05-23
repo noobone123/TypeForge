@@ -3,6 +3,7 @@ package blueprint.solver;
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.constraints.DummyType;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
@@ -10,7 +11,6 @@ import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
-import groovy.util.logging.Log;
 
 import java.util.*;
 
@@ -368,8 +368,8 @@ public class PCodeVisitor {
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var symExpr : argFacts) {
                 // If the argument is not a simple expression, we need to add it as an access point
-                if (!symExpr.isRootSymbol() && !symExpr.isConstant()) {
-                    ctx.addAccessPoint(symExpr, pcodeOp, null, AccessPoints.AccessType.ARGUMENT);
+                if (!symExpr.isRootSymExpr() && !symExpr.isConstant()) {
+                    ctx.addAccessPoint(symExpr, pcodeOp, new DummyType(), AccessPoints.AccessType.ARGUMENT);
                 }
 
                 var param = calleeNode.parameters.get(inputIdx - 1);
@@ -449,7 +449,7 @@ public class PCodeVisitor {
                         }
 
                         // If the argument is not a simple expression, we need to add it as an access point
-                        if (!symExpr.isRootSymbol() && !symExpr.isConstant()) {
+                        if (!symExpr.isRootSymExpr() && !symExpr.isConstant()) {
                             ctx.addAccessPoint(symExpr, pcodeOp, null, AccessPoints.AccessType.ARGUMENT);
                         }
                     }

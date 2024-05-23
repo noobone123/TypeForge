@@ -68,6 +68,14 @@ public class SymbolExpr {
         return offsetExpr;
     }
 
+    public SymbolExpr getIndex() {
+        return indexExpr;
+    }
+
+    public SymbolExpr getScale() {
+        return scaleExpr;
+    }
+
     public boolean hasOffset() {
         return offsetExpr != null;
     }
@@ -80,7 +88,7 @@ public class SymbolExpr {
         return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym == null && constant != 0;
     }
 
-    public boolean isRootSymbol() {
+    public boolean isRootSymExpr() {
         return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym != null && constant == 0;
     }
 
@@ -118,7 +126,7 @@ public class SymbolExpr {
         // this: a
         // other: b, 0x10, b + 0x10
         // result: a + b, a + 0x10, a + (b + 0x10)
-        if (this.isRootSymbol()) {
+        if (this.isRootSymExpr()) {
             builder.base(this).offset(other);
         }
         // this: 0x10
@@ -176,7 +184,7 @@ public class SymbolExpr {
 
 
     public SymbolExpr getRootSymExpr() {
-        if (isRootSymbol()) {
+        if (isRootSymExpr()) {
             return this;
         }
         else if (isDereference() && nestedExpr != null) {
@@ -252,7 +260,6 @@ public class SymbolExpr {
     public String toString() {
         return String.format("%s: %s", prefix, getRepresentation());
     }
-
 
     /**
      * Builder Pattern for creating SymbolExpr
