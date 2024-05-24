@@ -46,7 +46,7 @@ public class Context {
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
     public AccessPoints AP;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
-    public UnionFind<SymbolExpr> symAliasMap;
+    public UnionFind<SymbolExpr> typeAlias;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
@@ -55,7 +55,7 @@ public class Context {
         this.intraCtxMap = new HashMap<>();
         this.AP = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
-        this.symAliasMap = new UnionFind<>();
+        this.typeAlias = new UnionFind<>();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -175,13 +175,12 @@ public class Context {
         return res;
     }
 
-    public void updateSymbolAliasMap(SymbolExpr sym1, SymbolExpr sym2) {
+    public void setTypeAlias(SymbolExpr sym1, SymbolExpr sym2) {
         if (!sym1.equals(sym2)) {
-            symAliasMap.union(sym1, sym2);
+            typeAlias.union(sym1, sym2);
             Logging.info(String.format("[Alias] %s == %s", sym1, sym2));
         }
     }
-
 
     /**
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
@@ -190,57 +189,15 @@ public class Context {
     // TODO: this method should be called after all functions are solved, now it is called after each function is solved for debugging
     public void buildConstraints() {
         for (var symExpr : AP.getSymbolExprs()) {
-            parseSymbolExpr(symExpr);
+            parseSymbolExpr(symExpr, null, 0);
         }
 
         for (var constraint : symExprToConstraints.values()) {
             constraint.build();
         }
-
-//        // Step1: group all AccessPoints by the representative root symbol
-//        var rootExprToAPs = apSet.groupByRepresentativeRootSymbol();
-//        Set<SymbolExpr> visited = new HashSet<>();
-//
-//        rootExprToAPs.forEach((rootExpr, APs) -> {
-//            if (visited.contains(rootExpr)) {
-//                return;
-//            }
-//
-//            if (!rootExpr.isRootSymbol()) {
-//                Logging.error("The rootExpr is not a root symbol: " + rootExpr);
-//                return;
-//            }
-//
-//            // Step2: merge the AccessPoints from the same alias cluster
-//            var mergedAPs = new HashSet<>(APs);
-//            var aliasCluster = symAliasMap.getCluster(rootExpr);
-//            Logging.debug("[Alias] " + aliasCluster);
-//
-//            for (var aliasSym: aliasCluster) {
-//                if (aliasSym == rootExpr) {
-//                    continue;
-//                }
-//                var aliasAPs = rootExprToAPs.get(aliasSym);
-//                if (aliasAPs != null) {
-//                    mergedAPs.addAll(aliasAPs);
-//                }
-//            }
-//
-//            // Step3: build the ComplexTypeConstraint
-//            var constraint = new TypeConstraint();
-//
-//            // Step4: update the symToConstraints map according to the alias cluster
-//            for (var aliasSym: aliasCluster) {
-//                symExprToConstraints.put(aliasSym, constraint);
-//                visited.add(aliasSym);
-//                Logging.debug("[Alias] " + aliasSym + " -> " + constraint.getName());
-//            }
-//
-//            constraint.buildConstraint(mergedAPs);
-//        });
     }
 
-    private void parseSymbolExpr(SymbolExpr expr) {
+    private void parseSymbolExpr(SymbolExpr expr, TypeConstraint nextLevelConstraint, long derefLevel) {
         if (expr == null) return;
 
         Logging.info("[SymExpr] Parsing " + expr);
@@ -249,25 +206,58 @@ public class Context {
         var index = expr.getIndex();
         var scale = expr.getScale();
 
-        // simplest case: a
+        // case: a
         if (expr.isRootSymExpr()) {
             var constraint = getConstraint(expr);
-            var APs = AP.getAccessPoints(expr);
-            for (var ap: APs) {
-                constraint.addOffsetConstraint(0, ap);
+            if (nextLevelConstraint != null) {
+                constraint.addField(0, nextLevelConstraint);
+            }
+            else {
+                var APs = AP.getAccessPoints(expr);
+                for (var ap: APs) {
+                    constraint.addOffsetConstraint(0, ap);
+                }
             }
         }
 
-        // simplest case: a + 0x10
-        else if (base != null && base.isRootSymExpr() && offset.isConstant()) {
+        // case: a + 0x10
+        else if (base != null && base.isRootSymExpr() && index == null && scale == null && offset.isConstant()) {
+            var constraint = getConstraint(base);
+            var offsetValue = offset.getConstant();
+            if (nextLevelConstraint != null) {
+                constraint.addField(offsetValue, nextLevelConstraint);
+            }
+            else {
+                var APs = AP.getAccessPoints(expr);
+                for (var ap: APs) {
+                    constraint.addOffsetConstraint(offsetValue, ap);
+                }
+            }
+
+            if (derefLevel > 0) {
+                constraint.setPtrLevel(offsetValue, derefLevel);
+            }
+        }
+
+        // case:
+        // 1.  *(a + 0x8) + 0xc
+        // 2.  *(*(local_150 + 0x140) + local_20 * 0x8) + 0x74
+        // 3.  ...
+        else if (base != null && base.isDereference() && index == null && scale == null && offset.isConstant()) {
             var constraint = getConstraint(base);
             var offsetValue = offset.getConstant();
             var APs = AP.getAccessPoints(expr);
             for (var ap: APs) {
                 constraint.addOffsetConstraint(offsetValue, ap);
             }
+            parseSymbolExpr(base.getNestedExpr(), constraint, derefLevel + 1);
+        }
+
+        else {
+            Logging.warn("[SymExpr] Unsupported SymbolExpr: " + expr + " , Skipping...");
         }
     }
+
 
     private TypeConstraint getConstraint(SymbolExpr symExpr) {
         if (symExprToConstraints.containsKey(symExpr)) {
@@ -284,13 +274,8 @@ public class Context {
     }
 
     public void dumpConstraints(FunctionNode funcNode) {
-        var intraCtx = intraCtxMap.get(funcNode);
-        for (var highSym: intraCtx.tracedSymbols) {
-            var symExpr = new SymbolExpr.Builder().rootSymbol(highSym).build();
-            var constraint = symExprToConstraints.get(symExpr);
-            if (constraint != null) {
-                Logging.info("[TypeConstraints] " + highSym.getName() + " -> " + constraint);
-            }
-        }
+        symExprToConstraints.forEach((symExpr, constraint) -> {
+            Logging.info("[Constraint] " + symExpr + " -> " + constraint);
+        });
     }
 }

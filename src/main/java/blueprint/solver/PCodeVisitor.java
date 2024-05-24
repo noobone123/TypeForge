@@ -162,7 +162,7 @@ public class PCodeVisitor {
             var outputFacts = ctx.getIntraDataFlowFacts(funcNode, outputVn);
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    ctx.updateSymbolAliasMap(outputSymExpr, inputSymExpr);
+                    ctx.setTypeAlias(outputSymExpr, inputSymExpr);
                 }
             }
             else {
@@ -228,7 +228,7 @@ public class PCodeVisitor {
                         ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), refSymExpr);
                     } else {
                         for (var fact : outputFacts) {
-                            ctx.updateSymbolAliasMap(fact, refSymExpr);
+                            ctx.setTypeAlias(fact, refSymExpr);
                         }
                     }
                 }
@@ -248,7 +248,7 @@ public class PCodeVisitor {
                         ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), globalSymExpr);
                     } else {
                         for (var fact : outputFacts) {
-                            ctx.updateSymbolAliasMap(fact, globalSymExpr);
+                            ctx.setTypeAlias(fact, globalSymExpr);
                         }
                     }
                 }
@@ -374,7 +374,7 @@ public class PCodeVisitor {
 
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
-                ctx.updateSymbolAliasMap(symExpr, paramExpr);
+                ctx.setTypeAlias(symExpr, paramExpr);
             }
         }
     }

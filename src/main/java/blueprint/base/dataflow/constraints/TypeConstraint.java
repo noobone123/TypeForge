@@ -1,12 +1,9 @@
 package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
-import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
-import ghidra.program.model.pcode.PcodeOp;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class TypeConstraint implements TypeDescriptor {
     /**
@@ -22,6 +19,7 @@ public class TypeConstraint implements TypeDescriptor {
      */
     public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
     public final TreeMap<Long, HashSet<String>> tags;
+    public final TreeMap<Long, Long> ptrLevel;
 
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
@@ -33,6 +31,8 @@ public class TypeConstraint implements TypeDescriptor {
     public TypeConstraint() {
         fieldMap = new TreeMap<>();
         tags = new TreeMap<>();
+        ptrLevel = new TreeMap<>();
+
         accessOffsets = new HashMap<>();
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
@@ -60,11 +60,37 @@ public class TypeConstraint implements TypeDescriptor {
     public void addField(long offset, TypeDescriptor type) {
         fieldMap.putIfAbsent(offset, new HashMap<>());
         fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
+        Logging.info(String.format("ComplexType_%s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));
+    }
+
+    public void setPtrLevel(long offset, long level) {
+        if (ptrLevel.containsKey(offset)) {
+            if (ptrLevel.get(offset) < level) {
+                ptrLevel.put(offset, level);
+                Logging.info(String.format("ComplexType_%s setting new ptrLevel: %d", shortUUID, level));
+            }
+        } else {
+            ptrLevel.put(offset, level);
+            Logging.info(String.format("ComplexType_%s setting new ptrLevel: %d", shortUUID, level));
+        }
     }
 
     public void addTag(long offset, String tag) {
         tags.putIfAbsent(offset, new HashSet<>());
         tags.get(offset).add(tag);
+    }
+
+    public void removeTag(long offset, String tag) {
+        if (tags.containsKey(offset)) {
+            tags.get(offset).remove(tag);
+        }
+    }
+
+    public void setSize(long size) {
+        if (size != this.size) {
+            this.size = size;
+            Logging.info(String.format("ComplexType_%s setting new size: %d", shortUUID, size));
+        }
     }
 
     public void merge(TypeConstraint other) {
@@ -85,13 +111,6 @@ public class TypeConstraint implements TypeDescriptor {
         });
     }
 
-    public void setSize(long size) {
-        if (size != this.size) {
-            this.size = size;
-            Logging.info(String.format("ComplexType_%s setting new size: %d", shortUUID, size));
-        }
-    }
-
 
     @Override
     public String getName() {
@@ -101,6 +120,9 @@ public class TypeConstraint implements TypeDescriptor {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("ComplexType_" + shortUUID + " {\n");
+        if (size != 0) {
+            sb.append("Size: ").append(size).append("\n");
+        }
         fieldMap.forEach((offset, typeMap) -> {
             sb.append("0x").append(Long.toHexString(offset)).append(" : {");
             typeMap.forEach((type, count) -> sb.append(type.getName()).append(" : ").append(count).append(", "));
@@ -108,6 +130,9 @@ public class TypeConstraint implements TypeDescriptor {
             if (tags.containsKey(offset)) {
                 sb.append("Tags: ");
                 tags.get(offset).forEach(tag -> sb.append(tag).append(", "));
+            }
+            if (ptrLevel.containsKey(offset)) {
+                sb.append("PtrLevel: ").append(ptrLevel.get(offset));
             }
             sb.append("\n");
         });
