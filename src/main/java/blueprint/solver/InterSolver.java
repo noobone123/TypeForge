@@ -39,6 +39,9 @@ public class InterSolver {
 
             ctx.solvedFunc.add(funcNode);
         }
+
+        ctx.buildConstraints();
+        ctx.dumpConstraints();
     }
 
 

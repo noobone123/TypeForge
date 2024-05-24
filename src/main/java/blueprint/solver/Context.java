@@ -273,7 +273,7 @@ public class Context {
         return solvedFunc.contains(funcNode);
     }
 
-    public void dumpConstraints(FunctionNode funcNode) {
+    public void dumpConstraints() {
         symExprToConstraints.forEach((symExpr, constraint) -> {
             Logging.info("[Constraint] " + symExpr + " -> " + constraint);
         });
