@@ -46,7 +46,7 @@ public class SymbolExpr {
             throw new IllegalArgumentException("Dereference expression cannot have offset.");
         }
 
-        if (!isConstant()) {
+        if (!isNoZeroConst()) {
             var rootSymbol = getRootSymExpr().getRootSymbol();
             if (!rootSymbol.isGlobal()) {
                 this.function = rootSymbol.getHighFunction().getFunction();
@@ -76,6 +76,13 @@ public class SymbolExpr {
         return scaleExpr;
     }
 
+    public SymbolExpr getBaseIndexScale() {
+        if (baseExpr == null && indexExpr == null && scaleExpr == null) {
+            return null;
+        }
+        return new Builder().base(baseExpr).index(indexExpr).scale(scaleExpr).build();
+    }
+
     public boolean hasOffset() {
         return offsetExpr != null;
     }
@@ -84,8 +91,12 @@ public class SymbolExpr {
         return constant;
     }
 
-    public boolean isConstant() {
+    public boolean isNoZeroConst() {
         return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym == null && constant != 0;
+    }
+
+    public boolean isConst() {
+        return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym == null;
     }
 
     public boolean isRootSymExpr() {
@@ -97,6 +108,7 @@ public class SymbolExpr {
     }
 
     public boolean isDereference() {
+        assert baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym == null && constant == 0;
         return dereference;
     }
 
@@ -114,7 +126,7 @@ public class SymbolExpr {
 
     public SymbolExpr add(SymbolExpr other) {
         // ensure that the constant value is always on the right side of the expression
-        if (this.isConstant() && !other.isConstant()) {
+        if (this.isNoZeroConst() && !other.isNoZeroConst()) {
             return other.add(this);
         }
         // ensure that the index * scale is always on the right side of base
@@ -132,7 +144,7 @@ public class SymbolExpr {
         // this: 0x10
         // other : 0x8
         // result : 0x18
-        else if (this.isConstant() && other.isConstant()) {
+        else if (this.isNoZeroConst() && other.isNoZeroConst()) {
             builder.constant(this.constant + other.constant);
         }
         // this: a + b, a + 0x10
@@ -169,14 +181,14 @@ public class SymbolExpr {
     }
 
     public SymbolExpr dereference() {
-        if (this.isConstant()) {
+        if (this.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot dereference a constant value.");
         }
         return new Builder().dereference(this).build();
     }
 
     public SymbolExpr reference() {
-        if (this.isConstant()) {
+        if (this.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot reference a constant value.");
         }
         return new Builder().reference(this).build();

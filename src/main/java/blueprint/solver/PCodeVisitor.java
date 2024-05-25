@@ -368,7 +368,7 @@ public class PCodeVisitor {
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var symExpr : argFacts) {
                 // If the argument is not a simple expression, we need to add it as an access point
-                if (!symExpr.isRootSymExpr() && !symExpr.isConstant()) {
+                if (!symExpr.isRootSymExpr() && !symExpr.isNoZeroConst()) {
                     ctx.addAccessPoint(symExpr, pcodeOp, new DummyType(), AccessPoints.AccessType.ARGUMENT);
                 }
 
@@ -449,7 +449,7 @@ public class PCodeVisitor {
                         }
 
                         // If the argument is not a simple expression, we need to add it as an access point
-                        if (!symExpr.isRootSymExpr() && !symExpr.isConstant()) {
+                        if (!symExpr.isRootSymExpr() && !symExpr.isNoZeroConst()) {
                             ctx.addAccessPoint(symExpr, pcodeOp, null, AccessPoints.AccessType.ARGUMENT);
                         }
                     }

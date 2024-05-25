@@ -10,7 +10,7 @@ public class TypeConstraint implements TypeDescriptor {
      * For a complexType, the fieldMap is a map from the offset of the field to the field's type.
      * Be careful that there maybe multiple dataTypes at the same offset in the fieldMap because of the union or array.
      * <code>
-     * ComplexTypeConstraints {
+     * TypeConstraints {
      *     offset_1 : {type_1 : access_time, type_2 : access_time, ...},
      *     offset_2 : {type_1 : access_time, type_2 : access_time, ...},
      *     ...
@@ -49,29 +49,27 @@ public class TypeConstraint implements TypeDescriptor {
         });
     }
 
-
     public void addOffsetConstraint(long offset, AccessPoints.AP ap) {
         accessOffsets.putIfAbsent(ap, new HashSet<>());
         accessOffsets.get(ap).add(offset);
         addField(offset, ap.dataType);
     }
 
-
     public void addField(long offset, TypeDescriptor type) {
         fieldMap.putIfAbsent(offset, new HashMap<>());
         fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
-        Logging.info(String.format("ComplexType_%s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));
+        Logging.info(String.format("[Constraint] %s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));
     }
 
-    public void setPtrLevel(long offset, long level) {
+    public void setPtrLevel(long offset, long newLevel) {
         if (ptrLevel.containsKey(offset)) {
-            if (ptrLevel.get(offset) < level) {
-                ptrLevel.put(offset, level);
-                Logging.info(String.format("ComplexType_%s setting new ptrLevel: %d", shortUUID, level));
+            if (ptrLevel.get(offset) < newLevel) {
+                ptrLevel.put(offset, newLevel);
+                Logging.info(String.format("[Constraint] %s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
             }
         } else {
-            ptrLevel.put(offset, level);
-            Logging.info(String.format("ComplexType_%s setting new ptrLevel: %d", shortUUID, level));
+            ptrLevel.put(offset, newLevel);
+            Logging.info(String.format("[Constraint] %s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
         }
     }
 
@@ -89,12 +87,12 @@ public class TypeConstraint implements TypeDescriptor {
     public void setSize(long size) {
         if (size != this.size) {
             this.size = size;
-            Logging.info(String.format("ComplexType_%s setting new size: %d", shortUUID, size));
+            Logging.info(String.format("[Constraint] %s setting new size: %d", shortUUID, size));
         }
     }
 
     public void merge(TypeConstraint other) {
-        // Merging fields from other ComplexType
+        // Merging fields from other Constraint
         other.fieldMap.forEach((offset, typeMap) -> {
             if (!this.fieldMap.containsKey(offset)) {
                 this.fieldMap.put(offset, new HashMap<>(typeMap));
@@ -119,7 +117,7 @@ public class TypeConstraint implements TypeDescriptor {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("ComplexType_" + shortUUID + " {\n");
+        StringBuilder sb = new StringBuilder("Constraint_" + shortUUID + " {\n");
         if (size != 0) {
             sb.append("Size: ").append(size).append("\n");
         }

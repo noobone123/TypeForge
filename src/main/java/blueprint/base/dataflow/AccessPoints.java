@@ -41,13 +41,13 @@ public class AccessPoints {
 
         @Override
         public int hashCode() {
-            return Objects.hash(pcodeOp, dataType, accessType);
+            return Objects.hash(pcodeOp, dataType);
         }
 
         @Override
         public boolean equals(Object obj) {
             if (obj instanceof AP other) {
-                return this.pcodeOp.equals(other.pcodeOp) && this.dataType.equals(other.dataType) && this.accessType == other.accessType;
+                return this.pcodeOp.equals(other.pcodeOp) && this.dataType.equals(other.dataType);
             }
             return false;
         }
