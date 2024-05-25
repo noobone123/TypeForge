@@ -199,11 +199,11 @@ public class Context {
         Logging.info("[Constraint] Build constraints done.");
     }
 
-    private void parseSymbolExpr(SymbolExpr expr, TypeConstraint nextLevelConstraint, long derefLevel) {
+    private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
-        Logging.info("[SymExpr] Parsing " + expr + ", nextLevelConstraint: " + (nextLevelConstraint != null ? nextLevelConstraint.getName() : "null")
-                        + ", derefLevel: " + derefLevel);
+        Logging.info("[SymExpr] Parsing " + expr + ", parentTypeConstraint: " + (parentTypeConstraint != null ? parentTypeConstraint.getName() : "null")
+                        + ", derefDepth: " + derefDepth);
         var base = expr.getBase();
         var offset = expr.getOffset();
         var index = expr.getIndex();
@@ -213,8 +213,8 @@ public class Context {
         // case: a
         if (expr.isRootSymExpr()) {
             var constraint = getConstraint(expr);
-            if (nextLevelConstraint != null) {
-                constraint.addField(0, nextLevelConstraint);
+            if (parentTypeConstraint != null) {
+                constraint.addField(0, parentTypeConstraint);
             }
             else {
                 var APs = AP.getAccessPoints(expr);
@@ -228,8 +228,8 @@ public class Context {
         else if (base != null && base.isRootSymExpr() && index == null && scale == null && offset.isNoZeroConst()) {
             var constraint = getConstraint(base);
             var offsetValue = offset.getConstant();
-            if (nextLevelConstraint != null) {
-                constraint.addField(offsetValue, nextLevelConstraint);
+            if (parentTypeConstraint != null) {
+                constraint.addField(offsetValue, parentTypeConstraint);
             }
             else {
                 var APs = AP.getAccessPoints(expr);
@@ -238,16 +238,16 @@ public class Context {
                 }
             }
 
-            if (derefLevel > 0) {
-                constraint.setPtrLevel(offsetValue, derefLevel);
+            if (derefDepth > 0) {
+                constraint.setPtrLevel(offsetValue, derefDepth);
             }
         }
 
         // case: *(expr)
         else if (expr.isDereference()) {
             var constraint = getConstraint(expr);
-            if (nextLevelConstraint != null) {
-                constraint.addField(0, nextLevelConstraint);
+            if (parentTypeConstraint != null) {
+                constraint.addField(0, parentTypeConstraint);
             }
             else {
                 var APs = AP.getAccessPoints(expr);
@@ -255,7 +255,7 @@ public class Context {
                     constraint.addOffsetConstraint(0, ap);
                 }
             }
-            parseSymbolExpr(expr.getNestedExpr(), constraint, derefLevel + 1);
+            parseSymbolExpr(expr.getNestedExpr(), constraint, derefDepth + 1);
         }
 
         // case: *(expr) + offset
@@ -269,7 +269,7 @@ public class Context {
                 for (var ap: AP.getAccessPoints(expr)) {
                     constraint.addOffsetConstraint(offsetValue, ap);
                 }
-                parseSymbolExpr(base.getNestedExpr(), constraint, derefLevel + 1);
+                parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1);
             } else {
                 Logging.warn("[SymExpr] Offset is not a constant: " + expr + ", Skipping...");
             }
@@ -288,8 +288,8 @@ public class Context {
                     constraint.setSize(scale.getConstant());
                 }
 
-                if (nextLevelConstraint != null) {
-                    constraint.addField(offsetValue, nextLevelConstraint);
+                if (parentTypeConstraint != null) {
+                    constraint.addField(offsetValue, parentTypeConstraint);
                 }
                 else {
                     var APs = AP.getAccessPoints(expr);
@@ -297,7 +297,7 @@ public class Context {
                         constraint.addOffsetConstraint(offsetValue, ap);
                     }
                 }
-                parseSymbolExpr(base.getNestedExpr(), constraint, derefLevel + 1);
+                parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1);
             } else {
                 Logging.warn("[SymExpr] Offset is not a constant: " + expr + ", Skipping...");
             }
@@ -313,8 +313,8 @@ public class Context {
                 constraint.setSize(scale.getConstant());
             }
 
-            if (nextLevelConstraint != null) {
-                constraint.addField(0, nextLevelConstraint);
+            if (parentTypeConstraint != null) {
+                constraint.addField(0, parentTypeConstraint);
             }
             else {
                 var APs = AP.getAccessPoints(expr);
@@ -323,7 +323,7 @@ public class Context {
                 }
             }
 
-            parseSymbolExpr(base.getNestedExpr(), constraint, derefLevel + 1);
+            parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1);
         }
 
         else {
