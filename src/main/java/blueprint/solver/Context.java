@@ -191,7 +191,7 @@ public class Context {
             parseSymbolExpr(symExpr, null, 0);
         }
 
-        // TODO: merging the type alias ...
+        mergeTypeAlias();
 
         for (var constraint : symExprToConstraints.values()) {
             constraint.build();
@@ -200,6 +200,31 @@ public class Context {
         Logging.info("[Constraint] Build constraints done.");
     }
 
+
+    private void mergeTypeAlias() {
+        for (var symExpr : AP.getSymbolExprs()) {
+            var cluster = typeAlias.getCluster(symExpr);
+            if (cluster.size() > 1) {
+                var mergedConstraint = new TypeConstraint();
+                for (var sym : cluster) {
+                    var constraint = symExprToConstraints.get(sym);
+                    if (constraint != null) {
+                        Logging.info("[Alias] Merging " + sym + " -> " + constraint.getName());
+                        mergedConstraint.merge(constraint);
+
+                        // TODO: update reference ...
+                    }
+                }
+
+                for (var sym : cluster) {
+                    symExprToConstraints.put(sym, mergedConstraint);
+                }
+            }
+            else {
+                Logging.info("[Alias] " + symExpr + " is not type aliased with others.");
+            }
+        }
+    }
 
     private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
@@ -264,6 +289,7 @@ public class Context {
     private void updateConstraint(TypeConstraint currentTC, long offsetValue, TypeConstraint parentTC, Set<AccessPoints. AP> APs) {
         if (parentTC != null) {
             currentTC.addOffsetTypeConstraint(offsetValue, parentTC);
+            parentTC.addReferencedBy(currentTC, offsetValue);
         }
         else {
             for (var ap: APs) {

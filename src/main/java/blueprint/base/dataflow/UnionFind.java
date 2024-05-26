@@ -1,5 +1,7 @@
 package blueprint.base.dataflow;
 
+import blueprint.utils.Logging;
+
 import java.util.HashSet;
 import java.util.Map;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ public class UnionFind<T> {
         T yRoot = find(y);
 
         if (xRoot == yRoot) {
+            Logging.debug("[UnionFind] Already in the same set");
             return;
         }
         if (rank.get(xRoot) < rank.get(yRoot)) {

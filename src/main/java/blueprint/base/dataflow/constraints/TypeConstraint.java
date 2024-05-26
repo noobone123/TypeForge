@@ -25,6 +25,8 @@ public class TypeConstraint implements TypeDescriptor {
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
     public long size = 0;
 
+    public final HashMap<TypeConstraint, HashSet<Long>> referencedBy;
+
     public final UUID uuid;
     public final String shortUUID;
 
@@ -36,6 +38,8 @@ public class TypeConstraint implements TypeDescriptor {
         accessOffsets = new HashMap<>();
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
+
+        referencedBy = new HashMap<>();
     }
 
 
@@ -84,6 +88,17 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
+    public void addReferencedBy(TypeConstraint other, long offset) {
+        referencedBy.putIfAbsent(other, new HashSet<>());
+        referencedBy.get(other).add(offset);
+    }
+
+    public void removeReferencedBy(TypeConstraint other, long offset) {
+        if (referencedBy.containsKey(other)) {
+            referencedBy.get(other).remove(offset);
+        }
+    }
+
     public void setSize(long size) {
         if (size != this.size) {
             this.size = size;
@@ -92,6 +107,7 @@ public class TypeConstraint implements TypeDescriptor {
     }
 
     public void merge(TypeConstraint other) {
+        // TODO: update merging other meta data ...
         // Merging fields from other Constraint
         other.fieldMap.forEach((offset, typeMap) -> {
             if (!this.fieldMap.containsKey(offset)) {
