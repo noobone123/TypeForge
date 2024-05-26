@@ -520,12 +520,15 @@ public class PCodeVisitor {
         return builder.build();
     }
 
-    // TODO: add Type alias, if nestedExpr is TypeAlias, then the dereference should also be TypeAlias
     public SymbolExpr dereference(SymbolExpr a) {
         if (a.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot dereference a constant value.");
         }
-        return new SymbolExpr.Builder().dereference(a).build();
+        var newExpr = new SymbolExpr.Builder().dereference(a).build();
+        if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
+            ctx.setTypeAlias(newExpr, new SymbolExpr.Builder().dereference(a.baseExpr).build());
+        }
+        return newExpr;
     }
 
     public SymbolExpr reference(SymbolExpr a) {

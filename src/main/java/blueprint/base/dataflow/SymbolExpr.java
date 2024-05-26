@@ -5,6 +5,8 @@ import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighSymbol;
 
 import java.util.Objects;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * SymbolExpr represents all expressions in program that can be represented as :
@@ -27,6 +29,8 @@ public class SymbolExpr {
 
     public boolean isConst = false;
     public boolean isGlobal = false;
+
+    private static final Map<Integer, SymbolExpr> cache = new HashMap<>();
 
     public SymbolExpr(Builder builder) {
         this.baseExpr = builder.baseExpr;
@@ -274,7 +278,15 @@ public class SymbolExpr {
             if ((indexExpr != null && scaleExpr == null) || (indexExpr == null && scaleExpr != null)) {
                 throw new IllegalArgumentException("indexExpr and scaleExpr must either both be null or both be non-null.");
             }
-            return new SymbolExpr(this);
+
+            int hash = Objects.hash(baseExpr, indexExpr, scaleExpr, offsetExpr, rootSym, constant, dereference, reference, nestedExpr);
+            if (cache.containsKey(hash)) {
+                return cache.get(hash);
+            }
+
+            SymbolExpr expr = new SymbolExpr(this);
+            cache.put(hash, expr);
+            return expr;
         }
     }
 }

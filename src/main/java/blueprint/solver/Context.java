@@ -191,7 +191,7 @@ public class Context {
             parseSymbolExpr(symExpr, null, 0);
         }
 
-        // TODO: handle the type alias ...
+        // TODO: merging the type alias ...
 
         for (var constraint : symExprToConstraints.values()) {
             constraint.build();
