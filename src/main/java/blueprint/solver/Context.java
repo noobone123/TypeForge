@@ -186,11 +186,12 @@ public class Context {
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
-    // TODO: this method should be called after all functions are solved, now it is called after each function is solved for debugging
     public void buildConstraints() {
         for (var symExpr : AP.getSymbolExprs()) {
             parseSymbolExpr(symExpr, null, 0);
         }
+
+        // TODO: handle the type alias ...
 
         for (var constraint : symExprToConstraints.values()) {
             constraint.build();
@@ -199,135 +200,75 @@ public class Context {
         Logging.info("[Constraint] Build constraints done.");
     }
 
+
     private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
         Logging.info("[SymExpr] Parsing " + expr + ", parentTypeConstraint: " + (parentTypeConstraint != null ? parentTypeConstraint.getName() : "null")
-                        + ", derefDepth: " + derefDepth);
+                            + ", derefDepth: " + derefDepth);
+
         var base = expr.getBase();
         var offset = expr.getOffset();
         var index = expr.getIndex();
         var scale = expr.getScale();
+        long offsetValue = 0;
 
-        // TODO: parsing recursive index and scale ?
-        // case: a
-        if (expr.isRootSymExpr()) {
+        // case: a or *(expr)
+        if (expr.isRootSymExpr() || expr.isDereference()) {
             var constraint = getConstraint(expr);
-            if (parentTypeConstraint != null) {
-                constraint.addField(0, parentTypeConstraint);
-            }
-            else {
-                var APs = AP.getAccessPoints(expr);
-                for (var ap: APs) {
-                    constraint.addOffsetConstraint(0, ap);
-                }
-            }
-        }
-
-        // case: a + 0x10
-        else if (base != null && base.isRootSymExpr() && index == null && scale == null && offset.isNoZeroConst()) {
-            var constraint = getConstraint(base);
-            var offsetValue = offset.getConstant();
-            if (parentTypeConstraint != null) {
-                constraint.addField(offsetValue, parentTypeConstraint);
-            }
-            else {
-                var APs = AP.getAccessPoints(expr);
-                for (var ap: APs) {
-                    constraint.addOffsetConstraint(offsetValue, ap);
-                }
-            }
+            updateConstraint(constraint, 0, parentTypeConstraint, AP.getAccessPoints(expr));
 
             if (derefDepth > 0) {
                 constraint.setPtrLevel(offsetValue, derefDepth);
             }
+
+            if (expr.isDereference()) {
+                parseSymbolExpr(expr.getNestedExpr(), constraint, derefDepth + 1);
+            }
         }
 
-        // case: *(expr)
-        else if (expr.isDereference()) {
-            var constraint = getConstraint(expr);
-            if (parentTypeConstraint != null) {
-                constraint.addField(0, parentTypeConstraint);
-            }
-            else {
-                var APs = AP.getAccessPoints(expr);
-                for (var ap: APs) {
-                    constraint.addOffsetConstraint(0, ap);
-                }
-            }
-            parseSymbolExpr(expr.getNestedExpr(), constraint, derefDepth + 1);
-        }
+        else if (base != null) {
+            var constraint = getConstraint(base);
 
-        // case: *(expr) + offset
-        // example 1:  *(a + 0x8) + 0xc
-        // example 2:  *(*(local_150 + 0x140) + local_20 * 0x8) + 0x74
-        // example 3:  *(*(local_150 + 0x140) + local_20 * 0x20 + 0x18) + 0x74
-        else if (base != null && base.isDereference() && index == null && scale == null && offset != null) {
-            if (offset.isConst()) {
-                var offsetValue = offset.getConstant();
-                var constraint = getConstraint(base);
-                for (var ap: AP.getAccessPoints(expr)) {
-                    constraint.addOffsetConstraint(offsetValue, ap);
-                }
-                parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1);
-            } else {
+            if (expr.hasOffset() && offset.isConst()) {
+                offsetValue = offset.getConstant();
+            }
+            else if (expr.hasOffset() && !offset.isConst()) {
                 Logging.warn("[SymExpr] Offset is not a constant: " + expr + ", Skipping...");
+                return;
             }
-        }
 
-        // case: *(expr) + index * scale + offset
-        // example 1: *(local_150 + 0x140) + local_20 * 0x20 + 0x18
-        else if (base != null && base.isDereference() && index != null && scale != null && offset != null) {
-            setTypeAlias(base, expr.getBaseIndexScale());
+            updateConstraint(constraint, offsetValue, parentTypeConstraint, AP.getAccessPoints(expr));
 
-            if (offset.isConst()) {
-                var offsetValue = offset.getConstant();
-                var constraint = getConstraint(base);
+            if (derefDepth > 0) {
+                constraint.setPtrLevel(offsetValue, derefDepth);
+            }
 
+            if (index != null && scale != null) {
                 if (scale.isNoZeroConst()) {
                     constraint.setSize(scale.getConstant());
                 }
+            }
 
-                if (parentTypeConstraint != null) {
-                    constraint.addField(offsetValue, parentTypeConstraint);
-                }
-                else {
-                    var APs = AP.getAccessPoints(expr);
-                    for (var ap: APs) {
-                        constraint.addOffsetConstraint(offsetValue, ap);
-                    }
-                }
+            if (base.isDereference()) {
                 parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1);
-            } else {
-                Logging.warn("[SymExpr] Offset is not a constant: " + expr + ", Skipping...");
             }
-        }
-
-        // case: *(expr) + index * scale
-        // example 1: *(local_150 + 0x140) + local_20 * 0x8
-        else if (base != null && base.isDereference() && index != null && scale != null) {
-            setTypeAlias(base, expr);
-            var constraint = getConstraint(base);
-
-            if (scale.isNoZeroConst()) {
-                constraint.setSize(scale.getConstant());
-            }
-
-            if (parentTypeConstraint != null) {
-                constraint.addField(0, parentTypeConstraint);
-            }
-            else {
-                var APs = AP.getAccessPoints(expr);
-                for (var ap: APs) {
-                    constraint.addOffsetConstraint(0, ap);
-                }
-            }
-
-            parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1);
         }
 
         else {
             Logging.warn("[SymExpr] Unsupported SymbolExpr: " + expr + " , Skipping...");
+        }
+    }
+
+
+    private void updateConstraint(TypeConstraint currentTC, long offsetValue, TypeConstraint parentTC, Set<AccessPoints. AP> APs) {
+        if (parentTC != null) {
+            currentTC.addOffsetTypeConstraint(offsetValue, parentTC);
+        }
+        else {
+            for (var ap: APs) {
+                currentTC.addFieldConstraint(offsetValue, ap);
+            }
         }
     }
 

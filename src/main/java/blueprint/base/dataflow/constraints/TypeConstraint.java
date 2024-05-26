@@ -49,13 +49,13 @@ public class TypeConstraint implements TypeDescriptor {
         });
     }
 
-    public void addOffsetConstraint(long offset, AccessPoints.AP ap) {
+    public void addFieldConstraint(long offset, AccessPoints.AP ap) {
         accessOffsets.putIfAbsent(ap, new HashSet<>());
         accessOffsets.get(ap).add(offset);
-        addField(offset, ap.dataType);
+        addOffsetTypeConstraint(offset, ap.dataType);
     }
 
-    public void addField(long offset, TypeDescriptor type) {
+    public void addOffsetTypeConstraint(long offset, TypeDescriptor type) {
         fieldMap.putIfAbsent(offset, new HashMap<>());
         fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
         Logging.info(String.format("[Constraint] %s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));
