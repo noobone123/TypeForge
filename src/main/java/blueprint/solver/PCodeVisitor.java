@@ -412,7 +412,7 @@ public class PCodeVisitor {
             var type = new PrimitiveTypeDescriptor(outDT);
             ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
 
-            var newExpr = new SymbolExpr.Builder().dereference(symExpr).build();
+            var newExpr = symExpr.dereference();
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
     }

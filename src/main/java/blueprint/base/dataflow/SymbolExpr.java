@@ -25,6 +25,7 @@ public class SymbolExpr {
     private Function function = null;
     private String prefix = null;
 
+    private boolean isConst = false;
     private boolean isGlobal = false;
 
     public SymbolExpr(Builder builder) {
@@ -37,6 +38,7 @@ public class SymbolExpr {
         this.dereference = builder.dereference;
         this.reference = builder.reference;
         this.nestedExpr = builder.nestedExpr;
+        this.isConst = builder.isConst;
 
         if (this.dereference && this.nestedExpr == null) {
             throw new IllegalArgumentException("Dereference expression must have a nested expression.");
@@ -83,20 +85,28 @@ public class SymbolExpr {
         return new Builder().base(baseExpr).index(indexExpr).scale(scaleExpr).build();
     }
 
-    public boolean hasOffset() {
-        return offsetExpr != null;
-    }
-
     public long getConstant() {
         return constant;
     }
 
+    public boolean hasOffset() {
+        return offsetExpr != null;
+    }
+
+    public boolean hasBase() {
+        return baseExpr != null;
+    }
+
+    public boolean hasIndexScale() {
+        return indexExpr != null && scaleExpr != null;
+    }
+
     public boolean isNoZeroConst() {
-        return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym == null && constant != 0;
+        return isConst && constant != 0;
     }
 
     public boolean isConst() {
-        return baseExpr == null && indexExpr == null && scaleExpr == null && offsetExpr == null && rootSym == null;
+        return isConst;
     }
 
     public boolean isRootSymExpr() {
@@ -124,53 +134,50 @@ public class SymbolExpr {
         return isGlobal;
     }
 
+
     public SymbolExpr add(SymbolExpr other) {
+        if (this.hasIndexScale() && other.hasIndexScale()) {
+            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this.getRepresentation(), other.getRepresentation()));
+        }
+
         // ensure that the constant value is always on the right side of the expression
         if (this.isNoZeroConst() && !other.isNoZeroConst()) {
             return other.add(this);
         }
         // ensure that the index * scale is always on the right side of base
-        if (this.indexExpr != null && this.baseExpr == null) {
-            return other.add(this);
+        if (this.hasIndexScale() && !this.hasBase()) {
+            if (!other.isConst()) {
+                return other.add(this);
+            }
         }
 
         Builder builder = new Builder();
-        // this: a
-        // other: b, 0x10, b + 0x10
-        // result: a + b, a + 0x10, a + (b + 0x10)
-        if (this.isRootSymExpr()) {
-            builder.base(this).offset(other);
-        }
-        // this: 0x10
-        // other : 0x8
-        // result : 0x18
-        else if (this.isNoZeroConst() && other.isNoZeroConst()) {
+        if (this.isConst() && other.isConst()) {
             builder.constant(this.constant + other.constant);
         }
-        // this: a + b, a + 0x10
-        // other: 0x10
-        // result: a + b + 0x10, a + 0x20
-        else if (this.hasOffset()) {
-            builder.other(this).offset(this.offsetExpr.add(other));
-        }
-        else if (!this.hasOffset()) {
-            // this: *(a), *(a + 0x10)
-            if (this.dereference || this.reference) {
-                builder.dereference = false;
-                builder.reference = false;
-                builder.nestedExpr = null;
-                // other: b * 0x10, ...
-                if (other.indexExpr != null) {
-                    builder.base(this).index(other.indexExpr).scale(other.scaleExpr);
-                }
-                // other: b, ...
-                else {
-                    builder.base(this).offset(other);
-                }
+        else if (this.isRootSymExpr() || this.isDereference()) {
+            if (other.hasIndexScale()) {
+                builder.base(this).index(other.indexExpr).scale(other.scaleExpr).offset(other.offsetExpr);
+            } else {
+                builder.base(this).offset(other);
             }
-            // this: a * 0x10, a + b * 0x10, ...
-            else {
-                builder.other(this).offset(other);
+        }
+        else if (!this.hasBase() && this.hasIndexScale()) {
+            if (this.hasOffset()) {
+                builder.index(this.indexExpr).scale(this.scaleExpr).offset(this.offsetExpr.add(other));
+            } else {
+                builder.index(this.indexExpr).scale(this.scaleExpr).offset(other);
+            }
+        }
+
+        else if (this.hasBase() && this.hasOffset() && !this.hasIndexScale()) {
+            builder.base(this).offset(this.offsetExpr.add(other));
+        }
+        else if (this.hasBase() && this.hasIndexScale()) {
+            if (this.hasOffset()) {
+                builder.base(this).index(this.indexExpr).scale(this.scaleExpr).offset(this.offsetExpr.add(other));
+            } else {
+                builder.base(this).index(this.indexExpr).scale(this.scaleExpr).offset(other);
             }
         }
         else {
@@ -180,6 +187,8 @@ public class SymbolExpr {
         return builder.build();
     }
 
+
+    // TODO: add Type alias, if nestedExpr is TypeAlias, then the dereference should also be TypeAlias
     public SymbolExpr dereference() {
         if (this.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot dereference a constant value.");
@@ -286,6 +295,7 @@ public class SymbolExpr {
         private boolean dereference = false;
         private boolean reference = false;
         private SymbolExpr nestedExpr = null;
+        private boolean isConst = false;
 
         public Builder base(SymbolExpr base) {
             this.baseExpr = base;
@@ -313,32 +323,20 @@ public class SymbolExpr {
         }
 
         public Builder constant(long constant) {
+            this.isConst = true;
             this.constant = constant;
             return this;
         }
 
-        public Builder dereference(SymbolExpr nested) {
+        private Builder dereference(SymbolExpr nested) {
             this.dereference = true;
             this.nestedExpr = nested;
             return this;
         }
 
-        public Builder reference(SymbolExpr nested) {
+        private Builder reference(SymbolExpr nested) {
             this.reference = true;
             this.nestedExpr = nested;
-            return this;
-        }
-
-        public Builder other(SymbolExpr other) {
-            this.baseExpr = other.baseExpr;
-            this.indexExpr = other.indexExpr;
-            this.scaleExpr = other.scaleExpr;
-            this.offsetExpr = other.offsetExpr;
-            this.rootSym = other.rootSym;
-            this.constant = other.constant;
-            this.dereference = other.dereference;
-            this.reference = other.reference;
-            this.nestedExpr = other.nestedExpr;
             return this;
         }
 
