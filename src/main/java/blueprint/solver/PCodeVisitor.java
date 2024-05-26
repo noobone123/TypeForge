@@ -128,7 +128,7 @@ public class PCodeVisitor {
                 var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = symExpr.add(deltaSym);
+                    var newExpr = add(symExpr, deltaSym);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
                 }
             }
@@ -136,7 +136,7 @@ public class PCodeVisitor {
             var inputFact_1 = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
-                    var newExpr = symExpr.add(symExpr_1);
+                    var newExpr = add(symExpr, symExpr_1);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
                 }
             }
@@ -194,7 +194,7 @@ public class PCodeVisitor {
             var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
             if (OffsetSanityCheck(delta)) {
                 var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                var newExpr = symExpr.add(deltaSym);
+                var newExpr = add(symExpr, deltaSym);
                 ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
             }
         }
@@ -216,7 +216,7 @@ public class PCodeVisitor {
             if (reg.getName().equals("RSP")) {
                 var refSym = inputs[1].getHigh().getSymbol();
                 if (refSym != null) {
-                    var refSymExpr = new SymbolExpr.Builder().rootSymbol(refSym).build().reference();
+                    var refSymExpr = reference(new SymbolExpr.Builder().rootSymbol(refSym).build());
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
                     // For Example:
                     // 114_(unique, 0x3200, 8)[noHighSym], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16700_(const, 0xffffffffffffff58, 8)[local_a8]
@@ -412,7 +412,7 @@ public class PCodeVisitor {
             var type = new PrimitiveTypeDescriptor(outDT);
             ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
 
-            var newExpr = symExpr.dereference();
+            var newExpr = dereference(symExpr);
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
     }
@@ -463,6 +463,76 @@ public class PCodeVisitor {
                 Logging.info("memcpy: " + srcVn + " -> " + dstVn + " length: " + lengthVn);
             }
         }
+    }
+
+
+    public SymbolExpr add(SymbolExpr a, SymbolExpr b) {
+        if (a.hasIndexScale() && b.hasIndexScale()) {
+            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        // ensure that the constant value is always on the right side of the expression
+        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
+            return add(b, a);
+        }
+        // ensure that the index * scale is always on the right side of base
+        if (a.hasIndexScale() && !a.hasBase()) {
+            if (!b.isConst()) {
+                return add(b, a);
+            }
+        }
+
+        SymbolExpr.Builder builder = new SymbolExpr.Builder();
+        if (a.isConst() && b.isConst()) {
+            builder.constant(a.constant + b.constant);
+        }
+        else if (a.isRootSymExpr() || a.isDereference()) {
+            if (b.hasIndexScale()) {
+                // Set `base + index * scale` and `base` type alias
+                ctx.setTypeAlias(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build());
+                builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
+            } else {
+                builder.base(a).offset(b);
+            }
+        }
+        else if (!a.hasBase() && a.hasIndexScale()) {
+            if (a.hasOffset()) {
+                builder.index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
+            } else {
+                builder.index(a.indexExpr).scale(a.scaleExpr).offset(b);
+            }
+        }
+
+        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
+            builder.base(a.baseExpr).offset(add(a.offsetExpr, b));
+        }
+        else if (a.hasBase() && a.hasIndexScale()) {
+            if (a.hasOffset()) {
+                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
+            } else {
+                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(b);
+            }
+        }
+        else {
+            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        return builder.build();
+    }
+
+    // TODO: add Type alias, if nestedExpr is TypeAlias, then the dereference should also be TypeAlias
+    public SymbolExpr dereference(SymbolExpr a) {
+        if (a.isNoZeroConst()) {
+            throw new IllegalArgumentException("Cannot dereference a constant value.");
+        }
+        return new SymbolExpr.Builder().dereference(a).build();
+    }
+
+    public SymbolExpr reference(SymbolExpr a) {
+        if (a.isNoZeroConst()) {
+            throw new IllegalArgumentException("Cannot reference a constant value.");
+        }
+        return new SymbolExpr.Builder().reference(a).build();
     }
 
 

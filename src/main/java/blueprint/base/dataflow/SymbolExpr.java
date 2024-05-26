@@ -11,22 +11,22 @@ import java.util.Objects;
  *  <p> base + index * scale + offset </p>
  */
 public class SymbolExpr {
-    private SymbolExpr baseExpr = null;
-    private SymbolExpr indexExpr = null;
-    private SymbolExpr scaleExpr = null;
-    private SymbolExpr offsetExpr = null;
+    public SymbolExpr baseExpr = null;
+    public SymbolExpr indexExpr = null;
+    public SymbolExpr scaleExpr = null;
+    public SymbolExpr offsetExpr = null;
 
-    private HighSymbol rootSym = null;
-    private long constant = 0;
-    private boolean dereference = false;
-    private boolean reference = false;
-    private SymbolExpr nestedExpr = null;
+    public HighSymbol rootSym = null;
+    public long constant = 0;
+    public boolean dereference = false;
+    public boolean reference = false;
+    public SymbolExpr nestedExpr = null;
 
-    private Function function = null;
-    private String prefix = null;
+    public Function function = null;
+    public String prefix = null;
 
-    private boolean isConst = false;
-    private boolean isGlobal = false;
+    public boolean isConst = false;
+    public boolean isGlobal = false;
 
     public SymbolExpr(Builder builder) {
         this.baseExpr = builder.baseExpr;
@@ -133,76 +133,6 @@ public class SymbolExpr {
     public boolean isGlobal() {
         return isGlobal;
     }
-
-
-    public SymbolExpr add(SymbolExpr other) {
-        if (this.hasIndexScale() && other.hasIndexScale()) {
-            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this.getRepresentation(), other.getRepresentation()));
-        }
-
-        // ensure that the constant value is always on the right side of the expression
-        if (this.isNoZeroConst() && !other.isNoZeroConst()) {
-            return other.add(this);
-        }
-        // ensure that the index * scale is always on the right side of base
-        if (this.hasIndexScale() && !this.hasBase()) {
-            if (!other.isConst()) {
-                return other.add(this);
-            }
-        }
-
-        Builder builder = new Builder();
-        if (this.isConst() && other.isConst()) {
-            builder.constant(this.constant + other.constant);
-        }
-        else if (this.isRootSymExpr() || this.isDereference()) {
-            if (other.hasIndexScale()) {
-                builder.base(this).index(other.indexExpr).scale(other.scaleExpr).offset(other.offsetExpr);
-            } else {
-                builder.base(this).offset(other);
-            }
-        }
-        else if (!this.hasBase() && this.hasIndexScale()) {
-            if (this.hasOffset()) {
-                builder.index(this.indexExpr).scale(this.scaleExpr).offset(this.offsetExpr.add(other));
-            } else {
-                builder.index(this.indexExpr).scale(this.scaleExpr).offset(other);
-            }
-        }
-
-        else if (this.hasBase() && this.hasOffset() && !this.hasIndexScale()) {
-            builder.base(this).offset(this.offsetExpr.add(other));
-        }
-        else if (this.hasBase() && this.hasIndexScale()) {
-            if (this.hasOffset()) {
-                builder.base(this).index(this.indexExpr).scale(this.scaleExpr).offset(this.offsetExpr.add(other));
-            } else {
-                builder.base(this).index(this.indexExpr).scale(this.scaleExpr).offset(other);
-            }
-        }
-        else {
-            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", this.getRepresentation(), other.getRepresentation()));
-        }
-
-        return builder.build();
-    }
-
-
-    // TODO: add Type alias, if nestedExpr is TypeAlias, then the dereference should also be TypeAlias
-    public SymbolExpr dereference() {
-        if (this.isNoZeroConst()) {
-            throw new IllegalArgumentException("Cannot dereference a constant value.");
-        }
-        return new Builder().dereference(this).build();
-    }
-
-    public SymbolExpr reference() {
-        if (this.isNoZeroConst()) {
-            throw new IllegalArgumentException("Cannot reference a constant value.");
-        }
-        return new Builder().reference(this).build();
-    }
-
 
     public SymbolExpr getRootSymExpr() {
         if (isRootSymExpr()) {
@@ -328,13 +258,13 @@ public class SymbolExpr {
             return this;
         }
 
-        private Builder dereference(SymbolExpr nested) {
+        public Builder dereference(SymbolExpr nested) {
             this.dereference = true;
             this.nestedExpr = nested;
             return this;
         }
 
-        private Builder reference(SymbolExpr nested) {
+        public Builder reference(SymbolExpr nested) {
             this.reference = true;
             this.nestedExpr = nested;
             return this;

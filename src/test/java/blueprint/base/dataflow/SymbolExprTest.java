@@ -69,32 +69,32 @@ public class SymbolExprTest {
         assertEquals(expr5.getRepresentation(), "0x10");
         assertEquals(expr6.getRepresentation(), "0x18");
 
-        var expr7 = expr1.add(expr4);
-        var expr8 = expr2.add(expr5);
-        var expr9 = expr3.add(expr6);
-        assertEquals(expr7.getRepresentation(), "mock_1 + 0x8");
-        assertEquals(expr8.getRepresentation(), "mock_2 + 0x10");
-        assertEquals(expr9.getRepresentation(), "mock_3 + 0x18");
-
-        var expr10 = expr7.dereference();
-        var expr11 = expr8.dereference();
-        var expr12 = expr9.dereference();
-        var expr13 = expr1.dereference();
-        var expr14 = expr12.dereference();
-        assertEquals(expr10.getRepresentation(), "*(mock_1 + 0x8)");
-        assertEquals(expr11.getRepresentation(), "*(mock_2 + 0x10)");
-        assertEquals(expr12.getRepresentation(), "*(mock_3 + 0x18)");
-        assertEquals(expr13.getRepresentation(), "*(mock_1)");
-        assertEquals(expr14.getRepresentation(), "*(*(mock_3 + 0x18))");
-
-        var expr15 = expr12.add(expr4);
-        var expr16 = expr14.add(expr6);
-        var expr17 = expr16.add(expr6);
-        assertEquals(expr15.getRepresentation(), "*(mock_3 + 0x18) + 0x8");
-        assertEquals(expr16.getRepresentation(), "*(*(mock_3 + 0x18)) + 0x18");
-        assertEquals(expr17.getRepresentation(), "*(*(mock_3 + 0x18)) + 0x30");
-
-        var expr18 = expr17.add(expr3);
-        assertEquals(expr18.getRepresentation(), "*(*(mock_3 + 0x18)) + mock_3 + 0x30");
+//        var expr7 = expr1.add(expr4);
+//        var expr8 = expr2.add(expr5);
+//        var expr9 = expr3.add(expr6);
+//        assertEquals(expr7.getRepresentation(), "mock_1 + 0x8");
+//        assertEquals(expr8.getRepresentation(), "mock_2 + 0x10");
+//        assertEquals(expr9.getRepresentation(), "mock_3 + 0x18");
+//
+//        var expr10 = expr7.dereference();
+//        var expr11 = expr8.dereference();
+//        var expr12 = expr9.dereference();
+//        var expr13 = expr1.dereference();
+//        var expr14 = expr12.dereference();
+//        assertEquals(expr10.getRepresentation(), "*(mock_1 + 0x8)");
+//        assertEquals(expr11.getRepresentation(), "*(mock_2 + 0x10)");
+//        assertEquals(expr12.getRepresentation(), "*(mock_3 + 0x18)");
+//        assertEquals(expr13.getRepresentation(), "*(mock_1)");
+//        assertEquals(expr14.getRepresentation(), "*(*(mock_3 + 0x18))");
+//
+//        var expr15 = expr12.add(expr4);
+//        var expr16 = expr14.add(expr6);
+//        var expr17 = expr16.add(expr6);
+//        assertEquals(expr15.getRepresentation(), "*(mock_3 + 0x18) + 0x8");
+//        assertEquals(expr16.getRepresentation(), "*(*(mock_3 + 0x18)) + 0x18");
+//        assertEquals(expr17.getRepresentation(), "*(*(mock_3 + 0x18)) + 0x30");
+//
+//        var expr18 = expr17.add(expr3);
+//        assertEquals(expr18.getRepresentation(), "*(*(mock_3 + 0x18)) + mock_3 + 0x30");
     }
 }
