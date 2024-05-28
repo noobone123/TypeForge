@@ -2,6 +2,12 @@ package blueprint.base.dataflow.constraints;
 
 public class DummyType implements TypeDescriptor {
 
+    private final String name;
+
+    public DummyType(String name) {
+        this.name = name;
+    }
+
     @Override
     public int hashCode() {
         return 0;
@@ -14,6 +20,6 @@ public class DummyType implements TypeDescriptor {
 
     @Override
     public String getName() {
-        return "dummy";
+        return "(dummy)" + name;
     }
 }

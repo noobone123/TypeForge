@@ -187,10 +187,12 @@ public class Context {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void buildConstraints() {
+        // Parsing all SymbolExpr collected from PCodeVisitor, save them into symExprToConstraints
         for (var symExpr : AP.getSymbolExprs()) {
             parseSymbolExpr(symExpr, null, 0);
         }
 
+        // merging Type according to the typeAlias
         mergeTypeAlias();
 
         for (var constraint : symExprToConstraints.values()) {
@@ -231,6 +233,7 @@ public class Context {
         }
     }
 
+    // TODO: handle cases when AP type is ARGUMENT, how to add these tags into Constraints.
     private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 

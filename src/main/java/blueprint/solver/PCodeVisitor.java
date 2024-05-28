@@ -367,10 +367,11 @@ public class PCodeVisitor {
             }
 
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
-            for (var symExpr : argFacts) {
+            for (var argExpr : argFacts) {
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
-                ctx.setTypeAlias(symExpr, paramExpr);
+                ctx.setTypeAlias(argExpr, paramExpr);
+                ctx.addAccessPoint(argExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
             }
         }
     }
@@ -442,6 +443,7 @@ public class PCodeVisitor {
                     for (var symExpr : symExprs) {
                         var constraint = ctx.getConstraint(symExpr);
                         constraint.setSize(lengthArg.getOffset());
+                        ctx.addAccessPoint(symExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
                         Logging.info("[PCode] memset: " + symExpr + " size: " + lengthArg.getOffset());
                     }
                 }
@@ -462,6 +464,8 @@ public class PCodeVisitor {
                             var srcConstraint = ctx.getConstraint(srcExpr);
                             dstConstraint.setSize(lengthVn.getOffset());
                             srcConstraint.setSize(lengthVn.getOffset());
+                            ctx.addAccessPoint(dstExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
+                            ctx.addAccessPoint(srcExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
                             Logging.info("[PCode] memcpy size: " + lengthVn.getOffset());
                         }
                     }

@@ -54,7 +54,8 @@ public class TypeConstraint implements TypeDescriptor {
         accessOffsets.forEach((ap, offsets) -> {
             if (offsets.size() > 1) {
                 for (var offset : offsets) {
-                    addTag(offset, "SAME_ACCESS");
+                    // If one pcode Access Multiple fields, we should add a tag to the field
+                    addTag(offset, "MULTI_ACCESS");
                 }
             }
         });
