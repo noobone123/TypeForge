@@ -202,22 +202,27 @@ public class Context {
 
 
     private void mergeTypeAlias() {
-        for (var symExpr : AP.getSymbolExprs()) {
+        HashSet<SymbolExpr> updated = new HashSet<>();
+        var tmpSymExprToConstraints = new HashMap<>(symExprToConstraints);
+
+        for (var symExpr : tmpSymExprToConstraints.keySet()) {
+            if (updated.contains(symExpr)) {
+                continue;
+            }
             var cluster = typeAlias.getCluster(symExpr);
             if (cluster.size() > 1) {
                 var mergedConstraint = new TypeConstraint();
-                for (var sym : cluster) {
-                    var constraint = symExprToConstraints.get(sym);
+                for (var aliasSym : cluster) {
+                    var constraint = tmpSymExprToConstraints.get(aliasSym);
                     if (constraint != null) {
-                        Logging.info("[Alias] Merging " + sym + " -> " + constraint.getName());
+                        Logging.info("[Alias] Merging " + aliasSym + ": " + constraint.getName() + " into " + mergedConstraint.getName());
                         mergedConstraint.merge(constraint);
-
-                        // TODO: update reference ...
                     }
                 }
 
                 for (var sym : cluster) {
                     symExprToConstraints.put(sym, mergedConstraint);
+                    updated.add(sym);
                 }
             }
             else {
@@ -288,9 +293,11 @@ public class Context {
 
     private void updateConstraint(TypeConstraint currentTC, long offsetValue, TypeConstraint parentTC, Set<AccessPoints. AP> APs) {
         if (parentTC != null) {
-            currentTC.addOffsetTypeConstraint(offsetValue, parentTC);
-            parentTC.addReferencedBy(currentTC, offsetValue);
+            parentTC.addReferencedBy(offsetValue, currentTC);
+            currentTC.addReferenceTo(offsetValue, parentTC);
         }
+        // If remove else {} block, the addFieldConstraint will be called
+        // each time parsing a NestedExpr, this may cause the same APs to be added multiple times
         else {
             for (var ap: APs) {
                 currentTC.addFieldConstraint(offsetValue, ap);

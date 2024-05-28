@@ -2,6 +2,7 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.utils.Logging;
+import groovy.util.logging.Log;
 
 import java.util.*;
 
@@ -23,8 +24,11 @@ public class TypeConstraint implements TypeDescriptor {
 
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
-    public long size = 0;
+    public Set<Long> size;
 
+    /** The referenceTo is a map from current TypeConstraint's offset to the referenced TypeConstraint */
+    public final HashMap<Long, HashSet<TypeConstraint>> referenceTo;
+    /** The referencedBy is a map which records which TypeConstraint references the current TypeConstraint and the set of referenced offsets */
     public final HashMap<TypeConstraint, HashSet<Long>> referencedBy;
 
     public final UUID uuid;
@@ -39,7 +43,10 @@ public class TypeConstraint implements TypeDescriptor {
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
 
+        referenceTo = new HashMap<>();
         referencedBy = new HashMap<>();
+
+        this.size = new HashSet<>();
     }
 
 
@@ -88,27 +95,29 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
-    public void addReferencedBy(TypeConstraint other, long offset) {
+    public void addReferencedBy(long offset, TypeConstraint other) {
         referencedBy.putIfAbsent(other, new HashSet<>());
         referencedBy.get(other).add(offset);
     }
 
-    public void removeReferencedBy(TypeConstraint other, long offset) {
-        if (referencedBy.containsKey(other)) {
-            referencedBy.get(other).remove(offset);
+    public void addReferenceTo(long offset, TypeConstraint other) {
+        referenceTo.putIfAbsent(offset, new HashSet<>());
+        referenceTo.get(offset).add(other);
+    }
+
+    public void removeReferenceTo(long offset, TypeConstraint other) {
+        if (referenceTo.containsKey(offset)) {
+            referenceTo.get(offset).remove(other);
         }
     }
 
     public void setSize(long size) {
-        if (size != this.size) {
-            this.size = size;
-            Logging.info(String.format("[Constraint] %s setting new size: %d", shortUUID, size));
-        }
+        this.size.add(size);
+        Logging.info(String.format("[Constraint] %s setting size: %d", shortUUID, size));
     }
 
     public void merge(TypeConstraint other) {
-        // TODO: update merging other meta data ...
-        // Merging fields from other Constraint
+        // merging fieldMap
         other.fieldMap.forEach((offset, typeMap) -> {
             if (!this.fieldMap.containsKey(offset)) {
                 this.fieldMap.put(offset, new HashMap<>(typeMap));
@@ -123,6 +132,41 @@ public class TypeConstraint implements TypeDescriptor {
             this.tags.putIfAbsent(offset, new HashSet<>());
             this.tags.get(offset).addAll(tagSet);
         });
+
+        // Merging ptrLevel
+        other.ptrLevel.forEach((offset, level) -> {
+            if (this.ptrLevel.containsKey(offset)) {
+                this.ptrLevel.put(offset, Math.max(this.ptrLevel.get(offset), level));
+            } else {
+                this.ptrLevel.put(offset, level);
+            }
+        });
+
+        // Merging accessOffsets
+        other.accessOffsets.forEach((ap, offsets) -> {
+            this.accessOffsets.putIfAbsent(ap, new HashSet<>());
+            this.accessOffsets.get(ap).addAll(offsets);
+        });
+
+        // Handling referenceTo: update new and remove old
+        other.referenceTo.forEach((offset, constraints) -> {
+            constraints.forEach(constraint -> {
+                this.addReferenceTo(offset, constraint);
+                constraint.addReferencedBy(offset, this);
+            });
+        });
+
+        // Handling referencedBy
+        other.referencedBy.forEach((constraint, offsets) -> {
+            offsets.forEach(offset -> {
+                this.addReferencedBy(offset, constraint);
+                constraint.removeReferenceTo(offset, other);
+                constraint.addReferenceTo(offset,this);
+            });
+        });
+
+        // Merging size
+        this.size.addAll(other.size);
     }
 
 
@@ -134,19 +178,25 @@ public class TypeConstraint implements TypeDescriptor {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("Constraint_" + shortUUID + " {\n");
-        if (size != 0) {
-            sb.append("Size: ").append(size).append("\n");
+        if (!size.isEmpty()) {
+            sb.append("Possible Size: ").append(size).append("\n");
         }
         fieldMap.forEach((offset, typeMap) -> {
             sb.append("0x").append(Long.toHexString(offset)).append(" : {");
             typeMap.forEach((type, count) -> sb.append(type.getName()).append(" : ").append(count).append(", "));
-            sb.append("},   ");
+            sb.append("}, ");
             if (tags.containsKey(offset)) {
                 sb.append("Tags: ");
                 tags.get(offset).forEach(tag -> sb.append(tag).append(", "));
             }
             if (ptrLevel.containsKey(offset)) {
                 sb.append("PtrLevel: ").append(ptrLevel.get(offset));
+            }
+            sb.append(", ");
+            if (referenceTo.containsKey(offset)) {
+                sb.append("ReferenceTo: {");
+                referenceTo.get(offset).forEach(ref -> sb.append("Constraint_").append(ref.shortUUID).append(", "));
+                sb.append("}");
             }
             sb.append("\n");
         });
