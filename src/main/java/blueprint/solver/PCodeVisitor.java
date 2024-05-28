@@ -341,6 +341,7 @@ public class PCodeVisitor {
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
         var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
+        // TODO: set return value into type alias
         var returnVn = pcodeOp.getOutput();
         if (returnVn != null) {
             Logging.info("[PCode] Return value: " + returnVn);
@@ -367,11 +368,6 @@ public class PCodeVisitor {
 
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var symExpr : argFacts) {
-                // If the argument is not a simple expression, we need to add it as an access point
-                if (!symExpr.isRootSymExpr() && !symExpr.isNoZeroConst()) {
-                    ctx.addAccessPoint(symExpr, pcodeOp, new DummyType(), AccessPoints.AccessType.ARGUMENT);
-                }
-
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.setTypeAlias(symExpr, paramExpr);
@@ -436,22 +432,17 @@ public class PCodeVisitor {
         var externalFuncName = calleeNode.value.getName();
         Logging.info("External function call: " + externalFuncName);
 
+        // TODO: handle memOp External function's wrapper
+        // TODO: hold expr's constant value intra-procedural, which can be used to add constraints related to the memOp functions
         switch (externalFuncName) {
             case "memset" -> {
                 var lengthArg = pcodeOp.getInput(3);
                 if (lengthArg.isConstant()) {
                     var symExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
                     for (var symExpr : symExprs) {
-                        if (!symExpr.hasOffset()) {
-                            // var constraint = ctx.symToConstraints.computeIfAbsent(symExpr.getBaseSymbol(), k -> new ComplexTypeConstraint());
-                            Logging.info("memset: " + symExpr);
-                            // constraint.setSize(lengthArg.getOffset());
-                        }
-
-                        // If the argument is not a simple expression, we need to add it as an access point
-                        if (!symExpr.isRootSymExpr() && !symExpr.isNoZeroConst()) {
-                            ctx.addAccessPoint(symExpr, pcodeOp, null, AccessPoints.AccessType.ARGUMENT);
-                        }
+                        var constraint = ctx.getConstraint(symExpr);
+                        constraint.setSize(lengthArg.getOffset());
+                        Logging.info("[PCode] memset: " + symExpr + " size: " + lengthArg.getOffset());
                     }
                 }
             }
@@ -460,7 +451,22 @@ public class PCodeVisitor {
                 var dstVn = pcodeOp.getInput(1);
                 var srcVn = pcodeOp.getInput(2);
                 var lengthVn = pcodeOp.getInput(3);
-                Logging.info("memcpy: " + srcVn + " -> " + dstVn + " length: " + lengthVn);
+                var dstExprs = ctx.getIntraDataFlowFacts(funcNode, dstVn);
+                var srcExprs = ctx.getIntraDataFlowFacts(funcNode, srcVn);
+                for (var dstExpr : dstExprs) {
+                    for (var srcExpr : srcExprs) {
+                        ctx.setTypeAlias(dstExpr, srcExpr);
+                        Logging.info("[PCode] memcpy: " + dstExpr + " <- " + srcExpr);
+                        if (lengthVn.isConstant()) {
+                            var dstConstraint = ctx.getConstraint(dstExpr);
+                            var srcConstraint = ctx.getConstraint(srcExpr);
+                            dstConstraint.setSize(lengthVn.getOffset());
+                            srcConstraint.setSize(lengthVn.getOffset());
+                            Logging.info("[PCode] memcpy size: " + lengthVn.getOffset());
+                        }
+                    }
+                }
+
             }
         }
     }

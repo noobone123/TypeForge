@@ -306,7 +306,7 @@ public class Context {
     }
 
 
-    private TypeConstraint getConstraint(SymbolExpr symExpr) {
+    public TypeConstraint getConstraint(SymbolExpr symExpr) {
         TypeConstraint constraint = null;
         if (symExprToConstraints.containsKey(symExpr)) {
             constraint = symExprToConstraints.get(symExpr);

@@ -179,7 +179,9 @@ public class TypeConstraint implements TypeDescriptor {
     public String toString() {
         StringBuilder sb = new StringBuilder("Constraint_" + shortUUID + " {\n");
         if (!size.isEmpty()) {
-            sb.append("Possible Size: ").append(size).append("\n");
+            sb.append("Possible Size: {");
+            size.forEach(s -> sb.append("0x").append(Long.toHexString(s)).append(", "));
+            sb.append("}\n");
         }
         fieldMap.forEach((offset, typeMap) -> {
             sb.append("0x").append(Long.toHexString(offset)).append(" : {");

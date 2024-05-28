@@ -14,6 +14,6 @@ public class DummyType implements TypeDescriptor {
 
     @Override
     public String getName() {
-        return "[dummy]";
+        return "dummy";
     }
 }
