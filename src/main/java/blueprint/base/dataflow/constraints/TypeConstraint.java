@@ -254,13 +254,13 @@ public class TypeConstraint implements TypeDescriptor {
         var referencedByNode = rootNode.putObject("referencedBy");
         referencedBy.forEach((constraint, offsets) -> {
             var offsetArray = referencedByNode.putArray("Constraint_" + constraint.shortUUID);
-            offsets.forEach(offsetArray::add);
+            offsets.forEach(offset -> offsetArray.add("0x" + Long.toHexString(offset)));
         });
 
         var fieldsNode = rootNode.putObject("fields");
         fieldMap.forEach((offset, typesMap) -> {
             var offsetNode = fieldsNode.putObject("0x" + Long.toHexString(offset));
-            var fieldsArray = offsetNode.putArray("fields");
+            var fieldsArray = offsetNode.putArray("types");
             typesMap.forEach((type, count) -> fieldsArray.add(type.getName() + ": " + count));
 
             var referenceToArray = offsetNode.putArray("referenceTo");
