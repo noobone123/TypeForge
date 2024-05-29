@@ -41,7 +41,7 @@ public class InterSolver {
         }
 
         ctx.buildConstraints();
-        ctx.dumpConstraints();
+        ctx.dumpResults();
     }
 
 
@@ -57,7 +57,6 @@ public class InterSolver {
         // intersting leaf nodes:
         // network_merge_config_cpv / buffer_truncate / fdevent_sched_close / fdlog_pipes_abandon_pids / config_merge_config_cpv
         // http_response_upgrade_read_body_unknown / mod_scgi_merge_config_cpv / ...
-
         Address addr = FunctionHelper.getAddress(0x00119249);
         FunctionNode funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
@@ -65,8 +64,13 @@ public class InterSolver {
         addr = FunctionHelper.getAddress(0x00119337);
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
-//
-        addr = FunctionHelper.getAddress(0x0011a70a);
+
+
+        addr = FunctionHelper.getAddress(0x0011b7de); // network_write_init
+        funcNode = cg.getNodebyAddr(addr);
+        ctx.workList.add(funcNode);
+
+        addr = FunctionHelper.getAddress(0x0011a70a); // network_init
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
     }

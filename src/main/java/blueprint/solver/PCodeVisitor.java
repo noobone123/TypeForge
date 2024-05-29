@@ -5,6 +5,7 @@ import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.DummyType;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
+import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
@@ -12,6 +13,7 @@ import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
 
+import java.lang.reflect.Type;
 import java.util.*;
 
 import static blueprint.utils.DecompilerHelper.getSigned;
@@ -180,23 +182,35 @@ public class PCodeVisitor {
      */
     private void handlePtrAdd(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
-        // TODO: handle the case where input1 or input2 is not constant
-        if (!inputs[1].isConstant() || !inputs[2].isConstant()) {
-            return;
-        }
+        var input0Fact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
+        assert input0Fact != null;
 
-        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
-        assert inputFact != null;
-
-        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-
-        for (var symExpr: inputFact) {
-            var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
-            if (OffsetSanityCheck(delta)) {
-                var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                var newExpr = add(symExpr, deltaSym);
-                ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+        if (inputs[1].isConstant() && inputs[2].isConstant()) {
+            for (var symExpr: input0Fact) {
+                var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
+                if (OffsetSanityCheck(delta)) {
+                    var deltaSym = new SymbolExpr.Builder().constant(delta).build();
+                    var newExpr = add(symExpr, deltaSym);
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                }
             }
+
+            ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+        }
+        // inputs[1] is index and inputs[2] is element size
+        else if (!inputs[1].isConstant() && inputs[2].isConstant()) {
+            var scaleExpr = new SymbolExpr.Builder().constant(getSigned(inputs[2])).build();
+            for (var symExpr: input0Fact) {
+                var indexFacts = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
+                for (var indexExpr: indexFacts) {
+                    ctx.getConstraint(symExpr).addGlobalTag(TypeConstraint.Attribute.MAY_ARRAY);
+                    var newExpr = add(symExpr, multiply(indexExpr, scaleExpr));
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                }
+            }
+        }
+        else {
+            Logging.warn(String.format("[PCode] PTRADD: %s + %s * %s can not resolve", inputs[0], inputs[1], inputs[2]));
         }
     }
 
@@ -332,7 +346,7 @@ public class PCodeVisitor {
 
         var sizeExpr = new SymbolExpr.Builder().constant(size).build();
         for (var symExpr : inputFacts) {
-            var newExpr = new SymbolExpr.Builder().index(symExpr).scale(sizeExpr).build();
+            var newExpr = multiply(symExpr, sizeExpr);
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
     }
@@ -496,7 +510,7 @@ public class PCodeVisitor {
         if (a.isConst() && b.isConst()) {
             builder.constant(a.constant + b.constant);
         }
-        else if (a.isRootSymExpr() || a.isDereference()) {
+        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
                 ctx.setTypeAlias(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build());
@@ -529,6 +543,37 @@ public class PCodeVisitor {
 
         return builder.build();
     }
+
+    public SymbolExpr multiply(SymbolExpr a, SymbolExpr b) {
+        if (!a.isConst() && !b.isConst) {
+            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        // ensure that the constant value is always on the right side of the expression
+        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
+            return multiply(b, a);
+        }
+
+        SymbolExpr.Builder builder = new SymbolExpr.Builder();
+        if (a.isConst() && b.isConst()) {
+            builder.constant(a.constant * b.constant);
+        }
+        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
+            builder.index(a).scale(b);
+        }
+        else if (!a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
+            builder.index(a.indexExpr).scale(multiply(a.scaleExpr, b));
+        }
+        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
+            builder.index(a).scale(b);
+        }
+        else {
+            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        return builder.build();
+    }
+
 
     public SymbolExpr dereference(SymbolExpr a) {
         if (a.isNoZeroConst()) {

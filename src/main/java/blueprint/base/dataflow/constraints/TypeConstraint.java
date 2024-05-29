@@ -2,11 +2,24 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.utils.Logging;
-import groovy.util.logging.Log;
 
 import java.util.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.core.JsonProcessingException;
+
 public class TypeConstraint implements TypeDescriptor {
+
+    public enum Attribute {
+        ARGUMENT,
+        MULTI_ACCESS,
+        MAY_ARRAY,
+        MAY_NESTED,
+    }
+
     /**
      * For a complexType, the fieldMap is a map from the offset of the field to the field's type.
      * Be careful that there maybe multiple dataTypes at the same offset in the fieldMap because of the union or array.
@@ -19,11 +32,13 @@ public class TypeConstraint implements TypeDescriptor {
      * </code>
      */
     public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
-    public final TreeMap<Long, HashSet<String>> tags;
+    public final TreeMap<Long, HashSet<Attribute>> fieldTags;
     public final TreeMap<Long, Long> ptrLevel;
 
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
+
+    public Set<Attribute> globalTags;
     public Set<Long> size;
 
     /** The referenceTo is a map from current TypeConstraint's offset to the referenced TypeConstraint */
@@ -36,7 +51,7 @@ public class TypeConstraint implements TypeDescriptor {
 
     public TypeConstraint() {
         fieldMap = new TreeMap<>();
-        tags = new TreeMap<>();
+        fieldTags = new TreeMap<>();
         ptrLevel = new TreeMap<>();
 
         accessOffsets = new HashMap<>();
@@ -46,6 +61,7 @@ public class TypeConstraint implements TypeDescriptor {
         referenceTo = new HashMap<>();
         referencedBy = new HashMap<>();
 
+        globalTags = new HashSet<>();
         this.size = new HashSet<>();
     }
 
@@ -55,7 +71,7 @@ public class TypeConstraint implements TypeDescriptor {
             if (offsets.size() > 1) {
                 for (var offset : offsets) {
                     // If one pcode Access Multiple fields, we should add a tag to the field
-                    addTag(offset, "MULTI_ACCESS");
+                    addFieldTag(offset, Attribute.MULTI_ACCESS);
                 }
             }
         });
@@ -85,15 +101,19 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
-    public void addTag(long offset, String tag) {
-        tags.putIfAbsent(offset, new HashSet<>());
-        tags.get(offset).add(tag);
+    public void addFieldTag(long offset, Attribute tag) {
+        fieldTags.putIfAbsent(offset, new HashSet<>());
+        fieldTags.get(offset).add(tag);
     }
 
-    public void removeTag(long offset, String tag) {
-        if (tags.containsKey(offset)) {
-            tags.get(offset).remove(tag);
+    public void removeFieldTag(long offset, Attribute tag) {
+        if (fieldTags.containsKey(offset)) {
+            fieldTags.get(offset).remove(tag);
         }
+    }
+
+    public void addGlobalTag(Attribute tag) {
+        globalTags.add(tag);
     }
 
     public void addReferencedBy(long offset, TypeConstraint other) {
@@ -129,10 +149,13 @@ public class TypeConstraint implements TypeDescriptor {
         });
 
         // Merging tags
-        other.tags.forEach((offset, tagSet) -> {
-            this.tags.putIfAbsent(offset, new HashSet<>());
-            this.tags.get(offset).addAll(tagSet);
+        other.fieldTags.forEach((offset, tagSet) -> {
+            this.fieldTags.putIfAbsent(offset, new HashSet<>());
+            this.fieldTags.get(offset).addAll(tagSet);
         });
+
+        // Merging globalTags
+        this.globalTags.addAll(other.globalTags);
 
         // Merging ptrLevel
         other.ptrLevel.forEach((offset, level) -> {
@@ -188,9 +211,9 @@ public class TypeConstraint implements TypeDescriptor {
             sb.append("0x").append(Long.toHexString(offset)).append(" : {");
             typeMap.forEach((type, count) -> sb.append(type.getName()).append(" : ").append(count).append(", "));
             sb.append("}, ");
-            if (tags.containsKey(offset)) {
+            if (fieldTags.containsKey(offset)) {
                 sb.append("Tags: ");
-                tags.get(offset).forEach(tag -> sb.append(tag).append(", "));
+                fieldTags.get(offset).forEach(tag -> sb.append(tag).append(", "));
             }
             if (ptrLevel.containsKey(offset)) {
                 sb.append("PtrLevel: ").append(ptrLevel.get(offset));
@@ -204,6 +227,7 @@ public class TypeConstraint implements TypeDescriptor {
             sb.append("\n");
         });
         sb.append("}");
+
         return sb.toString();
     }
 
@@ -218,5 +242,36 @@ public class TypeConstraint implements TypeDescriptor {
             return this.uuid.equals(((TypeConstraint) obj).uuid);
         }
         return false;
+    }
+
+    public JsonNode getJsonObj(ObjectMapper mapper) {
+        var rootNode = mapper.createObjectNode();
+        rootNode.put("size", size.isEmpty() ? Long.toHexString(0) : Long.toHexString(size.iterator().next()));
+
+        var globalTagsArray = rootNode.putArray("globalTags");
+        globalTags.forEach(tag -> globalTagsArray.add(tag.toString()));
+
+        var referencedByNode = rootNode.putObject("referencedBy");
+        referencedBy.forEach((constraint, offsets) -> {
+            var offsetArray = referencedByNode.putArray("Constraint_" + constraint.shortUUID);
+            offsets.forEach(offsetArray::add);
+        });
+
+        var fieldsNode = rootNode.putObject("fields");
+        fieldMap.forEach((offset, typesMap) -> {
+            var offsetNode = fieldsNode.putObject("0x" + Long.toHexString(offset));
+            var fieldsArray = offsetNode.putArray("fields");
+            typesMap.forEach((type, count) -> fieldsArray.add(type.getName() + ": " + count));
+
+            var referenceToArray = offsetNode.putArray("referenceTo");
+            referenceTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> referenceToArray.add(ref.shortUUID));
+
+            offsetNode.put("PtrLevel", ptrLevel.getOrDefault(offset, 0L));
+
+            var tagsArray = offsetNode.putArray("tags");
+            fieldTags.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
+        });
+
+        return rootNode;
     }
 }

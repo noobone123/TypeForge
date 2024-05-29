@@ -10,11 +10,18 @@ import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
 
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.File;
+import java.io.IOException;
+
 
 /**
  * The context used to store the relationship between HighSymbol and TypeBuilder.
@@ -233,7 +240,7 @@ public class Context {
         }
     }
 
-    // TODO: handle cases when AP type is ARGUMENT, how to add these tags into Constraints.
+
     private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
@@ -303,7 +310,18 @@ public class Context {
         // each time parsing a NestedExpr, this may cause the same APs to be added multiple times
         else {
             for (var ap: APs) {
-                currentTC.addFieldConstraint(offsetValue, ap);
+                if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE) {
+                    currentTC.addFieldConstraint(offsetValue, ap);
+                }
+                else if (ap.accessType == AccessPoints.AccessType.ARGUMENT) {
+                    if (offsetValue != 0) {
+                        currentTC.addFieldConstraint(offsetValue, ap);
+                        currentTC.addFieldTag(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
+                    }
+                    else {
+                        currentTC.addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
+                    }
+                }
             }
         }
     }
@@ -326,9 +344,46 @@ public class Context {
         return solvedFunc.contains(funcNode);
     }
 
-    public void dumpConstraints() {
+    public void dumpResults() {
+        String workingDir = System.getProperty("user.dir");
+        Logging.info("Current working directory: " + workingDir);
+
+        File outputDir = new File(System.getProperty("user.dir") + File.separator + "codes/blueprint/dummy");
+        if (!outputDir.exists()) {
+            outputDir.mkdirs();
+        }
+
+        // dump constraints to JSON file
+        File outputFile = new File(outputDir, "constraints.json");
+        var mapper = new ObjectMapper();
+        var root = mapper.createObjectNode();
         symExprToConstraints.forEach((symExpr, constraint) -> {
-            Logging.info("[Constraint] " + symExpr + " -> " + constraint);
+            root.set("Constraint_" + constraint.shortUUID, constraint.getJsonObj(mapper));
         });
+
+        // dump metadata to JSON file
+        File outputFile2 = new File(outputDir, "metadata.json");
+        var mapper2 = new ObjectMapper();
+        var root2 = mapper2.createObjectNode();
+        symExprToConstraints.forEach((symExpr, constraint) -> {
+            var prefix = symExpr.prefix;
+            var prefixNode = (ObjectNode) root2.get(prefix);
+            if (prefixNode == null) {
+                prefixNode = mapper2.createObjectNode();
+                root2.set(prefix, prefixNode);
+            }
+            prefixNode.put(symExpr.getRepresentation(), "Constraint_" + constraint.shortUUID);
+        });
+
+        try {
+            mapper.writerWithDefaultPrettyPrinter().writeValue(outputFile, root);
+            Logging.info("Constraints dumped to " + outputFile.getPath());
+
+            mapper2.writerWithDefaultPrettyPrinter().writeValue(outputFile2, root2);
+            Logging.info("Metadata dumped to " + outputFile2.getPath());
+
+        } catch (IOException e) {
+            Logging.error("Error writing JSON to file" + e.getMessage());
+        }
     }
 }
