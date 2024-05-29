@@ -65,6 +65,9 @@ public class InterSolver {
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
 
+        addr = FunctionHelper.getAddress(0x00134309); // log_error
+        funcNode = cg.getNodebyAddr(addr);
+        ctx.workList.add(funcNode);
 
         addr = FunctionHelper.getAddress(0x0011b7de); // network_write_init
         funcNode = cg.getNodebyAddr(addr);

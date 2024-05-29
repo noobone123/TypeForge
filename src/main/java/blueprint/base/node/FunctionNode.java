@@ -4,15 +4,21 @@ import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 
+import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
 import ghidra.app.decompiler.ClangLine;
 import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
 import ghidra.app.decompiler.component.DecompilerUtils;
+import ghidra.program.model.data.FunctionDefinitionDataType;
+import ghidra.program.model.data.ParameterDefinition;
+import ghidra.program.model.data.ParameterDefinitionImpl;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.VariableStorage;
+import ghidra.program.model.pcode.FunctionPrototype;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 
 import java.util.*;
@@ -42,14 +48,12 @@ public class FunctionNode extends NodeBase<Function> {
     public void setDecompileResult (DecompileResults res) {
         this.decompileResults = res;
         this.hFunc = res.getHighFunction();
-        lines = DecompilerUtils.toLines(this.decompileResults.getCCodeMarkup());
-        for (ClangLine line : lines) {
-            var lineTokens = line.getAllTokens();
-            tokens.addAll(lineTokens);
+        if (updatePrototype()) {
+            updateLocalVariables();
+            updateGlobalVariables();
+        } else {
+            this.decompile();
         }
-        updatePrototype();
-        updateLocalVariables();
-        updateGlobalVariables();
     }
 
     /**
@@ -58,18 +62,28 @@ public class FunctionNode extends NodeBase<Function> {
      * This information can be found in `HighFunction` and we can utilize `HighFunctionDBUtil.commitParamsToDatabase`
      * to sync this information to database.
      */
-    private void updatePrototype() {
+    private boolean updatePrototype() {
         if (hFunc == null) {
             Logging.warn("HighFunction is not set");
-            return;
+            return false;
         }
 
         var funcProto = hFunc.getFunctionPrototype();
-        for (int i = 0; i < funcProto.getNumParams(); i++) {
-            var param = funcProto.getParam(i);
-            parameters.add(param);
+
+        // IMPORTANT: so dirty, avoid ghidra's func prototype parse error due to XMM registers
+        if (funcProto.getNumParams() >= 10) {
+            fixFuncProto(funcProto);
+            return false;
         }
+        else {
+            for (int i = 0; i < funcProto.getNumParams(); i++) {
+                var param = funcProto.getParam(i);
+                parameters.add(param);
+            }
+        }
+
         returnStorage = funcProto.getReturnStorage();
+        return true;
 
         // Commit to database, then types and return can be found in Listing model
         // And Information can be accessed by Function.getParameters()
@@ -108,6 +122,33 @@ public class FunctionNode extends NodeBase<Function> {
             var sym = it.next();
             globalVariables.add(sym);
         }
+    }
+
+
+    private void fixFuncProto(FunctionPrototype proto) {
+        var newParams = new ArrayList<HighSymbol>();
+        for (var i = 0; i < proto.getNumParams(); i++) {
+            var param = proto.getParam(i);
+            if (param.getStorage().getRegister().getName().contains("XMM")) {
+                Logging.warn("Remove XMM register parameter: " + param.getName());
+            } else {
+                newParams.add(param);
+            }
+        }
+
+        // init newParamsDef with newParams
+        var newParamsDef = new ParameterDefinition[newParams.size()];
+        for (var i = 0; i < newParams.size(); i++) {
+            var param = newParams.get(i);
+            newParamsDef[i] = new ParameterDefinitionImpl("param_" + (i+1), param.getDataType(), "updated");
+        }
+
+        var funcDef = new FunctionDefinitionDataType(this.value, true);
+        funcDef.setArguments(newParamsDef);
+
+        ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(this.value.getEntryPoint(), funcDef, SourceType.USER_DEFINED);
+        Global.ghidraScript.runCommand(cmd);
+        Logging.info("Fixed function prototype: " + this.value.getName());
     }
 
 

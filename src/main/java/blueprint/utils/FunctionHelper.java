@@ -3,6 +3,7 @@ package blueprint.utils;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.util.task.TaskMonitor;
+import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
 
 import java.util.HashSet;
 import java.util.Set;

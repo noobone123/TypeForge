@@ -6,6 +6,7 @@ import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.DummyType;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.constraints.TypeDescriptor;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
@@ -382,6 +383,9 @@ public class PCodeVisitor {
 
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var argExpr : argFacts) {
+                if (isTrivialArgExpr(argExpr)) {
+                    continue;
+                }
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.setTypeAlias(argExpr, paramExpr);
@@ -435,11 +439,27 @@ public class PCodeVisitor {
         // the slot index of cur.varnode is 1, which means this varnode
         // represent the memory location to be stored
         var storedAddrVn = pcodeOp.getInput(1);
+        var storedValueVn = pcodeOp.getInput(2);
+        var storedValueFacts = ctx.getIntraDataFlowFacts(funcNode, storedValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
+        var storedTypes = new HashSet<TypeDescriptor>();
+        if (storedValueFacts != null) {
+            storedValueFacts.forEach(symExpr -> {
+                if (symExpr.isGlobal()) {
+                    storedTypes.add(new DummyType("CodePtr_or_DataPtr"));
+                } else {
+                    storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
+                }
+            });
+        } else {
+            storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
+        }
+
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
-            var type = new PrimitiveTypeDescriptor(storedValueDT);
-            ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
+            for (var type : storedTypes) {
+                ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
+            }
         }
     }
 
@@ -591,6 +611,11 @@ public class PCodeVisitor {
             throw new IllegalArgumentException("Cannot reference a constant value.");
         }
         return new SymbolExpr.Builder().reference(a).build();
+    }
+
+
+    private boolean isTrivialArgExpr(SymbolExpr symExpr) {
+        return symExpr.isRootSymExpr() || symExpr.isConst();
     }
 
 

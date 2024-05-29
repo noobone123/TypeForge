@@ -46,6 +46,7 @@ public class BluePrint extends GhidraScript {
     protected boolean prepareAnalysis() {
         Global.currentProgram = this.currentProgram;
         Global.flatAPI = this;
+        Global.ghidraScript = this;
         Language language = this.currentProgram.getLanguage();
         if (language == null) {
             Logging.error("Language not found");
