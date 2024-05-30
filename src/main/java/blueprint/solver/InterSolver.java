@@ -57,11 +57,24 @@ public class InterSolver {
         // intersting leaf nodes:
         // network_merge_config_cpv / buffer_truncate / fdevent_sched_close / fdlog_pipes_abandon_pids / config_merge_config_cpv
         // http_response_upgrade_read_body_unknown / mod_scgi_merge_config_cpv / ...
-        Address addr = FunctionHelper.getAddress(0x00119249);
+
+        Address addr = FunctionHelper.getAddress(0x00119249); // network_merge_config_cpv
         FunctionNode funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x00119337);
+        addr = FunctionHelper.getAddress(0x00119337); // network_merge_config
+        funcNode = cg.getNodebyAddr(addr);
+        ctx.workList.add(funcNode);
+
+        addr = FunctionHelper.getAddress(0x00133ab0); // buffer_clear
+        funcNode = cg.getNodebyAddr(addr);
+        ctx.workList.add(funcNode);
+
+        addr = FunctionHelper.getAddress(0x0013401b); // log_buffer_prepare
+        funcNode = cg.getNodebyAddr(addr);
+        ctx.workList.add(funcNode);
+
+        addr = FunctionHelper.getAddress(0x0013418f); // log_va_list
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
 

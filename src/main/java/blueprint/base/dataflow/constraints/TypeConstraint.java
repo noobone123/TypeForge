@@ -264,7 +264,7 @@ public class TypeConstraint implements TypeDescriptor {
             typesMap.forEach((type, count) -> fieldsArray.add(type.getName() + ": " + count));
 
             var referenceToArray = offsetNode.putArray("referenceTo");
-            referenceTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> referenceToArray.add(ref.shortUUID));
+            referenceTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> referenceToArray.add("Constraint_" + ref.shortUUID));
 
             offsetNode.put("PtrLevel", ptrLevel.getOrDefault(offset, 0L));
 

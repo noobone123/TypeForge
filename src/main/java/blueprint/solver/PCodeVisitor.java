@@ -254,8 +254,8 @@ public class PCodeVisitor {
             // In this case, Maybe an Address of a global variable
             if (base.getOffset() == 0 && inputs[1].isConstant()) {
                 var globalSym = inputs[1].getHigh().getSymbol();
-                if (globalSym != null) {
-                    var globalSymExpr = new SymbolExpr.Builder().rootSymbol(globalSym).build();
+                if (globalSym != null && globalSym.isGlobal()) {
+                    var globalSymExpr = new SymbolExpr.Builder().global(globalSym.getSymbol().getAddress(), globalSym).build();
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
                     if (outputFacts == null) {
@@ -318,7 +318,6 @@ public class PCodeVisitor {
             ctx.addNewSymbolExpr(funcNode, output, symExpr);
         }
     }
-
 
     private void handleIntMult(PcodeOp pcodeOp) {
         var output = pcodeOp.getOutput();
@@ -383,9 +382,6 @@ public class PCodeVisitor {
 
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var argExpr : argFacts) {
-                if (isTrivialArgExpr(argExpr)) {
-                    continue;
-                }
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.setTypeAlias(argExpr, paramExpr);
@@ -612,12 +608,6 @@ public class PCodeVisitor {
         }
         return new SymbolExpr.Builder().reference(a).build();
     }
-
-
-    private boolean isTrivialArgExpr(SymbolExpr symExpr) {
-        return symExpr.isRootSymExpr() || symExpr.isConst();
-    }
-
 
     /**
      * Check if the offset is sane to be a structure offset

@@ -149,16 +149,24 @@ public class Context {
                 continue;
             }
 
+            SymbolExpr expr;
+            if (symbol.isGlobal()) {
+                expr = new SymbolExpr.Builder()
+                        .global(symbol.getSymbol().getAddress(), symbol)
+                        .build();
+            }
+            else {
+                expr = new SymbolExpr.Builder()
+                        .rootSymbol(symbol)
+                        .build();
+            }
+
             // Initialize the dataFlowFacts using the interested varnodes and add
             // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
             // TODO: this may cause flow-insensitive, ... we can improve it in the future
             for (var vn: highVar.getInstances()) {
                 addTracedVarnode(funcNode, vn);
-                var symExpr = new SymbolExpr.Builder()
-                                .rootSymbol(symbol)
-                                .build();
-
-                addNewSymbolExpr(funcNode, vn, symExpr);
+                addNewSymbolExpr(funcNode, vn, expr);
             }
         }
     }

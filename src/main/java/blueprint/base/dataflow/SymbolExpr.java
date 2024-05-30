@@ -1,6 +1,7 @@
 package blueprint.base.dataflow;
 
 import blueprint.utils.Logging;
+import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighSymbol;
 
@@ -29,10 +30,14 @@ public class SymbolExpr {
 
     public boolean isConst = false;
     public boolean isGlobal = false;
+    public Address globalAddr = null;
 
     private static final Map<Integer, SymbolExpr> cache = new HashMap<>();
 
     public SymbolExpr(Builder builder) {
+        // Be careful, for global variables, the same global variable have different HighSymbol instances
+        // in different functions.
+        // TODO: what about Global variable's complex SymbolExpr?
         this.baseExpr = builder.baseExpr;
         this.indexExpr = builder.indexExpr;
         this.scaleExpr = builder.scaleExpr;
@@ -43,6 +48,8 @@ public class SymbolExpr {
         this.reference = builder.reference;
         this.nestedExpr = builder.nestedExpr;
         this.isConst = builder.isConst;
+        this.isGlobal = builder.isGlobal;
+        this.globalAddr = builder.globalAddr;
 
         if (this.dereference && this.nestedExpr == null) {
             throw new IllegalArgumentException("Dereference expression must have a nested expression.");
@@ -52,18 +59,17 @@ public class SymbolExpr {
             throw new IllegalArgumentException("Dereference expression cannot have offset.");
         }
 
-        if (!isNoZeroConst()) {
-            var rootSymbol = getRootSymExpr().getRootSymbol();
-            if (!rootSymbol.isGlobal()) {
-                this.function = rootSymbol.getHighFunction().getFunction();
-                this.prefix = this.function.getName();
-            } else {
-                this.prefix = "Global";
-                this.isGlobal = true;
-            }
-        } else {
+        if (isGlobal) {
+            this.prefix = "Global";
+        } else if (isConst()) {
             this.prefix = "Constant";
+        } else {
+            var rootSymbol = getRootSymExpr().getRootSymbol();
+            this.function = rootSymbol.getHighFunction().getFunction();
+            this.prefix = this.function.getName();
         }
+
+        Logging.info("Created new SymbolExpr: " + this);
     }
 
     public SymbolExpr getBase() {
@@ -158,7 +164,6 @@ public class SymbolExpr {
         return null;
     }
 
-
     public String getRepresentation() {
         StringBuilder sb = new StringBuilder();
         if (baseExpr != null) {
@@ -191,24 +196,38 @@ public class SymbolExpr {
         return sb.toString();
     }
 
+    // IMPORTANT: modified the equals and hashCode should be careful the cache mechanism in Builder
     @Override
     public int hashCode() {
-        return Objects.hash(baseExpr, indexExpr, scaleExpr, offsetExpr, rootSym, constant, dereference, reference, nestedExpr);
+        if (isGlobal) {
+            return Objects.hash(globalAddr);
+        }
+        else {
+            return Objects.hash(baseExpr, indexExpr, scaleExpr,
+                    offsetExpr, rootSym, constant,
+                    dereference, reference, nestedExpr,
+                    isConst);
+        }
     }
 
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof SymbolExpr that)) return false;
-        return constant == that.constant &&
-                dereference == that.dereference &&
-                reference == that.reference &&
-                Objects.equals(baseExpr, that.baseExpr) &&
-                Objects.equals(indexExpr, that.indexExpr) &&
-                Objects.equals(scaleExpr, that.scaleExpr) &&
-                Objects.equals(offsetExpr, that.offsetExpr) &&
-                Objects.equals(rootSym, that.rootSym) &&
-                Objects.equals(nestedExpr, that.nestedExpr);
+        if (isGlobal) {
+            return Objects.equals(globalAddr, that.globalAddr);
+        } else {
+            return Objects.equals(baseExpr, that.baseExpr) &&
+                    Objects.equals(indexExpr, that.indexExpr) &&
+                    Objects.equals(scaleExpr, that.scaleExpr) &&
+                    Objects.equals(offsetExpr, that.offsetExpr) &&
+                    Objects.equals(rootSym, that.rootSym) &&
+                    constant == that.constant &&
+                    dereference == that.dereference &&
+                    reference == that.reference &&
+                    Objects.equals(nestedExpr, that.nestedExpr) &&
+                    isConst == that.isConst;
+        }
     }
 
     @Override
@@ -230,6 +249,8 @@ public class SymbolExpr {
         private boolean reference = false;
         private SymbolExpr nestedExpr = null;
         private boolean isConst = false;
+        private boolean isGlobal = false;
+        private Address globalAddr = null;
 
         public Builder base(SymbolExpr base) {
             this.baseExpr = base;
@@ -274,12 +295,28 @@ public class SymbolExpr {
             return this;
         }
 
+        public Builder global(Address globalAddr, HighSymbol symbol) {
+            this.isGlobal = true;
+            this.globalAddr = globalAddr;
+            this.rootSymbol(symbol);
+            return this;
+        }
+
         public SymbolExpr build() {
             if ((indexExpr != null && scaleExpr == null) || (indexExpr == null && scaleExpr != null)) {
                 throw new IllegalArgumentException("indexExpr and scaleExpr must either both be null or both be non-null.");
             }
 
-            int hash = Objects.hash(baseExpr, indexExpr, scaleExpr, offsetExpr, rootSym, constant, dereference, reference, nestedExpr);
+            int hash;
+            if (isGlobal) {
+                hash = Objects.hash(globalAddr);
+            } else {
+                hash = Objects.hash(baseExpr, indexExpr, scaleExpr,
+                        offsetExpr, rootSym, constant,
+                        dereference, reference, nestedExpr,
+                        isConst);
+            }
+
             if (cache.containsKey(hash)) {
                 return cache.get(hash);
             }
