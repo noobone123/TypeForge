@@ -42,7 +42,7 @@ public class CallGraph extends GraphBase<Function> {
         Set<Function> possibleRoots = new HashSet<>();
 
         for (var func : Global.currentProgram.getListing().getFunctions(true)) {
-            // These functions should not be seen as root nodes of a call graph
+            // These functions should not be seen as nodes of a call graph
             if (!FunctionHelper.isMeaningfulFunction(func)) {
                 continue;
             }

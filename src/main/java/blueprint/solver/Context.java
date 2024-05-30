@@ -35,12 +35,21 @@ public class Context {
 
         /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
         public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
+        public SymbolExpr returnExpr;
         public int dataFlowFactKSize = 10;
 
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
             this.tracedVarnodes = new HashSet<>();
             this.dataFlowFacts = new HashMap<>();
+        }
+
+        public void setReturnExpr(SymbolExpr expr) {
+            this.returnExpr = expr;
+        }
+
+        public SymbolExpr getReturnExpr() {
+            return this.returnExpr;
         }
     }
 
@@ -173,7 +182,7 @@ public class Context {
         }
     }
 
-    public boolean isInterestedVn(FunctionNode funcNode, Varnode vn) {
+    public boolean isTracedVn(FunctionNode funcNode, Varnode vn) {
         var intraCtx = intraCtxMap.get(funcNode);
         return intraCtx.tracedVarnodes.contains(vn);
     }
@@ -223,7 +232,8 @@ public class Context {
         // In PCodeVisitor, we mark `local + 0x10` and `a` as TypeAlias, but there is no AP for `local + 0x10`, so
         // in the first parsing, we can not get the constraints for `local + 0x10`, but after merging, local + 0x10
         // and `a` has the same constraints, so we should reparse these new added SymbolExprs.
-        for (var symExpr : symExprToConstraints.keySet()) {
+        var newtmp = new HashSet<>(symExprToConstraints.keySet());
+        for (var symExpr : newtmp) {
             if (!tmp.contains(symExpr)) {
                 Logging.info("[SymExpr] Re-parsing " + symExpr);
                 parseSymbolExpr(symExpr, null, 0, true);
@@ -365,7 +375,7 @@ public class Context {
 
 
     public TypeConstraint getConstraint(SymbolExpr symExpr) {
-        TypeConstraint constraint = null;
+        TypeConstraint constraint;
         if (symExprToConstraints.containsKey(symExpr)) {
             constraint = symExprToConstraints.get(symExpr);
         } else {

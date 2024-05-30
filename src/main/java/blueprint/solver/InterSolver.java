@@ -6,6 +6,8 @@ import blueprint.utils.*;
 
 import ghidra.program.model.address.Address;
 
+import java.util.List;
+
 public class InterSolver {
     Context ctx;
 
@@ -22,8 +24,13 @@ public class InterSolver {
     public void run() {
         while (!ctx.workList.isEmpty()) {
             FunctionNode funcNode = ctx.workList.poll();
+            if (!funcNode.isMeaningful) {
+                Logging.info("[Solver] Skip non-meaningful function: " + funcNode.value.getName());
+                continue;
+            }
+
             funcNode.decompile();
-            DecompilerHelper.dumpHighPcode(funcNode.hFunc);
+            funcNode.dumpHighPcode();
 
             // If the function is not a leaf function, we should
             // collect data-flow facts from its callee functions.
@@ -60,57 +67,34 @@ public class InterSolver {
         Address addr;
         FunctionNode funcNode;
 
-//        addr = FunctionHelper.getAddress(0x00119249); // network_merge_config_cpv
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
-//
-//        addr = FunctionHelper.getAddress(0x00119337); // network_merge_config
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
+        var addrList = List.of(
+            0x00119249, // network_merge_config_cpv
+            0x00119337, // network_merge_config
+            0x0012f820, // buffer_realloc
+            0x0012f905, // buffer_alloc_replace
+            0x0012fc86, // buffer_copy_string_len
+            0x00133b7c, // log_buffer_tstr
+                0x0012f978, // buffer_string_prepare_copy
+                0x0012fb09, // buffer_extend
+                0x0012fd8f, // buffer_append_str2
+                0x00130203, // utostr
+                0x00130485, // li_utostrn
+                0x001339f7, // buffer_clen
+                0x00133bd3, // log_buffer_timestamp
+            0x00133ab0, // buffer_clear
+                0x0012fe84, // buffer_append_iovec
+                0x00133d4b, // log_buffer_prefix
+            0x0013401b // log_buffer_prepare
+//            0x0013418f, // log_va_list
+//            0x00134309, // log_error
+//            0x0011b7de, // network_write_init
+//            0x0011a70a  // network_init
+        );
 
-
-        addr = FunctionHelper.getAddress(0x0012f820); //  buffer_realloc
-        funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
-
-        addr = FunctionHelper.getAddress(0x0012f905); //  buffer_alloc_replace
-        funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
-
-        addr = FunctionHelper.getAddress(0x0012fc86); //  buffer_copy_string_len
-        funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
-
-        addr = FunctionHelper.getAddress(0x00133b7c); // log_buffer_tstr
-        funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
-
-        addr = FunctionHelper.getAddress(0x00133bd3); // log_buffer_timestamp
-        funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
-//
-//        addr = FunctionHelper.getAddress(0x00133ab0); // buffer_clear
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
-//
-//        addr = FunctionHelper.getAddress(0x0013401b); // log_buffer_prepare
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
-//
-//        addr = FunctionHelper.getAddress(0x0013418f); // log_va_list
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
-//
-//        addr = FunctionHelper.getAddress(0x00134309); // log_error
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
-//
-//        addr = FunctionHelper.getAddress(0x0011b7de); // network_write_init
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
-//
-//        addr = FunctionHelper.getAddress(0x0011a70a); // network_init
-//        funcNode = cg.getNodebyAddr(addr);
-//        ctx.workList.add(funcNode);
+        for (var a : addrList) {
+            addr = FunctionHelper.getAddress(a);
+            funcNode = cg.getNodebyAddr(addr);
+            ctx.workList.add(funcNode);
+        }
     }
 }

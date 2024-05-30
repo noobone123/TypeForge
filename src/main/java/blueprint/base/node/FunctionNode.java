@@ -5,19 +5,14 @@ import blueprint.utils.Global;
 import blueprint.utils.Logging;
 
 import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
-import ghidra.app.decompiler.ClangLine;
-import ghidra.app.decompiler.ClangToken;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
-import ghidra.app.decompiler.component.DecompilerUtils;
 import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.program.model.data.ParameterDefinition;
 import ghidra.program.model.data.ParameterDefinitionImpl;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.VariableStorage;
-import ghidra.program.model.pcode.FunctionPrototype;
-import ghidra.program.model.pcode.HighFunction;
-import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.*;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 
@@ -25,7 +20,7 @@ import java.util.*;
 
 public class FunctionNode extends NodeBase<Function> {
     public List<HighSymbol> parameters = new LinkedList<>();
-    public VariableStorage returnStorage = null;
+    public HighSymbol returnSym = null;
     public Set<HighSymbol> localVariables = new HashSet<>();
     public Set<HighSymbol> globalVariables = new HashSet<>();
 
@@ -37,8 +32,8 @@ public class FunctionNode extends NodeBase<Function> {
     public boolean isNormal = false;
 
     public HighFunction hFunc = null;
-    public ArrayList<ClangLine> lines;
-    public ArrayList<ClangToken> tokens = new ArrayList<>();
+    public List<PcodeOp> pCodes = new LinkedList<>();
+    public PcodeOp returnOp = null;
     DecompileResults decompileResults = null;
 
     public FunctionNode(Function value, int id) {
@@ -48,9 +43,10 @@ public class FunctionNode extends NodeBase<Function> {
     public void setDecompileResult (DecompileResults res) {
         this.decompileResults = res;
         this.hFunc = res.getHighFunction();
-        if (updatePrototype()) {
-            updateLocalVariables();
-            updateGlobalVariables();
+        if (setPrototype()) {
+            setLocalVariables();
+            setGlobalVariables();
+            setHighPCode();
         } else {
             this.decompile();
         }
@@ -62,7 +58,7 @@ public class FunctionNode extends NodeBase<Function> {
      * This information can be found in `HighFunction` and we can utilize `HighFunctionDBUtil.commitParamsToDatabase`
      * to sync this information to database.
      */
-    private boolean updatePrototype() {
+    private boolean setPrototype() {
         if (hFunc == null) {
             Logging.warn("HighFunction is not set");
             return false;
@@ -82,7 +78,6 @@ public class FunctionNode extends NodeBase<Function> {
             }
         }
 
-        returnStorage = funcProto.getReturnStorage();
         return true;
 
         // Commit to database, then types and return can be found in Listing model
@@ -105,7 +100,7 @@ public class FunctionNode extends NodeBase<Function> {
      * Parse local variables from HighFunction.
      * !IMPORTANT: This method should be called after `parsePrototype` method.
      */
-    private void updateLocalVariables() {
+    private void setLocalVariables() {
         var localSymMap = hFunc.getLocalSymbolMap();
         for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();
@@ -116,7 +111,7 @@ public class FunctionNode extends NodeBase<Function> {
         }
     }
 
-    private void updateGlobalVariables() {
+    private void setGlobalVariables() {
         var globalSymMap = hFunc.getGlobalSymbolMap();
         for (Iterator<HighSymbol> it = globalSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();
@@ -149,6 +144,47 @@ public class FunctionNode extends NodeBase<Function> {
         ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(this.value.getEntryPoint(), funcDef, SourceType.USER_DEFINED);
         Global.ghidraScript.runCommand(cmd);
         Logging.info("Fixed function prototype: " + this.value.getName());
+    }
+
+
+    public void setHighPCode() {
+        for (var block : hFunc.getBasicBlocks()) {
+            var iter = block.getIterator();
+            while (iter.hasNext()) {
+                PcodeOp op = iter.next();
+                pCodes.add(op);
+                if (op.getOpcode() == PcodeOp.RETURN) {
+                    returnOp = op;
+                }
+            }
+        }
+    }
+
+    /**
+     * Dump HighVariable's HighPcode
+     */
+    public void dumpHighPcode() {
+        for (var pcode : pCodes) {
+            StringBuilder highPCodeInst = new StringBuilder();
+
+            //Output Pcode op's output Varnode
+            Varnode outVn = pcode.getOutput();
+            if (outVn != null) {
+                highPCodeInst.append(DecompilerHelper.getVarnodeString((VarnodeAST) outVn));
+            } else {
+                highPCodeInst.append("---"); //op with no output
+            }
+
+            //Output opcode itself
+            highPCodeInst.append("," + " ").append(pcode.getMnemonic());
+
+            //Output Pcode op's input Varnodes
+            for (int i = 0; i < pcode.getNumInputs(); ++i) {
+                highPCodeInst.append("," + " ").append(DecompilerHelper.getVarnodeString((VarnodeAST) pcode.getInput(i)));
+            }
+
+            Logging.info(highPCodeInst.toString());
+        }
     }
 
 

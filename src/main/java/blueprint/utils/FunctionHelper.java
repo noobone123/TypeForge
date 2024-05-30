@@ -48,7 +48,7 @@ public class FunctionHelper {
      */
     public static boolean isTrivialFunction(Function func) {
         Set<String> forbiddenName = Set.of("_init", "_start", "_fini", "__do_global_dtors_aux",
-                "frame_dummy", "deregister_tm_clones", "register_tm_clones");
+                "frame_dummy", "deregister_tm_clones", "register_tm_clones", "ck_assert_failed");
         return forbiddenName.contains(func.getName());
     }
 

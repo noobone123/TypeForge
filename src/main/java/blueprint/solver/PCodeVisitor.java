@@ -14,7 +14,6 @@ import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
 
-import java.lang.reflect.Type;
 import java.util.*;
 
 import static blueprint.utils.DecompilerHelper.getSigned;
@@ -63,7 +62,7 @@ public class PCodeVisitor {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAddOrSub(pcode);
                 }
-                case PcodeOp.COPY, PcodeOp.CAST, PcodeOp.SUBPIECE -> {
+                case PcodeOp.COPY, PcodeOp.CAST, PcodeOp.SUBPIECE, PcodeOp.INT_2COMP -> {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAssign(pcode);
                 }
@@ -103,6 +102,10 @@ public class PCodeVisitor {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleCall(pcode);
                 }
+                case PcodeOp.RETURN -> {
+                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    handleReturn(pcode);
+                }
             }
         }
     }
@@ -121,6 +124,11 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
 
+        if (!ctx.isTracedVn(funcNode, inputs[0])) {
+            Logging.debug("[PCode] " + inputs[0] + " is not traced");
+            return;
+        }
+
         var inputFact_0 = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact_0 != null;
 
@@ -135,6 +143,10 @@ public class PCodeVisitor {
                 }
             }
         } else {
+            if (!ctx.isTracedVn(funcNode, inputs[1])) {
+                Logging.debug("[PCode] " + inputs[1] + " is not traced");
+                return;
+            }
             var inputFact_1 = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
@@ -151,7 +163,7 @@ public class PCodeVisitor {
         var inputVn = pcodeOp.getInput(0);
         var outputVn = pcodeOp.getOutput();
 
-        if (!ctx.isInterestedVn(funcNode, inputVn)) {
+        if (!ctx.isTracedVn(funcNode, inputVn)) {
             return;
         }
 
@@ -183,6 +195,11 @@ public class PCodeVisitor {
      */
     private void handlePtrAdd(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
+
+        if (!ctx.isTracedVn(funcNode, inputs[0])) {
+            return;
+        }
+
         var input0Fact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert input0Fact != null;
 
@@ -209,6 +226,8 @@ public class PCodeVisitor {
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
             }
+
+            ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
         }
         else {
             Logging.warn(String.format("[PCode] PTRADD: %s + %s * %s can not resolve", inputs[0], inputs[1], inputs[2]));
@@ -290,7 +309,7 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
 
-        if (!ctx.isInterestedVn(funcNode, input)) {
+        if (!ctx.isTracedVn(funcNode, input)) {
             return;
         }
 
@@ -307,7 +326,7 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
 
-        if (!ctx.isInterestedVn(funcNode, input)) {
+        if (!ctx.isTracedVn(funcNode, input)) {
             return;
         }
 
@@ -324,7 +343,7 @@ public class PCodeVisitor {
         var input0 = pcodeOp.getInput(0);
         var input1 = pcodeOp.getInput(1);
 
-        if (!ctx.isInterestedVn(funcNode, input0) && !ctx.isInterestedVn(funcNode, input1)) {
+        if (!ctx.isTracedVn(funcNode, input0) && !ctx.isTracedVn(funcNode, input1)) {
             return;
         }
 
@@ -349,8 +368,24 @@ public class PCodeVisitor {
             var newExpr = multiply(symExpr, sizeExpr);
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
+        ctx.addTracedVarnode(funcNode, output);
     }
 
+
+    private void handleReturn(PcodeOp pcodeOp) {
+        for (var retVn : pcodeOp.getInputs()) {
+            if (!ctx.isTracedVn(funcNode, retVn)) {
+                Logging.warn("[PCode] Return value is not interested: " + retVn);
+                continue;
+            }
+
+            var retFacts = ctx.getIntraDataFlowFacts(funcNode, retVn);
+            for (var retExpr : retFacts) {
+                ctx.intraCtxMap.get(funcNode).setReturnExpr(retExpr);
+                Logging.info("[PCode] Set return expr: " + retExpr);
+            }
+        }
+    }
 
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
@@ -375,7 +410,7 @@ public class PCodeVisitor {
         // TODO: how to handle cases when arguments and parameters are inconsistency?
         for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
             var argVn = pcodeOp.getInput(inputIdx);
-            if (!ctx.isInterestedVn(funcNode, argVn)) {
+            if (!ctx.isTracedVn(funcNode, argVn)) {
                 Logging.warn("[PCode] Argument is not interested: " + argVn);
                 continue;
             }
