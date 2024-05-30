@@ -14,7 +14,6 @@ public class AccessPoints {
     public enum AccessType {
         LOAD,
         STORE,
-        ARGUMENT
     }
 
     /**

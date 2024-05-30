@@ -166,33 +166,38 @@ public class SymbolExpr {
 
     public String getRepresentation() {
         StringBuilder sb = new StringBuilder();
-        if (baseExpr != null) {
-            sb.append(baseExpr.getRepresentation());
-        }
-        if (baseExpr != null && indexExpr != null) {
-            sb.append(" + ");
-        }
-        if (indexExpr != null) {
-            sb.append(indexExpr.getRepresentation()).append(" * ").append(scaleExpr.getRepresentation());
-        }
-        if ((baseExpr != null || indexExpr != null) && offsetExpr != null) {
-            sb.append(" + ");
-        }
-        if (offsetExpr != null) {
-            sb.append(offsetExpr.getRepresentation());
-        }
         if (rootSym != null) {
             sb.append(rootSym.getName());
         }
-        if (constant != 0) {
+        else if (isConst) {
             sb.append("0x").append(Long.toHexString(constant));
         }
-        if (dereference) {
-            sb.append(String.format("*(%s)", nestedExpr.getRepresentation()));
+        else if (dereference) {
+            sb.append(String.format("*%s", nestedExpr.getRepresentation()));
         }
-        if (reference) {
-            sb.append(String.format("&(%s)", nestedExpr.getRepresentation()));
+        else if (reference) {
+            sb.append(String.format("&%s", nestedExpr.getRepresentation()));
         }
+        else {
+            sb.append("(");
+            if (baseExpr != null) {
+                sb.append(baseExpr.getRepresentation());
+            }
+            if (baseExpr != null && indexExpr != null) {
+                sb.append(" + ");
+            }
+            if (indexExpr != null) {
+                sb.append(indexExpr.getRepresentation()).append(" * ").append(scaleExpr.getRepresentation());
+            }
+            if ((baseExpr != null || indexExpr != null) && offsetExpr != null) {
+                sb.append(" + ");
+            }
+            if (offsetExpr != null) {
+                sb.append(offsetExpr.getRepresentation());
+            }
+            sb.append(")");
+        }
+
         return sb.toString();
     }
 

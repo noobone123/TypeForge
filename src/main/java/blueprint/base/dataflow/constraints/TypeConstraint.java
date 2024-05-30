@@ -39,7 +39,8 @@ public class TypeConstraint implements TypeDescriptor {
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
 
     public Set<Attribute> globalTags;
-    public Set<Long> size;
+    public Set<Long> totalSize;
+    public Set<Long> elementSize;
 
     /** The referenceTo is a map from current TypeConstraint's offset to the referenced TypeConstraint */
     public final HashMap<Long, HashSet<TypeConstraint>> referenceTo;
@@ -62,7 +63,8 @@ public class TypeConstraint implements TypeDescriptor {
         referencedBy = new HashMap<>();
 
         globalTags = new HashSet<>();
-        this.size = new HashSet<>();
+        this.totalSize = new HashSet<>();
+        this.elementSize = new HashSet<>();
     }
 
 
@@ -132,9 +134,14 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
-    public void setSize(long size) {
-        this.size.add(size);
-        Logging.info(String.format("[Constraint] %s setting size: %d", shortUUID, size));
+    public void setTotalSize(long size) {
+        this.totalSize.add(size);
+        Logging.info(String.format("[Constraint] %s setting total size: %d", shortUUID, size));
+    }
+
+    public void setElementSize(long size) {
+        this.elementSize.add(size);
+        Logging.info(String.format("[Constraint] %s setting element size: %d", shortUUID, size));
     }
 
     public void merge(TypeConstraint other) {
@@ -190,7 +197,8 @@ public class TypeConstraint implements TypeDescriptor {
         });
 
         // Merging size
-        this.size.addAll(other.size);
+        this.totalSize.addAll(other.totalSize);
+        this.elementSize.addAll(other.elementSize);
     }
 
 
@@ -202,11 +210,18 @@ public class TypeConstraint implements TypeDescriptor {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder("Constraint_" + shortUUID + " {\n");
-        if (!size.isEmpty()) {
-            sb.append("Possible Size: {");
-            size.forEach(s -> sb.append("0x").append(Long.toHexString(s)).append(", "));
+        if (!totalSize.isEmpty()) {
+            sb.append("Possible Total Size: {");
+            totalSize.forEach(s -> sb.append("0x").append(Long.toHexString(s)).append(", "));
             sb.append("}\n");
         }
+
+        if (!elementSize.isEmpty()) {
+            sb.append("Possible Element Size: {");
+            elementSize.forEach(s -> sb.append("0x").append(Long.toHexString(s)).append(", "));
+            sb.append("}\n");
+        }
+
         fieldMap.forEach((offset, typeMap) -> {
             sb.append("0x").append(Long.toHexString(offset)).append(" : {");
             typeMap.forEach((type, count) -> sb.append(type.getName()).append(" : ").append(count).append(", "));
@@ -244,9 +259,16 @@ public class TypeConstraint implements TypeDescriptor {
         return false;
     }
 
+    // In some cases, The FieldTag is not meaningful. For example, if there is a callsite
+    // foo(a, b + 1), the b + 1 is a constant, but the fieldTag is MAY_NESTED.
+    public boolean isMeaningful() {
+        return !fieldMap.isEmpty() || !totalSize.isEmpty() || !elementSize.isEmpty();
+    }
+
     public JsonNode getJsonObj(ObjectMapper mapper) {
         var rootNode = mapper.createObjectNode();
-        rootNode.put("size", size.isEmpty() ? Long.toHexString(0) : Long.toHexString(size.iterator().next()));
+        rootNode.put("TotalSize", totalSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(totalSize.iterator().next()));
+        rootNode.put("ElementSize", elementSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(elementSize.iterator().next()));
 
         var globalTagsArray = rootNode.putArray("globalTags");
         globalTags.forEach(tag -> globalTagsArray.add(tag.toString()));

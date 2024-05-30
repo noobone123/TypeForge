@@ -57,37 +57,60 @@ public class InterSolver {
         // intersting leaf nodes:
         // network_merge_config_cpv / buffer_truncate / fdevent_sched_close / fdlog_pipes_abandon_pids / config_merge_config_cpv
         // http_response_upgrade_read_body_unknown / mod_scgi_merge_config_cpv / ...
+        Address addr;
+        FunctionNode funcNode;
 
-        Address addr = FunctionHelper.getAddress(0x00119249); // network_merge_config_cpv
-        FunctionNode funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
+//        addr = FunctionHelper.getAddress(0x00119249); // network_merge_config_cpv
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x00119337); // network_merge_config
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x00119337); // network_merge_config
+
+        addr = FunctionHelper.getAddress(0x0012f820); //  buffer_realloc
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x00133ab0); // buffer_clear
+        addr = FunctionHelper.getAddress(0x0012f905); //  buffer_alloc_replace
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x0013401b); // log_buffer_prepare
+        addr = FunctionHelper.getAddress(0x0012fc86); //  buffer_copy_string_len
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x0013418f); // log_va_list
+        addr = FunctionHelper.getAddress(0x00133b7c); // log_buffer_tstr
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
 
-        addr = FunctionHelper.getAddress(0x00134309); // log_error
+        addr = FunctionHelper.getAddress(0x00133bd3); // log_buffer_timestamp
         funcNode = cg.getNodebyAddr(addr);
         ctx.workList.add(funcNode);
-
-        addr = FunctionHelper.getAddress(0x0011b7de); // network_write_init
-        funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
-
-        addr = FunctionHelper.getAddress(0x0011a70a); // network_init
-        funcNode = cg.getNodebyAddr(addr);
-        ctx.workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x00133ab0); // buffer_clear
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x0013401b); // log_buffer_prepare
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x0013418f); // log_va_list
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x00134309); // log_error
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x0011b7de); // network_write_init
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
+//
+//        addr = FunctionHelper.getAddress(0x0011a70a); // network_init
+//        funcNode = cg.getNodebyAddr(addr);
+//        ctx.workList.add(funcNode);
     }
 }

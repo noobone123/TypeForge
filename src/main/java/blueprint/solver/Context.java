@@ -53,6 +53,7 @@ public class Context {
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
     public AccessPoints AP;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
+    public HashSet<SymbolExpr> parsedSymExprs;
     public UnionFind<SymbolExpr> typeAlias;
 
     public Context(CallGraph cg) {
@@ -62,6 +63,7 @@ public class Context {
         this.intraCtxMap = new HashMap<>();
         this.AP = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
+        this.parsedSymExprs = new HashSet<>();
         this.typeAlias = new UnionFind<>();
     }
 
@@ -201,18 +203,48 @@ public class Context {
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
+    // TODO: add offset and Nested Constraints in Type Constraints, handle the cases of nested struct
     public void buildConstraints() {
         // Parsing all SymbolExpr collected from PCodeVisitor, save them into symExprToConstraints
         for (var symExpr : AP.getSymbolExprs()) {
-            parseSymbolExpr(symExpr, null, 0);
+            parseSymbolExpr(symExpr, null, 0, false);
         }
+
+        var tmp = new HashSet<>(symExprToConstraints.keySet());
 
         // merging Type according to the typeAlias
         mergeTypeAlias();
 
+        // After merging, the symExprToConstraints will be updated and more symExprs with Constraints will be
+        // added into the symExprToConstraints, so we need to reparse the new added SymbolExprs
+        // For example:
+        // There is a callsite: foo(local + 0x10, b), local + 0x10 is a ptr to Nested structure
+        // Function foo's prototype is void foo(struct A *a, int b).
+        // In PCodeVisitor, we mark `local + 0x10` and `a` as TypeAlias, but there is no AP for `local + 0x10`, so
+        // in the first parsing, we can not get the constraints for `local + 0x10`, but after merging, local + 0x10
+        // and `a` has the same constraints, so we should reparse these new added SymbolExprs.
+        for (var symExpr : symExprToConstraints.keySet()) {
+            if (!tmp.contains(symExpr)) {
+                Logging.info("[SymExpr] Re-parsing " + symExpr);
+                parseSymbolExpr(symExpr, null, 0, true);
+            }
+        }
+
+
         for (var constraint : symExprToConstraints.values()) {
             constraint.build();
         }
+
+        // Remove meaningLess constraints
+        var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
+        for (var symExpr : symExprToConstraints.keySet()) {
+            var constraint = symExprToConstraints.get(symExpr);
+            if (constraint.isMeaningful()) {
+                finalResult.put(symExpr, constraint);
+            }
+        }
+
+        symExprToConstraints = finalResult;
 
         Logging.info("[Constraint] Build constraints done.");
     }
@@ -239,6 +271,7 @@ public class Context {
 
                 for (var sym : cluster) {
                     symExprToConstraints.put(sym, mergedConstraint);
+                    Logging.info(String.format("[Alias] Set %s -> %s", sym, mergedConstraint.getName()));
                     updated.add(sym);
                 }
             }
@@ -249,7 +282,7 @@ public class Context {
     }
 
 
-    private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
+    private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth, boolean isReparsing) {
         if (expr == null) return;
 
         Logging.info("[SymExpr] Parsing " + expr + ", parentTypeConstraint: " + (parentTypeConstraint != null ? parentTypeConstraint.getName() : "null")
@@ -264,14 +297,15 @@ public class Context {
         // case: a or *(expr)
         if (expr.isRootSymExpr() || expr.isDereference()) {
             var constraint = getConstraint(expr);
-            updateConstraint(constraint, 0, parentTypeConstraint, AP.getAccessPoints(expr));
+
+            updateConstraint(constraint, 0, parentTypeConstraint, AP.getAccessPoints(expr), isReparsing);
 
             if (derefDepth > 0) {
                 constraint.setPtrLevel(offsetValue, derefDepth);
             }
 
             if (expr.isDereference()) {
-                parseSymbolExpr(expr.getNestedExpr(), constraint, derefDepth + 1);
+                parseSymbolExpr(expr.getNestedExpr(), constraint, derefDepth + 1, isReparsing);
             }
         }
 
@@ -286,7 +320,7 @@ public class Context {
                 return;
             }
 
-            updateConstraint(constraint, offsetValue, parentTypeConstraint, AP.getAccessPoints(expr));
+            updateConstraint(constraint, offsetValue, parentTypeConstraint, AP.getAccessPoints(expr), isReparsing);
 
             if (derefDepth > 0) {
                 constraint.setPtrLevel(offsetValue, derefDepth);
@@ -294,12 +328,12 @@ public class Context {
 
             if (index != null && scale != null) {
                 if (scale.isNoZeroConst()) {
-                    constraint.setSize(scale.getConstant());
+                    constraint.setElementSize(scale.getConstant());
                 }
             }
 
             if (base.isDereference()) {
-                parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1);
+                parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1, isReparsing);
             }
         }
 
@@ -309,7 +343,7 @@ public class Context {
     }
 
 
-    private void updateConstraint(TypeConstraint currentTC, long offsetValue, TypeConstraint parentTC, Set<AccessPoints. AP> APs) {
+    private void updateConstraint(TypeConstraint currentTC, long offsetValue, TypeConstraint parentTC, Set<AccessPoints. AP> APs, boolean isReparsing) {
         if (parentTC != null) {
             parentTC.addReferencedBy(offsetValue, currentTC);
             currentTC.addReferenceTo(offsetValue, parentTC);
@@ -317,18 +351,13 @@ public class Context {
         // If remove else {} block, the addFieldConstraint will be called
         // each time parsing a NestedExpr, this may cause the same APs to be added multiple times
         else {
+            if (isReparsing) {
+                return;
+            }
+
             for (var ap: APs) {
                 if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE) {
                     currentTC.addFieldConstraint(offsetValue, ap);
-                }
-                else if (ap.accessType == AccessPoints.AccessType.ARGUMENT) {
-                    if (offsetValue != 0) {
-                        currentTC.addFieldConstraint(offsetValue, ap);
-                        currentTC.addFieldTag(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
-                    }
-                    else {
-                        currentTC.addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
-                    }
                 }
             }
         }

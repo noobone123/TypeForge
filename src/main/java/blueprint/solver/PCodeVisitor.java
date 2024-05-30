@@ -63,7 +63,7 @@ public class PCodeVisitor {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAddOrSub(pcode);
                 }
-                case PcodeOp.COPY, PcodeOp.CAST -> {
+                case PcodeOp.COPY, PcodeOp.CAST, PcodeOp.SUBPIECE -> {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAssign(pcode);
                 }
@@ -121,10 +121,8 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
 
-        ctx.addTracedVarnode(funcNode, output);
         var inputFact_0 = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
         assert inputFact_0 != null;
-
 
         if (inputs[1].isConstant()) {
             for (var symExpr: inputFact_0) {
@@ -133,6 +131,7 @@ public class PCodeVisitor {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
                     var newExpr = add(symExpr, deltaSym);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
+                    ctx.addTracedVarnode(funcNode, output);
                 }
             }
         } else {
@@ -141,6 +140,7 @@ public class PCodeVisitor {
                 for (var symExpr_1: inputFact_1) {
                     var newExpr = add(symExpr, symExpr_1);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
+                    ctx.addTracedVarnode(funcNode, output);
                 }
             }
         }
@@ -385,7 +385,7 @@ public class PCodeVisitor {
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.setTypeAlias(argExpr, paramExpr);
-                ctx.addAccessPoint(argExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
+                ctx.getConstraint(argExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
             }
         }
     }
@@ -472,8 +472,8 @@ public class PCodeVisitor {
                     var symExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
                     for (var symExpr : symExprs) {
                         var constraint = ctx.getConstraint(symExpr);
-                        constraint.setSize(lengthArg.getOffset());
-                        ctx.addAccessPoint(symExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
+                        constraint.setTotalSize(lengthArg.getOffset());
+                        ctx.getConstraint(symExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
                         Logging.info("[PCode] memset: " + symExpr + " size: " + lengthArg.getOffset());
                     }
                 }
@@ -492,10 +492,10 @@ public class PCodeVisitor {
                         if (lengthVn.isConstant()) {
                             var dstConstraint = ctx.getConstraint(dstExpr);
                             var srcConstraint = ctx.getConstraint(srcExpr);
-                            dstConstraint.setSize(lengthVn.getOffset());
-                            srcConstraint.setSize(lengthVn.getOffset());
-                            ctx.addAccessPoint(dstExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
-                            ctx.addAccessPoint(srcExpr, pcodeOp, new DummyType("Arg"), AccessPoints.AccessType.ARGUMENT);
+                            dstConstraint.setTotalSize(lengthVn.getOffset());
+                            srcConstraint.setTotalSize(lengthVn.getOffset());
+                            ctx.getConstraint(dstExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
+                            ctx.getConstraint(srcExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
                             Logging.info("[PCode] memcpy size: " + lengthVn.getOffset());
                         }
                     }
@@ -615,11 +615,8 @@ public class PCodeVisitor {
      * @return true if the offset is sane
      */
     private boolean OffsetSanityCheck(long offset) {
-        if (offset < 0) {
-            return false;
-        }
         // TODO: 0x2000 is a reasonable limit for a structure ?
-        else return offset <= 0x2000;
+        return offset <= 0x2000;
     }
 
 
