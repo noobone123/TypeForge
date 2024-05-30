@@ -35,21 +35,22 @@ public class Context {
 
         /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
         public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
-        public SymbolExpr returnExpr;
+        public HashSet<SymbolExpr> returnExprs;
         public int dataFlowFactKSize = 10;
 
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
             this.tracedVarnodes = new HashSet<>();
             this.dataFlowFacts = new HashMap<>();
+            this.returnExprs = new HashSet<>();
         }
 
         public void setReturnExpr(SymbolExpr expr) {
-            this.returnExpr = expr;
+            this.returnExprs.add(expr);
         }
 
-        public SymbolExpr getReturnExpr() {
-            return this.returnExpr;
+        public Set<SymbolExpr> getReturnExpr() {
+            return this.returnExprs;
         }
     }
 

@@ -58,6 +58,8 @@ public class InterSolver {
     private void buildWorkList() {
         // TODO: implement algorithm to build worklist which first process the leaf nodes in the call graph
         // TODO: and then process the non-leaf nodes in the call graph hierarchically.
+        // Should traverse the call graph from the leaf nodes to the root nodes, because the handle of Return Value.
+        // So if caller want to merge the return value's expression, the callee's expression should be solved first.
     }
 
     private void buildWorkListTest() {

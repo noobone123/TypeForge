@@ -13,6 +13,7 @@ import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
+import groovy.util.logging.Log;
 
 import java.util.*;
 
@@ -390,11 +391,6 @@ public class PCodeVisitor {
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
         var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
-        // TODO: set return value into type alias
-        var returnVn = pcodeOp.getOutput();
-        if (returnVn != null) {
-            Logging.info("[PCode] Return value: " + returnVn);
-        }
 
         if (calleeNode.isExternal) {
             handleExternalCall(pcodeOp, calleeNode);
@@ -405,6 +401,31 @@ public class PCodeVisitor {
             Logging.warn("Callee function is not solved yet: " + calleeNode.value.getName());
             return;
         }
+
+        var actualRetVn = pcodeOp.getOutput();
+        if (actualRetVn != null) {
+            var actualRetFacts = ctx.getIntraDataFlowFacts(funcNode, actualRetVn);
+            var formalRetExprs = ctx.intraCtxMap.get(calleeNode).getReturnExpr();
+            if (formalRetExprs == null) {
+                Logging.warn("[PCode] Formal return value is not set but actual return value is traced");
+            } else {
+                if (actualRetFacts == null) {
+                    // TODO: is this right?
+                    for (var formalRetExpr : formalRetExprs) {
+                        ctx.addNewSymbolExpr(funcNode, actualRetVn, formalRetExpr);
+                        Logging.info("[PCode] Set return expr from callee: " + formalRetExpr);
+                    }
+                } else {
+                    for (var actualRetExpr : actualRetFacts) {
+                        for (var formalRetExpr : formalRetExprs) {
+                            ctx.setTypeAlias(actualRetExpr, formalRetExpr);
+                        }
+                    }
+                }
+
+            }
+        }
+
         Logging.info("Callee function: " + calleeNode.value.getName() + " is solved");
 
         // TODO: how to handle cases when arguments and parameters are inconsistency?
