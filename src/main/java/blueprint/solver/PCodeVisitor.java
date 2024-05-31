@@ -400,33 +400,34 @@ public class PCodeVisitor {
         if (!ctx.isFunctionSolved(calleeNode)) {
             Logging.warn("Callee function is not solved yet: " + calleeNode.value.getName());
             return;
+        } else {
+            Logging.info("Callee function: " + calleeNode.value.getName() + " is solved");
         }
 
-        var actualRetVn = pcodeOp.getOutput();
-        if (actualRetVn != null) {
-            var actualRetFacts = ctx.getIntraDataFlowFacts(funcNode, actualRetVn);
-            var formalRetExprs = ctx.intraCtxMap.get(calleeNode).getReturnExpr();
-            if (formalRetExprs == null) {
-                Logging.warn("[PCode] Formal return value is not set but actual return value is traced");
+        var receiverVn = pcodeOp.getOutput();
+        if (receiverVn != null) {
+            var retExprs = ctx.intraCtxMap.get(calleeNode).getReturnExpr();
+            if (retExprs.isEmpty()) {
+                Logging.warn("[PCode] Callee's Return Value is not set but Receiver exists.");
             } else {
-                if (actualRetFacts == null) {
-                    // TODO: is this right?
-                    for (var formalRetExpr : formalRetExprs) {
-                        ctx.addNewSymbolExpr(funcNode, actualRetVn, formalRetExpr);
-                        Logging.info("[PCode] Set return expr from callee: " + formalRetExpr);
-                    }
-                } else {
-                    for (var actualRetExpr : actualRetFacts) {
-                        for (var formalRetExpr : formalRetExprs) {
-                            ctx.setTypeAlias(actualRetExpr, formalRetExpr);
+                Logging.info("[PCode] Setting Receiver ...");
+                var receiverFacts = ctx.getIntraDataFlowFacts(funcNode, receiverVn);
+                if (receiverFacts != null) {
+                    for (var receiverExpr : receiverFacts) {
+                        for (var retValueExpr : retExprs) {
+                            ctx.setTypeAlias(receiverExpr, retValueExpr);
                         }
                     }
                 }
-
+                // If receiverFacts has no corresponding symbolExpr
+                else {
+                    for (var retValueExpr : retExprs) {
+                        ctx.addNewSymbolExpr(funcNode, receiverVn, retValueExpr);
+                    }
+                    ctx.addTracedVarnode(funcNode, receiverVn);
+                }
             }
         }
-
-        Logging.info("Callee function: " + calleeNode.value.getName() + " is solved");
 
         // TODO: how to handle cases when arguments and parameters are inconsistency?
         for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
