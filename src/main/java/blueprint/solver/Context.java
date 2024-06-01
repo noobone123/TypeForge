@@ -3,6 +3,7 @@ package blueprint.solver;
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.UnionFind;
+import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.constraints.TypeDescriptor;
 import blueprint.base.graph.CallGraph;
@@ -11,6 +12,7 @@ import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import ghidra.program.model.data.*;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
@@ -152,34 +154,62 @@ public class Context {
         var intraCtx = intraCtxMap.get(funcNode);
         // Update the interestedVn
         for (var symbol: intraCtx.tracedSymbols) {
-            var highVar = symbol.getHighVariable();
             Logging.info("Candidate HighSymbol: " + symbol.getName());
 
-            // If a HighSymbol (like a parameter) is not be used in the function, it can not hold a HighVariable
-            if (highVar == null) {
-                Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + symbol.getName() + " has no HighVariable");
-                continue;
-            }
-
             SymbolExpr expr;
+            TypeConstraint constraint;
+            var dataType = symbol.getDataType();
             if (symbol.isGlobal()) {
-                expr = new SymbolExpr.Builder()
-                        .global(symbol.getSymbol().getAddress(), symbol)
-                        .build();
-            }
-            else {
-                expr = new SymbolExpr.Builder()
-                        .rootSymbol(symbol)
-                        .build();
+                expr = new SymbolExpr.Builder().global(symbol.getSymbol().getAddress(), symbol).build();
+                constraint = getConstraint(expr);
+                constraint.addGlobalTag(TypeConstraint.Attribute.GLOBAL);
+            } else {
+                expr = new SymbolExpr.Builder().rootSymbol(symbol).build();
+                if (dataType instanceof Array || dataType instanceof Structure || dataType instanceof Union) {
+                    expr = SymbolExpr.reference(this, expr);
+                }
+                constraint = getConstraint(expr);
+                constraint.addGlobalTag(TypeConstraint.Attribute.LOCAL);
             }
 
-            // Initialize the dataFlowFacts using the interested varnodes and add
-            // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
-            // TODO: this may cause flow-insensitive, ... we can improve it in the future
-            for (var vn: highVar.getInstances()) {
-                addTracedVarnode(funcNode, vn);
-                addNewSymbolExpr(funcNode, vn, expr);
+            if (dataType instanceof Array array) {
+                Logging.info("Found decompiler recovered Array " + dataType.getName());
+                constraint.setTotalSize(array.getLength());
+                constraint.addGlobalTag(TypeConstraint.Attribute.ARRAY);
+                constraint.setElementSize(array.getElementLength());
             }
+            else if (dataType instanceof Structure structure) {
+                Logging.info("Found decompiler recovered Structure " + dataType.getName());
+                constraint.setTotalSize(structure.getLength());
+                constraint.addGlobalTag(TypeConstraint.Attribute.STRUCT);
+                for (var field: structure.getComponents()) {
+                    constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
+                }
+            }
+            else if (dataType instanceof Union union) {
+                Logging.info("Found decompiler recovered Union " + dataType.getName());
+                constraint.setTotalSize(union.getLength());
+                constraint.addGlobalTag(TypeConstraint.Attribute.UNION);
+                for (var field: union.getComponents()) {
+                    constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
+                }
+            }
+
+            // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:
+            // 1. HighSymbol is not used in the function
+            // 2. HighSymbol is used in the function, but ghidra's decompiler failed to find the HighVariable
+            if (symbol.getHighVariable() == null) {
+                Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + symbol.getName() + " has no HighVariable");
+            } else {
+                // Initialize the dataFlowFacts using the interested varnodes and add
+                // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
+                // TODO: this may cause flow-insensitive, ... we can improve it in the future
+                for (var vn: symbol.getHighVariable().getInstances()) {
+                    addTracedVarnode(funcNode, vn);
+                    addNewSymbolExpr(funcNode, vn, expr);
+                }
+            }
+
         }
     }
 

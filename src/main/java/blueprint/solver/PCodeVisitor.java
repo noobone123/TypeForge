@@ -63,7 +63,7 @@ public class PCodeVisitor {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAddOrSub(pcode);
                 }
-                case PcodeOp.COPY, PcodeOp.CAST, PcodeOp.SUBPIECE, PcodeOp.INT_2COMP -> {
+                case PcodeOp.COPY, PcodeOp.CAST, PcodeOp.SUBPIECE -> {
                     Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
                     handleAssign(pcode);
                 }
@@ -138,7 +138,7 @@ public class PCodeVisitor {
                 var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = add(symExpr, deltaSym);
+                    var newExpr = SymbolExpr.add(ctx, symExpr, deltaSym);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
                     ctx.addTracedVarnode(funcNode, output);
                 }
@@ -151,7 +151,7 @@ public class PCodeVisitor {
             var inputFact_1 = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
-                    var newExpr = add(symExpr, symExpr_1);
+                    var newExpr = SymbolExpr.add(ctx, symExpr, symExpr_1);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
                     ctx.addTracedVarnode(funcNode, output);
                 }
@@ -209,7 +209,7 @@ public class PCodeVisitor {
                 var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = add(symExpr, deltaSym);
+                    var newExpr = SymbolExpr.add(ctx, symExpr, deltaSym);
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
             }
@@ -218,12 +218,19 @@ public class PCodeVisitor {
         }
         // inputs[1] is index and inputs[2] is element size
         else if (!inputs[1].isConstant() && inputs[2].isConstant()) {
-            var scaleExpr = new SymbolExpr.Builder().constant(getSigned(inputs[2])).build();
+            if (!ctx.isTracedVn(funcNode, inputs[1])) {
+                return;
+            }
+            var scaleValue = getSigned(inputs[2]);
+            if (!OffsetSanityCheck(scaleValue)) {
+                return;
+            }
+            var scaleExpr = new SymbolExpr.Builder().constant(scaleValue).build();
             for (var symExpr: input0Fact) {
                 var indexFacts = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
                 for (var indexExpr: indexFacts) {
                     ctx.getConstraint(symExpr).addGlobalTag(TypeConstraint.Attribute.MAY_ARRAY);
-                    var newExpr = add(symExpr, multiply(indexExpr, scaleExpr));
+                    var newExpr = SymbolExpr.add(ctx, symExpr, SymbolExpr.multiply(ctx, indexExpr, scaleExpr));
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
             }
@@ -247,23 +254,28 @@ public class PCodeVisitor {
 
         if (base.isRegister()) {
             var reg = Global.currentProgram.getRegister(base);
-            // may be a reference of a local variable
+            // may be a reference of a local array or a stack structure or a stack array.
+            // For Example:
+            // 114_(unique, 0x3200, 8)[noHighSym], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16700_(const, 0xffffffffffffff58, 8)[local_a8]
+            // 133_(unique, 0x3200, 8)[local_28], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16702_(const, 0xffffffffffffff58, 8)[local_a8]
+            // 133_(unique, 0x3200, 8) and 114_(unique, 0x3200, 8) are actually the same symbol, but ghidra internal can not resolve it, so we manually recover it
+            // 114_(unique, 0x3200, 8)[noHighSym] has no initial Facts but 133_(unique, 0x3200, 8)[local_28] has initial Facts
             if (reg.getName().equals("RSP")) {
-                var refSym = inputs[1].getHigh().getSymbol();
-                if (refSym != null) {
-                    var refSymExpr = reference(new SymbolExpr.Builder().rootSymbol(refSym).build());
+                var sym = inputs[1].getHigh().getSymbol();
+                if (sym != null) {
+                    var expr = new SymbolExpr.Builder().rootSymbol(sym).build();
+                    if (!ctx.symExprToConstraints.containsKey(expr)) {
+                        Logging.info("[PCode] PTRSUB: Found new uninitialized symbol: " + expr);
+                        expr = SymbolExpr.reference(ctx, expr);
+                    }
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
-                    // For Example:
-                    // 114_(unique, 0x3200, 8)[noHighSym], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16700_(const, 0xffffffffffffff58, 8)[local_a8]
-                    // 133_(unique, 0x3200, 8)[local_28], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16702_(const, 0xffffffffffffff58, 8)[local_a8]
-                    // 133_(unique, 0x3200, 8) and 114_(unique, 0x3200, 8) are actually the same symbol, but ghidra internal can not resolve it, so we manually recover it
-                    // 114_(unique, 0x3200, 8)[noHighSym] has no initial Facts but 133_(unique, 0x3200, 8)[local_28] has initial Facts
+
                     if (outputFacts == null) {
                         ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), refSymExpr);
+                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), expr);
                     } else {
                         for (var fact : outputFacts) {
-                            ctx.setTypeAlias(fact, refSymExpr);
+                            ctx.setTypeAlias(fact, expr);
                         }
                     }
                 }
@@ -358,18 +370,20 @@ public class PCodeVisitor {
         long size = 0;
         if (input0.isConstant()) {
             inputFacts = ctx.getIntraDataFlowFacts(funcNode, input1);
-            size = input0.getOffset();
+            size = getSigned(input0);
         } else {
             inputFacts = ctx.getIntraDataFlowFacts(funcNode, input0);
-            size = input1.getOffset();
+            size = getSigned(input1);
         }
 
-        var sizeExpr = new SymbolExpr.Builder().constant(size).build();
-        for (var symExpr : inputFacts) {
-            var newExpr = multiply(symExpr, sizeExpr);
-            ctx.addNewSymbolExpr(funcNode, output, newExpr);
+        if (OffsetSanityCheck(size)) {
+            var sizeExpr = new SymbolExpr.Builder().constant(size).build();
+            for (var symExpr : inputFacts) {
+                var newExpr = SymbolExpr.multiply(ctx, symExpr, sizeExpr);
+                ctx.addNewSymbolExpr(funcNode, output, newExpr);
+            }
+            ctx.addTracedVarnode(funcNode, output);
         }
-        ctx.addTracedVarnode(funcNode, output);
     }
 
 
@@ -480,7 +494,7 @@ public class PCodeVisitor {
             var type = new PrimitiveTypeDescriptor(outDT);
             ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
 
-            var newExpr = dereference(symExpr);
+            var newExpr = SymbolExpr.dereference(ctx, symExpr);
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
     }
@@ -540,6 +554,9 @@ public class PCodeVisitor {
                 var dstVn = pcodeOp.getInput(1);
                 var srcVn = pcodeOp.getInput(2);
                 var lengthVn = pcodeOp.getInput(3);
+                if (!ctx.isTracedVn(funcNode, dstVn) || !ctx.isTracedVn(funcNode, srcVn)) {
+                    return;
+                }
                 var dstExprs = ctx.getIntraDataFlowFacts(funcNode, dstVn);
                 var srcExprs = ctx.getIntraDataFlowFacts(funcNode, srcVn);
                 for (var dstExpr : dstExprs) {
@@ -562,110 +579,6 @@ public class PCodeVisitor {
         }
     }
 
-
-    public SymbolExpr add(SymbolExpr a, SymbolExpr b) {
-        if (a.hasIndexScale() && b.hasIndexScale()) {
-            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
-        }
-
-        // ensure that the constant value is always on the right side of the expression
-        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
-            return add(b, a);
-        }
-        // ensure that the index * scale is always on the right side of base
-        if (a.hasIndexScale() && !a.hasBase()) {
-            if (!b.isConst()) {
-                return add(b, a);
-            }
-        }
-
-        SymbolExpr.Builder builder = new SymbolExpr.Builder();
-        if (a.isConst() && b.isConst()) {
-            builder.constant(a.constant + b.constant);
-        }
-        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
-            if (b.hasIndexScale()) {
-                // Set `base + index * scale` and `base` type alias
-                ctx.setTypeAlias(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build());
-                builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
-            } else {
-                builder.base(a).offset(b);
-            }
-        }
-        else if (!a.hasBase() && a.hasIndexScale()) {
-            if (a.hasOffset()) {
-                builder.index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
-            } else {
-                builder.index(a.indexExpr).scale(a.scaleExpr).offset(b);
-            }
-        }
-
-        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
-            builder.base(a.baseExpr).offset(add(a.offsetExpr, b));
-        }
-        else if (a.hasBase() && a.hasIndexScale()) {
-            if (a.hasOffset()) {
-                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
-            } else {
-                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(b);
-            }
-        }
-        else {
-            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
-        }
-
-        return builder.build();
-    }
-
-    public SymbolExpr multiply(SymbolExpr a, SymbolExpr b) {
-        if (!a.isConst() && !b.isConst) {
-            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
-        }
-
-        // ensure that the constant value is always on the right side of the expression
-        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
-            return multiply(b, a);
-        }
-
-        SymbolExpr.Builder builder = new SymbolExpr.Builder();
-        if (a.isConst() && b.isConst()) {
-            builder.constant(a.constant * b.constant);
-        }
-        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
-            builder.index(a).scale(b);
-        }
-        else if (!a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            builder.index(a.indexExpr).scale(multiply(a.scaleExpr, b));
-        }
-        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
-            builder.index(a).scale(b);
-        }
-        else {
-            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
-        }
-
-        return builder.build();
-    }
-
-
-    public SymbolExpr dereference(SymbolExpr a) {
-        if (a.isNoZeroConst()) {
-            throw new IllegalArgumentException("Cannot dereference a constant value.");
-        }
-        var newExpr = new SymbolExpr.Builder().dereference(a).build();
-        if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            ctx.setTypeAlias(newExpr, new SymbolExpr.Builder().dereference(a.baseExpr).build());
-        }
-        return newExpr;
-    }
-
-    public SymbolExpr reference(SymbolExpr a) {
-        if (a.isNoZeroConst()) {
-            throw new IllegalArgumentException("Cannot reference a constant value.");
-        }
-        return new SymbolExpr.Builder().reference(a).build();
-    }
-
     /**
      * Check if the offset is sane to be a structure offset
      * @param offset the offset
@@ -673,6 +586,9 @@ public class PCodeVisitor {
      */
     private boolean OffsetSanityCheck(long offset) {
         // TODO: 0x2000 is a reasonable limit for a structure ?
+        if (offset < 0) {
+            return false;
+        }
         return offset <= 0x2000;
     }
 

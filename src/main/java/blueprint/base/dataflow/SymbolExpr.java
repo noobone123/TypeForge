@@ -1,5 +1,6 @@
 package blueprint.base.dataflow;
 
+import blueprint.solver.Context;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
@@ -291,12 +292,16 @@ public class SymbolExpr {
         public Builder dereference(SymbolExpr nested) {
             this.dereference = true;
             this.nestedExpr = nested;
+            this.isGlobal = nested.isGlobal;
+            this.globalAddr = nested.globalAddr;
             return this;
         }
 
         public Builder reference(SymbolExpr nested) {
             this.reference = true;
             this.nestedExpr = nested;
+            this.isGlobal = nested.isGlobal;
+            this.globalAddr = nested.globalAddr;
             return this;
         }
 
@@ -330,5 +335,110 @@ public class SymbolExpr {
             cache.put(hash, expr);
             return expr;
         }
+    }
+
+
+
+    public static SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
+        if (a.hasIndexScale() && b.hasIndexScale()) {
+            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        // ensure that the constant value is always on the right side of the expression
+        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
+            return add(ctx, b, a);
+        }
+        // ensure that the index * scale is always on the right side of base
+        if (a.hasIndexScale() && !a.hasBase()) {
+            if (!b.isConst()) {
+                return add(ctx, b, a);
+            }
+        }
+
+        SymbolExpr.Builder builder = new SymbolExpr.Builder();
+        if (a.isConst() && b.isConst()) {
+            builder.constant(a.constant + b.constant);
+        }
+        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
+            if (b.hasIndexScale()) {
+                // Set `base + index * scale` and `base` type alias
+                ctx.setTypeAlias(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build());
+                builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
+            } else {
+                builder.base(a).offset(b);
+            }
+        }
+        else if (!a.hasBase() && a.hasIndexScale()) {
+            if (a.hasOffset()) {
+                builder.index(a.indexExpr).scale(a.scaleExpr).offset(add(ctx, a.offsetExpr, b));
+            } else {
+                builder.index(a.indexExpr).scale(a.scaleExpr).offset(b);
+            }
+        }
+
+        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
+            builder.base(a.baseExpr).offset(add(ctx, a.offsetExpr, b));
+        }
+        else if (a.hasBase() && a.hasIndexScale()) {
+            if (a.hasOffset()) {
+                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(add(ctx, a.offsetExpr, b));
+            } else {
+                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(b);
+            }
+        }
+        else {
+            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        return builder.build();
+    }
+
+    public static SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
+        if (!a.isConst() && !b.isConst) {
+            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        // ensure that the constant value is always on the right side of the expression
+        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
+            return multiply(ctx, b, a);
+        }
+
+        SymbolExpr.Builder builder = new SymbolExpr.Builder();
+        if (a.isConst() && b.isConst()) {
+            builder.constant(a.constant * b.constant);
+        }
+        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
+            builder.index(a).scale(b);
+        }
+        else if (!a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
+            builder.index(a.indexExpr).scale(multiply(ctx, a.scaleExpr, b));
+        }
+        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
+            builder.index(a).scale(b);
+        }
+        else {
+            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+        }
+
+        return builder.build();
+    }
+
+
+    public static SymbolExpr dereference(Context ctx, SymbolExpr a) {
+        if (a.isNoZeroConst()) {
+            throw new IllegalArgumentException("Cannot dereference a constant value.");
+        }
+        var newExpr = new SymbolExpr.Builder().dereference(a).build();
+        if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
+            ctx.setTypeAlias(newExpr, new SymbolExpr.Builder().dereference(a.baseExpr).build());
+        }
+        return newExpr;
+    }
+
+    public static SymbolExpr reference(Context ctx, SymbolExpr a) {
+        if (a.isNoZeroConst()) {
+            throw new IllegalArgumentException("Cannot reference a constant value.");
+        }
+        return new SymbolExpr.Builder().reference(a).build();
     }
 }

@@ -7,9 +7,6 @@ import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.core.JsonProcessingException;
 
 public class TypeConstraint implements TypeDescriptor {
 
@@ -18,6 +15,11 @@ public class TypeConstraint implements TypeDescriptor {
         MULTI_ACCESS,
         MAY_ARRAY,
         MAY_NESTED,
+        ARRAY,
+        STRUCT,
+        UNION,
+        LOCAL,
+        GLOBAL
     }
 
     /**
