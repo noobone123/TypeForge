@@ -86,11 +86,11 @@ public class InterSolver {
             0x00133ab0, // buffer_clear
                 0x0012fe84, // buffer_append_iovec
                 0x00133d4b, // log_buffer_prefix
-            0x0013401b // log_buffer_prepare
-//            0x0013418f, // log_va_list
-//            0x00134309, // log_error
-//            0x0011b7de, // network_write_init
-//            0x0011a70a  // network_init
+            0x0013401b, // log_buffer_prepare
+            0x0013418f, // log_va_list
+            0x00134309, // log_error
+            0x0011b7de, // network_write_init
+            0x0011a70a  // network_init
         );
 
         for (var a : addrList) {

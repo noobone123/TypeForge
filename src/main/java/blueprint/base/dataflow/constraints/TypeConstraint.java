@@ -15,10 +15,9 @@ public class TypeConstraint implements TypeDescriptor {
         MULTI_ACCESS,
         MAY_ARRAY,
         MAY_NESTED,
-        ARRAY,
-        STRUCT,
-        UNION,
-        LOCAL,
+        STACK_ARRAY,
+        STACK_STRUCT,
+        STACK_UNION,
         GLOBAL
     }
 

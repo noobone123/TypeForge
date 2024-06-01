@@ -169,19 +169,18 @@ public class Context {
                     expr = SymbolExpr.reference(this, expr);
                 }
                 constraint = getConstraint(expr);
-                constraint.addGlobalTag(TypeConstraint.Attribute.LOCAL);
             }
 
             if (dataType instanceof Array array) {
                 Logging.info("Found decompiler recovered Array " + dataType.getName());
                 constraint.setTotalSize(array.getLength());
-                constraint.addGlobalTag(TypeConstraint.Attribute.ARRAY);
+                constraint.addGlobalTag(TypeConstraint.Attribute.STACK_ARRAY);
                 constraint.setElementSize(array.getElementLength());
             }
             else if (dataType instanceof Structure structure) {
                 Logging.info("Found decompiler recovered Structure " + dataType.getName());
                 constraint.setTotalSize(structure.getLength());
-                constraint.addGlobalTag(TypeConstraint.Attribute.STRUCT);
+                constraint.addGlobalTag(TypeConstraint.Attribute.STACK_STRUCT);
                 for (var field: structure.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
@@ -189,7 +188,7 @@ public class Context {
             else if (dataType instanceof Union union) {
                 Logging.info("Found decompiler recovered Union " + dataType.getName());
                 constraint.setTotalSize(union.getLength());
-                constraint.addGlobalTag(TypeConstraint.Attribute.UNION);
+                constraint.addGlobalTag(TypeConstraint.Attribute.STACK_UNION);
                 for (var field: union.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
@@ -250,7 +249,7 @@ public class Context {
             parseSymbolExpr(symExpr, null, 0, false);
         }
 
-        var tmp = new HashSet<>(symExprToConstraints.keySet());
+        var tmp = new HashSet<>(AP.getSymbolExprs());
 
         // merging Type according to the typeAlias
         mergeTypeAlias();

@@ -264,10 +264,7 @@ public class PCodeVisitor {
                 var sym = inputs[1].getHigh().getSymbol();
                 if (sym != null) {
                     var expr = new SymbolExpr.Builder().rootSymbol(sym).build();
-                    if (!ctx.symExprToConstraints.containsKey(expr)) {
-                        Logging.info("[PCode] PTRSUB: Found new uninitialized symbol: " + expr);
-                        expr = SymbolExpr.reference(ctx, expr);
-                    }
+                    expr = SymbolExpr.reference(ctx, expr);
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
                     if (outputFacts == null) {
