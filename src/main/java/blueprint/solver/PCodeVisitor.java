@@ -13,7 +13,6 @@ import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
-import groovy.util.logging.Log;
 
 import java.util.*;
 
@@ -229,7 +228,7 @@ public class PCodeVisitor {
             for (var symExpr: input0Fact) {
                 var indexFacts = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
                 for (var indexExpr: indexFacts) {
-                    ctx.getConstraint(symExpr).addGlobalTag(TypeConstraint.Attribute.MAY_ARRAY);
+                    ctx.getConstraint(symExpr).addSymExprAttr(symExpr, TypeConstraint.Attribute.MAY_ARRAY);
                     var newExpr = SymbolExpr.add(ctx, symExpr, SymbolExpr.multiply(ctx, indexExpr, scaleExpr));
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
@@ -453,7 +452,7 @@ public class PCodeVisitor {
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.setTypeAlias(argExpr, paramExpr);
-                ctx.getConstraint(argExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
+                ctx.getConstraint(argExpr).addSymExprAttr(argExpr, TypeConstraint.Attribute.ARGUMENT);
             }
         }
     }
@@ -541,7 +540,7 @@ public class PCodeVisitor {
                     for (var symExpr : symExprs) {
                         var constraint = ctx.getConstraint(symExpr);
                         constraint.setTotalSize(lengthArg.getOffset());
-                        ctx.getConstraint(symExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
+                        ctx.getConstraint(symExpr).addSymExprAttr(symExpr, TypeConstraint.Attribute.ARGUMENT);
                         Logging.info("[PCode] memset: " + symExpr + " size: " + lengthArg.getOffset());
                     }
                 }
@@ -565,8 +564,8 @@ public class PCodeVisitor {
                             var srcConstraint = ctx.getConstraint(srcExpr);
                             dstConstraint.setTotalSize(lengthVn.getOffset());
                             srcConstraint.setTotalSize(lengthVn.getOffset());
-                            ctx.getConstraint(dstExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
-                            ctx.getConstraint(srcExpr).addGlobalTag(TypeConstraint.Attribute.ARGUMENT);
+                            ctx.getConstraint(dstExpr).addSymExprAttr(dstExpr, TypeConstraint.Attribute.ARGUMENT);
+                            ctx.getConstraint(srcExpr).addSymExprAttr(srcExpr, TypeConstraint.Attribute.ARGUMENT);
                             Logging.info("[PCode] memcpy size: " + lengthVn.getOffset());
                         }
                     }

@@ -162,7 +162,7 @@ public class Context {
             if (symbol.isGlobal()) {
                 expr = new SymbolExpr.Builder().global(symbol.getSymbol().getAddress(), symbol).build();
                 constraint = getConstraint(expr);
-                constraint.addGlobalTag(TypeConstraint.Attribute.GLOBAL);
+                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.GLOBAL);
             } else {
                 expr = new SymbolExpr.Builder().rootSymbol(symbol).build();
                 if (dataType instanceof Array || dataType instanceof Structure || dataType instanceof Union) {
@@ -174,13 +174,13 @@ public class Context {
             if (dataType instanceof Array array) {
                 Logging.info("Found decompiler recovered Array " + dataType.getName());
                 constraint.setTotalSize(array.getLength());
-                constraint.addGlobalTag(TypeConstraint.Attribute.STACK_ARRAY);
+                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.STACK_ARRAY);
                 constraint.setElementSize(array.getElementLength());
             }
             else if (dataType instanceof Structure structure) {
                 Logging.info("Found decompiler recovered Structure " + dataType.getName());
                 constraint.setTotalSize(structure.getLength());
-                constraint.addGlobalTag(TypeConstraint.Attribute.STACK_STRUCT);
+                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.STACK_STRUCT);
                 for (var field: structure.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
@@ -188,7 +188,7 @@ public class Context {
             else if (dataType instanceof Union union) {
                 Logging.info("Found decompiler recovered Union " + dataType.getName());
                 constraint.setTotalSize(union.getLength());
-                constraint.addGlobalTag(TypeConstraint.Attribute.STACK_UNION);
+                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.STACK_UNION);
                 for (var field: union.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
@@ -270,21 +270,22 @@ public class Context {
             }
         }
 
-
-        for (var constraint : symExprToConstraints.values()) {
-            constraint.build();
-        }
-
         // Remove meaningLess constraints
         var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
         for (var symExpr : symExprToConstraints.keySet()) {
             var constraint = symExprToConstraints.get(symExpr);
             if (constraint.isMeaningful()) {
                 finalResult.put(symExpr, constraint);
+            } else {
+                Logging.warn("[Constraint] Remove meaningless constraint: " + constraint.getName());
             }
         }
 
         symExprToConstraints = finalResult;
+
+        for (var constraint : symExprToConstraints.values()) {
+            constraint.build();
+        }
 
         Logging.info("[Constraint] Build constraints done.");
     }
@@ -360,6 +361,16 @@ public class Context {
                 return;
             }
 
+            // Handle the cases MAY_NESTED
+            if (isReparsing && symExprToConstraints.containsKey(expr) && offsetValue != 0) {
+                Logging.info("[SymExpr] Found MAY_NESTED " + expr);
+                var baseConstraint = getConstraint(base);
+                baseConstraint.addFieldTag(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
+                baseConstraint.addNestTo(offsetValue, symExprToConstraints.get(expr));
+                var nestedConstraint = symExprToConstraints.get(expr);
+                nestedConstraint.addNestedBy(offsetValue, baseConstraint);
+            }
+
             updateConstraint(constraint, offsetValue, parentTypeConstraint, AP.getAccessPoints(expr), isReparsing);
 
             if (derefDepth > 0) {
@@ -414,6 +425,11 @@ public class Context {
         }
         Logging.info("[SymExpr] Get " + symExpr + " -> " + constraint.getName());
         return constraint;
+    }
+
+
+    public TypeConstraint hasConstraint(SymbolExpr symExpr) {
+        return symExprToConstraints.get(symExpr);
     }
 
 

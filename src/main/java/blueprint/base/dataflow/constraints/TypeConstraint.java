@@ -1,6 +1,7 @@
 package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
+import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
 
 import java.util.*;
@@ -39,7 +40,8 @@ public class TypeConstraint implements TypeDescriptor {
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
 
-    public Set<Attribute> globalTags;
+    /** This is important, which is used to describe the symbol expression's attributes which associated with this TypeConstraint */
+    public Map<SymbolExpr, Set<Attribute>> symExprAttrs;
     public Set<Long> totalSize;
     public Set<Long> elementSize;
 
@@ -47,6 +49,9 @@ public class TypeConstraint implements TypeDescriptor {
     public final HashMap<Long, HashSet<TypeConstraint>> referenceTo;
     /** The referencedBy is a map which records which TypeConstraint references the current TypeConstraint and the set of referenced offsets */
     public final HashMap<TypeConstraint, HashSet<Long>> referencedBy;
+
+    public final HashMap<Long, HashSet<TypeConstraint>> nestTo;
+    public final HashMap<Long, HashSet<TypeConstraint>> nestedBy;
 
     public final UUID uuid;
     public final String shortUUID;
@@ -63,7 +68,10 @@ public class TypeConstraint implements TypeDescriptor {
         referenceTo = new HashMap<>();
         referencedBy = new HashMap<>();
 
-        globalTags = new HashSet<>();
+        nestTo = new HashMap<>();
+        nestedBy = new HashMap<>();
+
+        symExprAttrs = new HashMap<>();
         this.totalSize = new HashSet<>();
         this.elementSize = new HashSet<>();
     }
@@ -115,8 +123,9 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
-    public void addGlobalTag(Attribute tag) {
-        globalTags.add(tag);
+    public void addSymExprAttr(SymbolExpr expr, Attribute attr) {
+        symExprAttrs.putIfAbsent(expr, new HashSet<>());
+        symExprAttrs.get(expr).add(attr);
     }
 
     public void addReferencedBy(long offset, TypeConstraint other) {
@@ -133,6 +142,16 @@ public class TypeConstraint implements TypeDescriptor {
         if (referenceTo.containsKey(offset)) {
             referenceTo.get(offset).remove(other);
         }
+    }
+
+    public void addNestTo(long offset, TypeConstraint other) {
+        nestTo.putIfAbsent(offset, new HashSet<>());
+        nestTo.get(offset).add(other);
+    }
+
+    public void addNestedBy(long offset, TypeConstraint other) {
+        nestedBy.putIfAbsent(offset, new HashSet<>());
+        nestedBy.get(offset).add(other);
     }
 
     public void setTotalSize(long size) {
@@ -162,8 +181,11 @@ public class TypeConstraint implements TypeDescriptor {
             this.fieldTags.get(offset).addAll(tagSet);
         });
 
-        // Merging globalTags
-        this.globalTags.addAll(other.globalTags);
+        // Merging symExprAttrs
+        other.symExprAttrs.forEach((expr, attrs) -> {
+            this.symExprAttrs.putIfAbsent(expr, new HashSet<>());
+            this.symExprAttrs.get(expr).addAll(attrs);
+        });
 
         // Merging ptrLevel
         other.ptrLevel.forEach((offset, level) -> {
@@ -200,6 +222,15 @@ public class TypeConstraint implements TypeDescriptor {
         // Merging size
         this.totalSize.addAll(other.totalSize);
         this.elementSize.addAll(other.elementSize);
+    }
+
+
+    public List<Long> collectFieldOffsets() {
+        Set<Long> offsets = new HashSet<>(fieldMap.keySet());
+        offsets.addAll(fieldTags.keySet());
+        List<Long> sortedOffset = new ArrayList<>(offsets);
+        Collections.sort(sortedOffset);
+        return sortedOffset;
     }
 
 
@@ -268,11 +299,17 @@ public class TypeConstraint implements TypeDescriptor {
 
     public JsonNode getJsonObj(ObjectMapper mapper) {
         var rootNode = mapper.createObjectNode();
+
+        var SymExprAttrs = rootNode.putArray("SymExprAttrs");
+        symExprAttrs.forEach((expr, attrs) -> {
+            var exprNode = SymExprAttrs.addObject();
+            exprNode.put("SymbolExpr", expr.toString());
+            var attrArray = exprNode.putArray("Attributes");
+            attrs.forEach(attr -> attrArray.add(attr.toString()));
+        });
+
         rootNode.put("TotalSize", totalSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(totalSize.iterator().next()));
         rootNode.put("ElementSize", elementSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(elementSize.iterator().next()));
-
-        var globalTagsArray = rootNode.putArray("globalTags");
-        globalTags.forEach(tag -> globalTagsArray.add(tag.toString()));
 
         var referencedByNode = rootNode.putObject("referencedBy");
         referencedBy.forEach((constraint, offsets) -> {
@@ -280,14 +317,25 @@ public class TypeConstraint implements TypeDescriptor {
             offsets.forEach(offset -> offsetArray.add("0x" + Long.toHexString(offset)));
         });
 
+        var NestedByNode = rootNode.putObject("nestedBy");
+        nestedBy.forEach((offset, constraints) -> {
+            var constraintArray = NestedByNode.putArray("0x" + Long.toHexString(offset));
+            constraints.forEach(constraint -> constraintArray.add("Constraint_" + constraint.shortUUID));
+        });
+
         var fieldsNode = rootNode.putObject("fields");
-        fieldMap.forEach((offset, typesMap) -> {
+        List<Long> offsets = collectFieldOffsets();
+        offsets.forEach(offset -> {
             var offsetNode = fieldsNode.putObject("0x" + Long.toHexString(offset));
+
             var fieldsArray = offsetNode.putArray("types");
-            typesMap.forEach((type, count) -> fieldsArray.add(type.getName() + ": " + count));
+            fieldMap.getOrDefault(offset, new HashMap<>()).forEach((type, count) -> fieldsArray.add(type.getName() + ": " + count));
 
             var referenceToArray = offsetNode.putArray("referenceTo");
             referenceTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> referenceToArray.add("Constraint_" + ref.shortUUID));
+
+            var NestToArray = offsetNode.putArray("nestTo");
+            nestTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> NestToArray.add("Constraint_" + ref.shortUUID));
 
             offsetNode.put("PtrLevel", ptrLevel.getOrDefault(offset, 0L));
 
