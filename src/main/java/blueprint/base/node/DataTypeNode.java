@@ -35,7 +35,7 @@ public class DataTypeNode extends NodeBase<DataType>{
 
     public DataTypeNode(DataType value, int id) {
         super(value, id);
-        Logging.info("Creating DataTypeNode with value: " + value.getName());
+        Logging.info("DataTypeNode", "Creating DataTypeNode with value: " + value.getName());
 
         if (value instanceof Structure st) {
             fillFieldMap(st);

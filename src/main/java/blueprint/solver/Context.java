@@ -85,7 +85,7 @@ public class Context {
     public void addTracedSymbol(FunctionNode funcNode, HighSymbol highSymbol) {
         IntraContext intraCtx = intraCtxMap.get(funcNode);
         if (intraCtx == null) {
-            Logging.error("Failed to get intraContext for " + funcNode.value.getName());
+            Logging.error("Context", "Failed to get intraContext for " + funcNode.value.getName());
             return;
         }
         intraCtx.tracedSymbols.add(highSymbol);
@@ -94,7 +94,7 @@ public class Context {
     public void addTracedVarnode(FunctionNode funcNode, Varnode vn) {
         var tracedVns = intraCtxMap.get(funcNode).tracedVarnodes;
         if (tracedVns.add(vn)) {
-            Logging.debug("[DataFlow] Add traced varnode: " + vn);
+            Logging.debug("Context", "Add traced varnode: " + vn);
         }
     }
 
@@ -107,13 +107,13 @@ public class Context {
     public void addNewSymbolExpr(FunctionNode funcNode, Varnode vn, SymbolExpr symbolExpr) {
         var intraCtx = intraCtxMap.get(funcNode);
         if (intraCtx == null) {
-            Logging.error("Failed to get intraContext for " + funcNode.value.getName());
+            Logging.error("Context", "Failed to get intraContext for " + funcNode.value.getName());
             return;
         }
         var curDataFlowFact = intraCtx.dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(intraCtx.dataFlowFactKSize));
 
         if (curDataFlowFact.add(symbolExpr)) {
-            Logging.debug("[DataFlow] New " + vn + " -> " + curDataFlowFact);
+            Logging.debug("Context", "New " + vn + " -> " + curDataFlowFact);
         }
     }
 
@@ -132,7 +132,7 @@ public class Context {
         var inputFacts = dataFlowFacts.get(input);
 
         if (inputFacts == null) {
-            Logging.warn("Failed to get dataflow fact for " + input);
+            Logging.warn("Context", "Failed to get dataflow fact for " + input);
             return;
         }
 
@@ -142,7 +142,7 @@ public class Context {
         }
 
         outputFacts.merge(inputFacts);
-        Logging.debug("[DataFlow] Merge " + output + " -> " + outputFacts);
+        Logging.debug("Context", "Merge " + output + " -> " + outputFacts);
     }
 
     /**
@@ -152,7 +152,7 @@ public class Context {
         var intraCtx = intraCtxMap.get(funcNode);
         // Update the interestedVn
         for (var symbol: intraCtx.tracedSymbols) {
-            Logging.info("Candidate HighSymbol: " + symbol.getName());
+            Logging.info("Context", "Candidate HighSymbol: " + symbol.getName());
 
             SymbolExpr expr;
             TypeConstraint constraint;
@@ -170,13 +170,13 @@ public class Context {
             }
 
             if (dataType instanceof Array array) {
-                Logging.info("Found decompiler recovered Array " + dataType.getName());
+                Logging.info("Context", "Found decompiler recovered Array " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.STACK_ARRAY);
                 constraint.setTotalSize(array.getLength());
                 constraint.setElementSize(array.getElementLength());
             }
             else if (dataType instanceof Structure structure) {
-                Logging.info("Found decompiler recovered Structure " + dataType.getName());
+                Logging.info("Context", "Found decompiler recovered Structure " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.STACK_STRUCT);
                 constraint.setTotalSize(structure.getLength());
                 for (var field: structure.getComponents()) {
@@ -184,7 +184,7 @@ public class Context {
                 }
             }
             else if (dataType instanceof Union union) {
-                Logging.info("Found decompiler recovered Union " + dataType.getName());
+                Logging.info("Context", "Found decompiler recovered Union " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.STACK_UNION);
                 constraint.setTotalSize(union.getLength());
                 for (var field: union.getComponents()) {
@@ -196,7 +196,7 @@ public class Context {
             // 1. HighSymbol is not used in the function
             // 2. HighSymbol is used in the function, but ghidra's decompiler failed to find the HighVariable
             if (symbol.getHighVariable() == null) {
-                Logging.warn(funcNode.value.getName() + " -> HighSymbol: " + symbol.getName() + " has no HighVariable");
+                Logging.warn("Context", funcNode.value.getName() + " -> HighSymbol: " + symbol.getName() + " has no HighVariable");
             } else {
                 // Initialize the dataFlowFacts using the interested varnodes and add
                 // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
@@ -219,7 +219,7 @@ public class Context {
         var intraCtx = intraCtxMap.get(funcNode);
         var res = intraCtx.dataFlowFacts.get(vn);
         if (res == null) {
-            Logging.warn("Failed to get dataflow fact for " + vn);
+            Logging.warn("Context", "Failed to get dataflow fact for " + vn);
             return null;
         }
         return res;
@@ -228,7 +228,7 @@ public class Context {
     public void setTypeAlias(SymbolExpr sym1, SymbolExpr sym2) {
         if (!sym1.equals(sym2)) {
             typeAlias.union(sym1, sym2);
-            Logging.info(String.format("[Alias] %s == %s", sym1, sym2));
+            Logging.info("Context", String.format("Set type alias: %s == %s", sym1, sym2));
         }
     }
 
@@ -260,7 +260,7 @@ public class Context {
             if (constraint.isMeaningful()) {
                 finalResult.put(symExpr, constraint);
             } else {
-                Logging.warn("[Constraint] Remove meaningless constraint: " + constraint.getName());
+                Logging.warn("Context", String.format("Remove meaningless Constraint_%s", constraint.getName()));
             }
         }
 
@@ -270,7 +270,7 @@ public class Context {
             constraint.build();
         }
 
-        Logging.info("[Constraint] Build constraints done.");
+        Logging.info("Context", "Build constraints done.");
     }
 
 
@@ -288,19 +288,19 @@ public class Context {
                 for (var aliasSym : cluster) {
                     var constraint = tmpSymExprToConstraints.get(aliasSym);
                     if (constraint != null) {
-                        Logging.info("[Alias] Merging " + aliasSym + ": " + constraint.getName() + " into " + mergedConstraint.getName());
+                        Logging.info("Context", "Merging " + aliasSym + ": " + constraint.getName() + " into " + mergedConstraint.getName());
                         mergedConstraint.merge(constraint);
                     }
                 }
 
                 for (var sym : cluster) {
                     symExprToConstraints.put(sym, mergedConstraint);
-                    Logging.info(String.format("[Alias] Set %s -> %s", sym, mergedConstraint.getName()));
+                    Logging.info("Context", String.format("Set %s -> %s", sym, mergedConstraint.getName()));
                     updated.add(sym);
                 }
             }
             else {
-                Logging.info("[Alias] " + symExpr + " is not type aliased with others.");
+                Logging.info("Context", symExpr + " is not type aliased with others.");
             }
         }
     }
@@ -314,8 +314,7 @@ public class Context {
     private void parseMemAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
-        Logging.info("[SymExpr] Parsing MemAccessExpr " + expr + ", parentTypeConstraint: " + (parentTypeConstraint != null ? parentTypeConstraint.getName() : "null")
-                            + ", derefDepth: " + derefDepth);
+        Logging.info("Context", String.format("Parsing MemAccessExpr %s, parentTypeConstraint: %s, derefDepth: %d", expr, parentTypeConstraint != null ? parentTypeConstraint.getName() : "null", derefDepth));
 
         var base = expr.getBase();
         var offset = expr.getOffset();
@@ -341,7 +340,7 @@ public class Context {
                 offsetValue = offset.getConstant();
             }
             else if (expr.hasOffset() && !offset.isConst()) {
-                Logging.warn("[SymExpr] Offset is not a constant: " + expr + ", Skipping...");
+                Logging.warn("Context", String.format("Offset is not a constant: %s, Skipping...", expr));
                 return;
             }
 
@@ -357,7 +356,7 @@ public class Context {
             }
         }
         else {
-            Logging.warn("[SymExpr] Unsupported SymbolExpr: " + expr + " , Skipping...");
+            Logging.warn("Context", String.format("Failed to parse MemAccessExpr %s", expr));
         }
     }
 
@@ -366,6 +365,9 @@ public class Context {
      * @param expr the Expression to parse
      */
     private void parseArgAccessExpr(SymbolExpr expr) {
+        if (expr == null) return;
+        Logging.info("Context", String.format("Parsing ArgAccessExpr %s", expr));
+
         var base = expr.getBase();
         var offset = expr.getOffset();
         if (base != null && offset != null &&
@@ -414,8 +416,9 @@ public class Context {
         } else {
             constraint = new TypeConstraint();
             symExprToConstraints.put(symExpr, constraint);
-            Logging.info("[Constraint] Create new constraint for " + symExpr);
+            Logging.debug("Context", String.format("Create Constraint_%s for %s", constraint.shortUUID, symExpr));
         }
+        Logging.debug("Context", String.format("Get Constraint_%s for %s", constraint.shortUUID, symExpr));
         return constraint;
     }
 
@@ -433,7 +436,7 @@ public class Context {
 
     public void dumpResults() {
         String workingDir = System.getProperty("user.dir");
-        Logging.info("Current working directory: " + workingDir);
+        Logging.info("Context", "Current working directory: " + workingDir);
 
         File outputDir = new File(System.getProperty("user.dir") + File.separator + "codes/blueprint/dummy");
         if (!outputDir.exists()) {
@@ -464,13 +467,13 @@ public class Context {
 
         try {
             mapper.writerWithDefaultPrettyPrinter().writeValue(outputFile, root);
-            Logging.info("Constraints dumped to " + outputFile.getPath());
+            Logging.info("Context", "Constraints dumped to " + outputFile.getPath());
 
             mapper2.writerWithDefaultPrettyPrinter().writeValue(outputFile2, root2);
-            Logging.info("Metadata dumped to " + outputFile2.getPath());
+            Logging.info("Context", "Metadata dumped to " + outputFile2.getPath());
 
         } catch (IOException e) {
-            Logging.error("Error writing JSON to file" + e.getMessage());
+            Logging.error("Context", "Error writing JSON to file" + e.getMessage());
         }
     }
 }

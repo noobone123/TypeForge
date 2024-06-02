@@ -36,9 +36,9 @@ public class SDGraph extends GraphBase<DataType> {
      * @param root the root data type
      */
     private SDGraph(DataType root) {
-        Logging.info(root.toString());
+        Logging.info("SDGraph", root.toString());
         if (!(root instanceof Structure st)) {
-            Logging.error("The root data type is not a structure");
+            Logging.error("SDGraph", "The root data type is not a structure");
             return;
         }
 
@@ -91,7 +91,7 @@ public class SDGraph extends GraphBase<DataType> {
                 // TODO: pointer should be handled differently from other types
                 DataType pointedDT = ptr.getDataType();
                 if (pointedDT instanceof Structure pointedST) {
-                    Logging.info("Reference: " + fieldDT + " offset: " + dtc.getOffset());
+                    Logging.info("SDGraph", "Reference: " + fieldDT + " offset: " + dtc.getOffset());
                     DataTypeNode dstNode = (DataTypeNode) getNode(pointedST);
                     addEdge(node, dstNode, EdgeType.REFERENCE, dtc.getOffset());
                     if (!visited.contains(dstNode)) {
@@ -106,7 +106,7 @@ public class SDGraph extends GraphBase<DataType> {
 
             } else if (fieldDT instanceof Structure fst) {
                 DataTypeNode dstNode = (DataTypeNode) getNode(fst);
-                Logging.info("Nested: " + fst.getName() + " offset: " + dtc.getOffset());
+                Logging.info("SDGraph", "Nested: " + fst.getName() + " offset: " + dtc.getOffset());
                 addEdge(node, dstNode, EdgeType.NESTED, dtc.getOffset());
                 if (!visited.contains(dstNode)) {
                     workList.add(dstNode);
@@ -129,7 +129,7 @@ public class SDGraph extends GraphBase<DataType> {
                 continue;
 
             } else {
-                Logging.error("Unsupported data type: " + fieldDT);
+                Logging.error("SDGraph", "Unsupported data type: " + fieldDT);
             }
         }
     }
@@ -181,9 +181,9 @@ public class SDGraph extends GraphBase<DataType> {
      */
     public void addEdge(DataTypeNode srcNode, DataTypeNode dstNode, EdgeType edge_type, int offset) {
         if (srcNode.offsetToEdge.get(offset) != null) {
-            Logging.warn("The offset " + offset + " already exists in the srcNode");
+            Logging.warn("SDGraph", "The offset " + offset + " already exists in the srcNode");
             if (srcNode.offsetToEdge.get(offset).dstNode != dstNode) {
-                Logging.error("The offset " + offset + " already exists in the srcNode, but the dstNode is different");
+                Logging.error("SDGraph", "The offset " + offset + " already exists in the srcNode, but the dstNode is different");
             }
             return;
         }

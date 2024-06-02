@@ -59,7 +59,7 @@ public class GraphHelper {
         try (BufferedWriter writer = Files.newBufferedWriter(Paths.get(filename))) {
             writer.write(dotBuilder.toString());
         } catch (IOException e) {
-            Logging.error("Failed to write to file: " + filename);
+            Logging.error("GraphHelper", "Failed to write to file: " + filename);
         }
     }
 }

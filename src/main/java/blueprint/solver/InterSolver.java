@@ -25,7 +25,7 @@ public class InterSolver {
         while (!ctx.workList.isEmpty()) {
             FunctionNode funcNode = ctx.workList.poll();
             if (!funcNode.isMeaningful) {
-                Logging.info("[Solver] Skip non-meaningful function: " + funcNode.value.getName());
+                Logging.info("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
 
@@ -35,9 +35,9 @@ public class InterSolver {
             // If the function is not a leaf function, we should
             // collect data-flow facts from its callee functions.
             if (!funcNode.isLeaf) {
-                Logging.info("Non-leaf function: " + funcNode.value.getName());
+                Logging.info("InterSolver", "Non-leaf function: " + funcNode.value.getName());
             } else {
-                Logging.info("Leaf function: " + funcNode.value.getName());
+                Logging.info("InterSolver", "Leaf function: " + funcNode.value.getName());
             }
             ctx.createIntraContext(funcNode);
 

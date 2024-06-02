@@ -40,7 +40,7 @@ public class DataTypeHelper {
         } else if (dt instanceof TypeDef typedef) {
             return getBaseDataType(typedef.getBaseDataType());
         } else {
-            Logging.warn("Unexpected data type: " + dt.getName());
+            Logging.warn("DataTypeHelper", "Unexpected data type: " + dt.getName());
             return dt;
         }
     }
@@ -108,7 +108,7 @@ public class DataTypeHelper {
         Set<DataType> result = new HashSet<>();
         for (var dt : dwarfDataTypes) {
             if (builtInLibTypeNames.contains(getBaseDataType(dt).getName())) {
-                Logging.warn("Built-in lib type detected: " + dt.getName());
+                Logging.warn("DataTypeHelper", "Built-in lib type detected: " + dt.getName());
             } else {
                 result.add(dt);
             }
@@ -131,7 +131,7 @@ public class DataTypeHelper {
             if (dt instanceof Composite) {
                 result.add(dt);
             } else if (dt instanceof FunctionDefinition) {
-                Logging.debug("FunctionDefinition detected: " + dt.getName());
+                Logging.debug("DataTypeHelper", "FunctionDefinition detected: " + dt.getName());
             } else if (dt instanceof TypeDef typedef) {
                 var baseDT = typedef.getBaseDataType();
                 if (baseDT instanceof Composite) {

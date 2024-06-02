@@ -28,7 +28,7 @@ public class IntraSolver {
          * and their aliases.
          */
         if (funcNode.parameters.isEmpty()) {
-            Logging.warn("No parameters in the function");
+            Logging.warn("IntraSolver", "No parameters in the function");
         }
         for (var symbol : funcNode.parameters) {
             ctx.addTracedSymbol(funcNode, symbol);
@@ -46,12 +46,12 @@ public class IntraSolver {
 
 
     public void solve() {
-        Logging.info("Solving function: " + funcNode.value.getName());
+        Logging.info("IntraSolver", "Solving function: " + funcNode.value.getName());
 
         visitor.prepare();
         visitor.run();
 
-        Logging.info("Solved function: " + funcNode.value.getName());
+        Logging.info("IntraSolver", "Solved function: " + funcNode.value.getName());
     }
 
     /**

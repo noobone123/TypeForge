@@ -59,51 +59,51 @@ public class PCodeVisitor {
 
             switch (opCode) {
                 case PcodeOp.INT_ADD, PcodeOp.INT_SUB -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleAddOrSub(pcode);
                 }
                 case PcodeOp.COPY, PcodeOp.CAST, PcodeOp.SUBPIECE -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleAssign(pcode);
                 }
                 case PcodeOp.PTRADD -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handlePtrAdd(pcode);
                 }
                 case PcodeOp.PTRSUB -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handlePtrSub(pcode);
                 }
                 case PcodeOp.MULTIEQUAL -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleMultiEqual(pcode);
                 }
                 case PcodeOp.INT_ZEXT -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleIntZext(pcode);
                 }
                 case PcodeOp.INT_SEXT -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleIntSext(pcode);
                 }
                 case PcodeOp.INT_MULT -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleIntMult(pcode);
                 }
                 case PcodeOp.LOAD -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleLoad(pcode);
                 }
                 case PcodeOp.STORE -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleStore(pcode);
                 }
                 case PcodeOp.CALL -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleCall(pcode);
                 }
                 case PcodeOp.RETURN -> {
-                    Logging.debug("[PCode] " + getPCodeRepresentation(pcode));
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleReturn(pcode);
                 }
             }
@@ -125,7 +125,7 @@ public class PCodeVisitor {
         Varnode output = pcodeOp.getOutput();
 
         if (!ctx.isTracedVn(funcNode, inputs[0])) {
-            Logging.debug("[PCode] " + inputs[0] + " is not traced");
+            Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
@@ -144,7 +144,7 @@ public class PCodeVisitor {
             }
         } else {
             if (!ctx.isTracedVn(funcNode, inputs[1])) {
-                Logging.debug("[PCode] " + inputs[1] + " is not traced");
+                Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
             var inputFact_1 = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
@@ -197,6 +197,7 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
 
         if (!ctx.isTracedVn(funcNode, inputs[0])) {
+            Logging.debug("PCOdeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
@@ -218,10 +219,12 @@ public class PCodeVisitor {
         // inputs[1] is index and inputs[2] is element size
         else if (!inputs[1].isConstant() && inputs[2].isConstant()) {
             if (!ctx.isTracedVn(funcNode, inputs[1])) {
+                Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
             var scaleValue = getSigned(inputs[2]);
             if (!OffsetSanityCheck(scaleValue)) {
+                Logging.debug("PCodeVisitor", String.format("Scale value %d is not valid", scaleValue));
                 return;
             }
             var scaleExpr = new SymbolExpr.Builder().constant(scaleValue).build();
@@ -237,7 +240,7 @@ public class PCodeVisitor {
             ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
         }
         else {
-            Logging.warn(String.format("[PCode] PTRADD: %s + %s * %s can not resolve", inputs[0], inputs[1], inputs[2]));
+            Logging.warn("PCodeVisitor", String.format("%s + %s * %s can not resolve", inputs[0], inputs[1], inputs[2]));
         }
     }
 
@@ -299,7 +302,7 @@ public class PCodeVisitor {
         }
 
         else {
-            Logging.warn("[PCode] PTRSUB: " + base + " is not a constant or register");
+            Logging.warn("PCodeVisitor", String.format("%s is not a constant or register", base));
         }
     }
 
@@ -319,6 +322,7 @@ public class PCodeVisitor {
         var output = pcodeOp.getOutput();
 
         if (!ctx.isTracedVn(funcNode, input)) {
+            Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
@@ -336,6 +340,7 @@ public class PCodeVisitor {
         var output = pcodeOp.getOutput();
 
         if (!ctx.isTracedVn(funcNode, input)) {
+            Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
@@ -353,12 +358,13 @@ public class PCodeVisitor {
         var input1 = pcodeOp.getInput(1);
 
         if (!ctx.isTracedVn(funcNode, input0) && !ctx.isTracedVn(funcNode, input1)) {
+            Logging.debug("PCodeVisitor", String.format("both %s * %s is not traced", input0, input1));
             return;
         }
 
         // TODO: handle the case where input0 or input1 is not constant
         if (!input0.isConstant() && !input1.isConstant()) {
-            Logging.warn(String.format("[PCode] INT_MULT: %s * %s can not resolve", input0, input1));
+            Logging.warn("PCodeVisitor", String.format("%s * %s can not resolve", input0, input1));
             return;
         }
 
@@ -454,14 +460,14 @@ public class PCodeVisitor {
     private void handleReturn(PcodeOp pcodeOp) {
         for (var retVn : pcodeOp.getInputs()) {
             if (!ctx.isTracedVn(funcNode, retVn)) {
-                Logging.warn("[PCode] Return value is not interested: " + retVn);
+                Logging.debug("PCodeVisitor", "[PCode] Return value is not interested: " + retVn);
                 continue;
             }
 
             var retFacts = ctx.getIntraDataFlowFacts(funcNode, retVn);
             for (var retExpr : retFacts) {
                 ctx.intraCtxMap.get(funcNode).setReturnExpr(retExpr);
-                Logging.info("[PCode] Set return expr: " + retExpr);
+                Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
     }
@@ -476,19 +482,19 @@ public class PCodeVisitor {
         }
 
         if (!ctx.isFunctionSolved(calleeNode)) {
-            Logging.warn("Callee function is not solved yet: " + calleeNode.value.getName());
+            Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
             return;
         } else {
-            Logging.info("Callee function: " + calleeNode.value.getName() + " is solved");
+            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");
         }
 
         var receiverVn = pcodeOp.getOutput();
         if (receiverVn != null) {
             var retExprs = ctx.intraCtxMap.get(calleeNode).getReturnExpr();
             if (retExprs.isEmpty()) {
-                Logging.warn("[PCode] Callee's Return Value is not set but Receiver exists.");
+                Logging.warn("PCodeVisitor", "Callee's Return Value is not set but Receiver exists.");
             } else {
-                Logging.info("[PCode] Setting Receiver ...");
+                Logging.info("PCodeVisitor", "setting callsite receiver ...");
                 var receiverFacts = ctx.getIntraDataFlowFacts(funcNode, receiverVn);
                 if (receiverFacts != null) {
                     for (var receiverExpr : receiverFacts) {
@@ -511,7 +517,7 @@ public class PCodeVisitor {
         for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
             var argVn = pcodeOp.getInput(inputIdx);
             if (!ctx.isTracedVn(funcNode, argVn)) {
-                Logging.warn("[PCode] Argument is not interested: " + argVn);
+                Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
                 continue;
             }
 
@@ -529,7 +535,7 @@ public class PCodeVisitor {
 
     private void handleExternalCall(PcodeOp pcodeOp, FunctionNode calleeNode) {
         var externalFuncName = calleeNode.value.getName();
-        Logging.info("External function call: " + externalFuncName);
+        Logging.info("PCodeVisitor", "External function call: " + externalFuncName);
 
         // TODO: handle memOp External function's wrapper
         // TODO: hold expr's constant value intra-procedural, which can be used to add constraints related to the memOp functions
@@ -543,7 +549,7 @@ public class PCodeVisitor {
                         ctx.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
                         ctx.getAccessPoints().addArgAccessPoint(ptrExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
 
-                        Logging.info("[PCode] memset: " + ptrExpr + " size: " + lengthArg.getOffset());
+                        Logging.info("PCodeVisitor", "memset: " + ptrExpr + " size: " + lengthArg.getOffset());
                     }
                 }
             }
@@ -560,7 +566,7 @@ public class PCodeVisitor {
                 for (var dstExpr : dstExprs) {
                     for (var srcExpr : srcExprs) {
                         ctx.setTypeAlias(dstExpr, srcExpr);
-                        Logging.info("[PCode] memcpy: " + dstExpr + " <- " + srcExpr);
+                        Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
                             ctx.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
                             ctx.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
@@ -568,7 +574,7 @@ public class PCodeVisitor {
                             srcExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                             ctx.getAccessPoints().addArgAccessPoint(dstExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
                             ctx.getAccessPoints().addArgAccessPoint(srcExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
-                            Logging.info("[PCode] memcpy size: " + lengthVn.getOffset());
+                            Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());
                         }
                     }
                 }

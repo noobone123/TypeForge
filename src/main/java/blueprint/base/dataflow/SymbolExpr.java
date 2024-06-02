@@ -83,7 +83,7 @@ public class SymbolExpr {
             this.prefix = this.function.getName();
         }
 
-        Logging.info("Created new SymbolExpr: " + this);
+        Logging.info("SymbolExpr","Created new SymbolExpr: " + this);
     }
 
     public SymbolExpr getBase() {
@@ -174,7 +174,7 @@ public class SymbolExpr {
         else if (indexExpr != null) {
             return indexExpr.getRootSymExpr();
         }
-        Logging.error(String.format("[SymbolExpr] Cannot find representative root SymExpr for %s", this));
+        Logging.error("SymbolExpr", String.format("[SymbolExpr] Cannot find representative root SymExpr for %s", this));
         return null;
     }
 
@@ -362,7 +362,7 @@ public class SymbolExpr {
 
     public static SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
         if (a.hasIndexScale() && b.hasIndexScale()) {
-            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
         }
 
         // ensure that the constant value is always on the right side of the expression
@@ -408,7 +408,7 @@ public class SymbolExpr {
             }
         }
         else {
-            Logging.error(String.format("[SymbolExpr] Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
         }
 
         return builder.build();
@@ -416,7 +416,7 @@ public class SymbolExpr {
 
     public static SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
         if (!a.isConst() && !b.isConst) {
-            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
         }
 
         // ensure that the constant value is always on the right side of the expression
@@ -438,7 +438,7 @@ public class SymbolExpr {
             builder.index(a).scale(b);
         }
         else {
-            Logging.error(String.format("[SymbolExpr] Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
         }
 
         return builder.build();

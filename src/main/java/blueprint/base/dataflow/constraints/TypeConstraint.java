@@ -91,24 +91,25 @@ public class TypeConstraint implements TypeDescriptor {
     public void addOffsetTypeConstraint(long offset, TypeDescriptor type) {
         fieldMap.putIfAbsent(offset, new HashMap<>());
         fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
-        Logging.info(String.format("[Constraint] %s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));
     }
 
     public void setPtrLevel(long offset, long newLevel) {
         if (ptrLevel.containsKey(offset)) {
             if (ptrLevel.get(offset) < newLevel) {
                 ptrLevel.put(offset, newLevel);
-                Logging.info(String.format("[Constraint] %s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
+                Logging.info("TypeConstraint", String.format("Constraint_%s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
             }
         } else {
             ptrLevel.put(offset, newLevel);
-            Logging.info(String.format("[Constraint] %s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
+            Logging.info("TypeConstraint", String.format("Constraint_%s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
         }
     }
 
     public void addFieldAttr(long offset, Attribute tag) {
         fieldAttrs.putIfAbsent(offset, new HashSet<>());
         fieldAttrs.get(offset).add(tag);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding fieldTag: 0x%x -> %s", shortUUID, offset, tag));
     }
 
     public void removeFieldTag(long offset, Attribute tag) {
@@ -120,11 +121,13 @@ public class TypeConstraint implements TypeDescriptor {
     public void addReferencedBy(long offset, TypeConstraint other) {
         referencedBy.putIfAbsent(other, new HashSet<>());
         referencedBy.get(other).add(offset);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding referencedBy: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
     public void addReferenceTo(long offset, TypeConstraint other) {
         referenceTo.putIfAbsent(offset, new HashSet<>());
         referenceTo.get(offset).add(other);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
     public void removeReferenceTo(long offset, TypeConstraint other) {
@@ -136,21 +139,23 @@ public class TypeConstraint implements TypeDescriptor {
     public void addNestTo(long offset, TypeConstraint other) {
         nestTo.putIfAbsent(offset, new HashSet<>());
         nestTo.get(offset).add(other);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
     public void addNestedBy(long offset, TypeConstraint other) {
         nestedBy.putIfAbsent(offset, new HashSet<>());
         nestedBy.get(offset).add(other);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding nestedBy: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
     public void setTotalSize(long size) {
         this.totalSize.add(size);
-        Logging.info(String.format("[Constraint] %s setting total size: %d", shortUUID, size));
+        Logging.info("TypeConstraint", String.format("Constraint_%s setting total size: %d", shortUUID, size));
     }
 
     public void setElementSize(long size) {
         this.elementSize.add(size);
-        Logging.info(String.format("[Constraint] %s setting element size: %d", shortUUID, size));
+        Logging.info("TypeConstraint", String.format("Constraint_%s setting element size: %d", shortUUID, size));
     }
 
     public void merge(TypeConstraint other) {

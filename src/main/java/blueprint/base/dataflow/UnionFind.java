@@ -39,7 +39,7 @@ public class UnionFind<T> {
         T yRoot = find(y);
 
         if (xRoot == yRoot) {
-            Logging.debug("[UnionFind] Already in the same set");
+            Logging.debug("UnionFind", String.format("%s and %s have already in the same cluster", x, y));
             return;
         }
         if (rank.get(xRoot) < rank.get(yRoot)) {

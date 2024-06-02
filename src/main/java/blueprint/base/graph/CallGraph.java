@@ -58,7 +58,7 @@ public class CallGraph extends GraphBase<Function> {
             }
         }
 
-        Logging.info(String.format(
+        Logging.info("CallGraph", String.format(
                 "Found %d possible root nodes of the call graph",
                 possibleRoots.size()
         ));
@@ -74,7 +74,7 @@ public class CallGraph extends GraphBase<Function> {
         DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
         try {
             if (!ifc.openProgram(Global.currentProgram)) {
-                Logging.error("Failed to use the decompiler");
+                Logging.error("CallGraph", "Failed to use the decompiler");
                 return;
             }
 
@@ -83,10 +83,10 @@ public class CallGraph extends GraphBase<Function> {
                 HighFunction highFunc = null;
                 DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
                 if (!decompileRes.decompileCompleted()) {
-                    Logging.error("Decompile failed for function " + func.getName());
+                    Logging.error("CallGraph", "Decompile failed for function " + func.getName());
                     continue;
                 } else {
-                    Logging.info("Decompile function " + func.getName());
+                    Logging.info("CallGraph", "Decompile function " + func.getName());
                     funcNode.setDecompileResult(decompileRes);
                 }
             }
@@ -166,11 +166,11 @@ public class CallGraph extends GraphBase<Function> {
                                     }
                                 }
                             } else {
-                                Logging.error("Function not found at " + flow);
+                                Logging.error("CallGraph", "Function not found at " + flow);
                             }
                         }
                     } else {
-                        Logging.debug("Indirect call at " + inst.getAddress());
+                        Logging.debug("CallGraph", "Indirect call at " + inst.getAddress());
                     }
                 }
             }

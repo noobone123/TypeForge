@@ -48,38 +48,31 @@ public class Logging {
      * Generate an error log.
      * @param msg the log message.
      */
-    public static void error(String msg) {
-        defaultLogger.error(msg);
+    public static void error(String prefix, String msg) {
+        defaultLogger.error("[{}] - {}", prefix, msg);
     }
 
     /**
      * Generate a warning log.
      * @param msg the log message.
      */
-    public static void warn(String msg) {
-        defaultLogger.warn(msg);
+    public static void warn(String prefix, String msg) {
+        defaultLogger.warn("[{}] - {}", prefix, msg);
     }
 
     /**
      * Generate a info log.
      * @param msg the log message.
      */
-    public static void info(String msg) {
-        defaultLogger.info(msg);
+    public static void info(String prefix, String msg) {
+        defaultLogger.info("[{}] - {}", prefix, msg);
     }
 
     /**
      * Generate a debug log
      * @param msg the debug log.
      */
-    public static void debug(String msg) {
-        defaultLogger.debug(msg);
-    }
-
-
-    public static void collectTypeLog(HighVariable highVar, Long offset, DataType dataType) {
-        String msg = String.format("[Collector] HighVariable: %s, Offset: 0x%x, DataType: %s, Size: 0x%x",
-                highVar.getName(), offset, dataType.getName(), dataType.getLength());
-        Logging.info(msg);
+    public static void debug(String prefix, String msg) {
+        defaultLogger.debug("[{}] - {}", prefix, msg);
     }
 }

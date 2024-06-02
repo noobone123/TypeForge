@@ -24,10 +24,10 @@ public class statistics extends GhidraScript {
 
         List<Function> functions = Global.currentProgram.getListing().getGlobalFunctions("main");
         if (functions.isEmpty()) {
-            Logging.error("No main function found");
+            Logging.error("GhidraScript","No main function found");
             return;
         }
-        Logging.info("Number of main functions: " + functions.size());
+        Logging.info("GhidraScript","Number of main functions: " + functions.size());
         Function entryFunction = functions.get(0);
 
         // calculate the time of the analysis in seconds
@@ -35,7 +35,7 @@ public class statistics extends GhidraScript {
 
         // Function node and CallGraph statistics
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
-        Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
+        Logging.info("GhidraScript","Number of meaningful functions: " + meaningfulFunctions.size());
 
         CallGraph cg = CallGraph.getCallGraph();
 
@@ -57,11 +57,11 @@ public class statistics extends GhidraScript {
                 continue;
             }
 
-            Logging.info("Function: " + func.value.getName());
+            Logging.info("GhidraScript","Function: " + func.value.getName());
             for (var param : func.parameters) {
                 var paramDataType = param.getDataType();
                 parameterCount++;
-                Logging.info("Parameter: " + paramDataType.getName());
+                Logging.info("GhidraScript","Parameter: " + paramDataType.getName());
                 if (DataTypeHelper.isComplexTypeAware(paramDataType)) {
                     complexDataTypeAwareParameterCount++;
                     isComplexDataTypeAware = true;
@@ -74,17 +74,17 @@ public class statistics extends GhidraScript {
             }
         }
 
-        Logging.info("Total number of parameters: " + parameterCount);
-        Logging.info("Total number of complex data type aware parameters: " + complexDataTypeAwareParameterCount);
-        Logging.info("Total number of complex data type aware functions: " + functionWithComplexTypeParamCounter);
-        Logging.info("Total number of meaningful functions: " + meaningfulFunctions.size());
+        Logging.info("GhidraScript","Total number of parameters: " + parameterCount);
+        Logging.info("GhidraScript","Total number of complex data type aware parameters: " + complexDataTypeAwareParameterCount);
+        Logging.info("GhidraScript","Total number of complex data type aware functions: " + functionWithComplexTypeParamCounter);
+        Logging.info("GhidraScript","Total number of meaningful functions: " + meaningfulFunctions.size());
 
-        Logging.info("Complex data types in function's parameters: " + visited.size());
-        Logging.info("Total number of user defined complex data types: " + allUserDefinedComplexTypes.size());
+        Logging.info("GhidraScript","Complex data types in function's parameters: " + visited.size());
+        Logging.info("GhidraScript","Total number of user defined complex data types: " + allUserDefinedComplexTypes.size());
 
         for (var dt : allUserDefinedComplexTypes) {
             if (!visited.contains(dt)) {
-                Logging.info("Unused complex data type: " + dt.getName());
+                Logging.info("GhidraScript","Unused complex data type: " + dt.getName());
             }
         }
 
@@ -106,7 +106,7 @@ public class statistics extends GhidraScript {
         long endTime = System.currentTimeMillis();
 
         // keep 2 floating points
-        Logging.info("Analysis time: " + (endTime - startTime) / 1000.00 + "s");
+        Logging.info("GhidraScript","Analysis time: " + (endTime - startTime) / 1000.00 + "s");
     }
 
     protected boolean prepareAnalysis() {
@@ -114,28 +114,28 @@ public class statistics extends GhidraScript {
         Global.flatAPI = this;
         Language language = this.currentProgram.getLanguage();
         if (language == null) {
-            Logging.error("Language not found");
+            Logging.error("GhidraScript","Language not found");
             return false;
         } else {
-            Logging.info("Language: " + language.getLanguageID());
+            Logging.info("GhidraScript","Language: " + language.getLanguageID());
             return true;
         }
     }
 
 
     public static void dumpCallGraphInfo(CallGraph cg) {
-        Logging.info(String.format(
+        Logging.info("GhidraScript", String.format(
                 "Call Graph root count: %d",
                 cg.roots.size()
         ));
 
-        Logging.info(String.format(
+        Logging.info("GhidraScript", String.format(
                 "Function node count: %d",
                 cg.functionNodes.size()
         ));
 
         for (var root : cg.roots) {
-            Logging.info(String.format(
+            Logging.info("GhidraScript", String.format(
                     "Root function %s has %d nodes",
                     root.getName(),
                     cg.rootToNodes.get(root).size()

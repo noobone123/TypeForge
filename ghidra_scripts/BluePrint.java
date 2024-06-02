@@ -22,16 +22,16 @@ public class BluePrint extends GhidraScript {
 
         List<Function> functions = Global.currentProgram.getListing().getGlobalFunctions("main");
         if (functions.isEmpty()) {
-            Logging.error("No main function found");
+            Logging.error("GhidraScript","No main function found");
             return;
         }
-        Logging.info("Number of main functions: " + functions.size());
+        Logging.info("GhidraScript","Number of main functions: " + functions.size());
 
         long startTime = System.currentTimeMillis();
 
         // Function node and CallGraph statistics
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
-        Logging.info("Number of meaningful functions: " + meaningfulFunctions.size());
+        Logging.info("GhidraScript","Number of meaningful functions: " + meaningfulFunctions.size());
 
         CallGraph cg = CallGraph.getCallGraph();
 
@@ -40,7 +40,7 @@ public class BluePrint extends GhidraScript {
 
         long endTime = System.currentTimeMillis();
 
-        Logging.info("Analysis time: " + (endTime - startTime) / 1000.00 + "s");
+        Logging.info("GhidraScript","Analysis time: " + (endTime - startTime) / 1000.00 + "s");
     }
 
     protected boolean prepareAnalysis() {
@@ -49,10 +49,10 @@ public class BluePrint extends GhidraScript {
         Global.ghidraScript = this;
         Language language = this.currentProgram.getLanguage();
         if (language == null) {
-            Logging.error("Language not found");
+            Logging.error("GhidraScript","Language not found");
             return false;
         } else {
-            Logging.info("Language: " + language.getLanguageID());
+            Logging.info("GhidraScript","Language: " + language.getLanguageID());
             return true;
         }
     }

@@ -81,13 +81,13 @@ public class AccessPoints {
     public void addMemAccessPoint(SymbolExpr symExpr, PcodeOp op, TypeDescriptor type, AccessType accessType) {
         memoryAccessMap.putIfAbsent(symExpr, new HashSet<>());
         memoryAccessMap.get(symExpr).add(new AP(op, type, accessType));
-        Logging.info(String.format("[AP] Add %s access point for [%s] with type [%s]", accessType, symExpr, type.getName()));
+        Logging.info("AccessPoints", String.format("Add %s ap for [%s] with type [%s]", accessType, symExpr, type.getName()));
     }
 
     public void addArgAccessPoint(SymbolExpr symExpr, PcodeOp op, AccessType accessType) {
         argAccessMap.putIfAbsent(symExpr, new HashSet<>());
         argAccessMap.get(symExpr).add(new AP(op, null, accessType));
-        Logging.info(String.format("[AP] Add %s access point for [%s] with type [null]", accessType, symExpr));
+        Logging.info("AccessPoints", String.format("Add %s ap for [%s]", accessType, symExpr));
     }
 
     public Map<SymbolExpr, Set<AP>> getMemoryAccessMap() {
@@ -121,7 +121,7 @@ public class AccessPoints {
                 }
             }
             if (isRedundant) {
-                Logging.info(String.format("[AP] Remove redundant argument access point for [%s]", symExpr));
+                Logging.info("AccessPoints", String.format("Remove redundant argument ap for [%s]", symExpr));
             }
             return isRedundant;
         });

@@ -60,7 +60,7 @@ public class FunctionNode extends NodeBase<Function> {
      */
     private boolean setPrototype() {
         if (hFunc == null) {
-            Logging.warn("HighFunction is not set");
+            Logging.warn("FunctionNode", "HighFunction is not set");
             return false;
         }
 
@@ -125,7 +125,7 @@ public class FunctionNode extends NodeBase<Function> {
         for (var i = 0; i < proto.getNumParams(); i++) {
             var param = proto.getParam(i);
             if (param.getStorage().getRegister().getName().contains("XMM")) {
-                Logging.warn("Remove XMM register parameter: " + param.getName());
+                Logging.warn("FunctionNode", "Remove XMM register parameter: " + param.getName());
             } else {
                 newParams.add(param);
             }
@@ -143,7 +143,7 @@ public class FunctionNode extends NodeBase<Function> {
 
         ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(this.value.getEntryPoint(), funcDef, SourceType.USER_DEFINED);
         Global.ghidraScript.runCommand(cmd);
-        Logging.info("Fixed function prototype: " + this.value.getName());
+        Logging.info("FunctionNode", "Fixed function prototype: " + this.value.getName());
     }
 
 
@@ -183,7 +183,7 @@ public class FunctionNode extends NodeBase<Function> {
                 highPCodeInst.append("," + " ").append(DecompilerHelper.getVarnodeString((VarnodeAST) pcode.getInput(i)));
             }
 
-            Logging.info(highPCodeInst.toString());
+            Logging.info("FunctionNode", highPCodeInst.toString());
         }
     }
 
@@ -195,15 +195,15 @@ public class FunctionNode extends NodeBase<Function> {
         DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
         try {
             if (!ifc.openProgram(Global.currentProgram)) {
-                Logging.error("Failed to use the decompiler");
+                Logging.error("FunctionNode", "Failed to use the decompiler");
                 return;
             }
 
             DecompileResults decompileRes = ifc.decompileFunction(value, 30, TaskMonitor.DUMMY);
             if (!decompileRes.decompileCompleted()) {
-                Logging.error("Function decompile failed" + value.getName());
+                Logging.error("FunctionNode", "Function decompile failed" + value.getName());
             } else {
-                Logging.info("Decompiled function " + value.getName());
+                Logging.info("FunctionNode", "Decompiled function " + value.getName());
                 setDecompileResult(decompileRes);
             }
 
