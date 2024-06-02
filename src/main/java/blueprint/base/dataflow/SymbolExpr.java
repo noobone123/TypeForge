@@ -6,15 +6,26 @@ import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighSymbol;
 
-import java.util.Objects;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 /**
  * SymbolExpr represents all expressions in program that can be represented as :
  *  <p> base + index * scale + offset </p>
  */
 public class SymbolExpr {
+
+    public enum Attribute {
+        NORMAL,
+        ARGUMENT,
+        MAY_ARRAY,
+        STACK_ARRAY,
+        STACK_STRUCT,
+        STACK_UNION,
+        GLOBAL,
+        MEM_FUNC_ARG,
+    }
+
+
     public SymbolExpr baseExpr = null;
     public SymbolExpr indexExpr = null;
     public SymbolExpr scaleExpr = null;
@@ -32,6 +43,8 @@ public class SymbolExpr {
     public boolean isConst = false;
     public boolean isGlobal = false;
     public Address globalAddr = null;
+
+    public Set<Attribute> attributes = new HashSet<>();
 
     private static final Map<Integer, SymbolExpr> cache = new HashMap<>();
 
@@ -163,6 +176,14 @@ public class SymbolExpr {
         }
         Logging.error(String.format("[SymbolExpr] Cannot find representative root SymExpr for %s", this));
         return null;
+    }
+
+    public void addAttribute(Attribute attr) {
+        attributes.add(attr);
+    }
+
+    public boolean hasAttribute(Attribute attr) {
+        return attributes.contains(attr);
     }
 
     public String getRepresentation() {

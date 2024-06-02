@@ -12,14 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class TypeConstraint implements TypeDescriptor {
 
     public enum Attribute {
-        ARGUMENT,
         MULTI_ACCESS,
-        MAY_ARRAY,
         MAY_NESTED,
-        STACK_ARRAY,
-        STACK_STRUCT,
-        STACK_UNION,
-        GLOBAL
     }
 
     /**
@@ -34,14 +28,14 @@ public class TypeConstraint implements TypeDescriptor {
      * </code>
      */
     public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
-    public final TreeMap<Long, HashSet<Attribute>> fieldTags;
+    public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
     public final TreeMap<Long, Long> ptrLevel;
 
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
 
-    /** This is important, which is used to describe the symbol expression's attributes which associated with this TypeConstraint */
-    public Map<SymbolExpr, Set<Attribute>> symExprAttrs;
+    /** This is important, which is used to record the symbol expression which associated with this TypeConstraint */
+    public Set<SymbolExpr> associatedExpr;
     public Set<Long> totalSize;
     public Set<Long> elementSize;
 
@@ -58,7 +52,7 @@ public class TypeConstraint implements TypeDescriptor {
 
     public TypeConstraint() {
         fieldMap = new TreeMap<>();
-        fieldTags = new TreeMap<>();
+        fieldAttrs = new TreeMap<>();
         ptrLevel = new TreeMap<>();
 
         accessOffsets = new HashMap<>();
@@ -71,7 +65,7 @@ public class TypeConstraint implements TypeDescriptor {
         nestTo = new HashMap<>();
         nestedBy = new HashMap<>();
 
-        symExprAttrs = new HashMap<>();
+        associatedExpr = new HashSet<>();
         this.totalSize = new HashSet<>();
         this.elementSize = new HashSet<>();
     }
@@ -82,7 +76,7 @@ public class TypeConstraint implements TypeDescriptor {
             if (offsets.size() > 1) {
                 for (var offset : offsets) {
                     // If one pcode Access Multiple fields, we should add a tag to the field
-                    addFieldTag(offset, Attribute.MULTI_ACCESS);
+                    addFieldAttr(offset, Attribute.MULTI_ACCESS);
                 }
             }
         });
@@ -112,20 +106,15 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
-    public void addFieldTag(long offset, Attribute tag) {
-        fieldTags.putIfAbsent(offset, new HashSet<>());
-        fieldTags.get(offset).add(tag);
+    public void addFieldAttr(long offset, Attribute tag) {
+        fieldAttrs.putIfAbsent(offset, new HashSet<>());
+        fieldAttrs.get(offset).add(tag);
     }
 
     public void removeFieldTag(long offset, Attribute tag) {
-        if (fieldTags.containsKey(offset)) {
-            fieldTags.get(offset).remove(tag);
+        if (fieldAttrs.containsKey(offset)) {
+            fieldAttrs.get(offset).remove(tag);
         }
-    }
-
-    public void addSymExprAttr(SymbolExpr expr, Attribute attr) {
-        symExprAttrs.putIfAbsent(expr, new HashSet<>());
-        symExprAttrs.get(expr).add(attr);
     }
 
     public void addReferencedBy(long offset, TypeConstraint other) {
@@ -175,17 +164,14 @@ public class TypeConstraint implements TypeDescriptor {
             }
         });
 
-        // Merging tags
-        other.fieldTags.forEach((offset, tagSet) -> {
-            this.fieldTags.putIfAbsent(offset, new HashSet<>());
-            this.fieldTags.get(offset).addAll(tagSet);
+        // Merging field attributes
+        other.fieldAttrs.forEach((offset, tagSet) -> {
+            this.fieldAttrs.putIfAbsent(offset, new HashSet<>());
+            this.fieldAttrs.get(offset).addAll(tagSet);
         });
 
-        // Merging symExprAttrs
-        other.symExprAttrs.forEach((expr, attrs) -> {
-            this.symExprAttrs.putIfAbsent(expr, new HashSet<>());
-            this.symExprAttrs.get(expr).addAll(attrs);
-        });
+        // Merging associatedExpr
+        this.associatedExpr.addAll(other.associatedExpr);
 
         // Merging ptrLevel
         other.ptrLevel.forEach((offset, level) -> {
@@ -227,7 +213,7 @@ public class TypeConstraint implements TypeDescriptor {
 
     public List<Long> collectFieldOffsets() {
         Set<Long> offsets = new HashSet<>(fieldMap.keySet());
-        offsets.addAll(fieldTags.keySet());
+        offsets.addAll(fieldAttrs.keySet());
         List<Long> sortedOffset = new ArrayList<>(offsets);
         Collections.sort(sortedOffset);
         return sortedOffset;
@@ -241,41 +227,7 @@ public class TypeConstraint implements TypeDescriptor {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("Constraint_" + shortUUID + " {\n");
-        if (!totalSize.isEmpty()) {
-            sb.append("Possible Total Size: {");
-            totalSize.forEach(s -> sb.append("0x").append(Long.toHexString(s)).append(", "));
-            sb.append("}\n");
-        }
-
-        if (!elementSize.isEmpty()) {
-            sb.append("Possible Element Size: {");
-            elementSize.forEach(s -> sb.append("0x").append(Long.toHexString(s)).append(", "));
-            sb.append("}\n");
-        }
-
-        fieldMap.forEach((offset, typeMap) -> {
-            sb.append("0x").append(Long.toHexString(offset)).append(" : {");
-            typeMap.forEach((type, count) -> sb.append(type.getName()).append(" : ").append(count).append(", "));
-            sb.append("}, ");
-            if (fieldTags.containsKey(offset)) {
-                sb.append("Tags: ");
-                fieldTags.get(offset).forEach(tag -> sb.append(tag).append(", "));
-            }
-            if (ptrLevel.containsKey(offset)) {
-                sb.append("PtrLevel: ").append(ptrLevel.get(offset));
-            }
-            sb.append(", ");
-            if (referenceTo.containsKey(offset)) {
-                sb.append("ReferenceTo: {");
-                referenceTo.get(offset).forEach(ref -> sb.append("Constraint_").append(ref.shortUUID).append(", "));
-                sb.append("}");
-            }
-            sb.append("\n");
-        });
-        sb.append("}");
-
-        return sb.toString();
+        return getName();
     }
 
     @Override
@@ -300,13 +252,8 @@ public class TypeConstraint implements TypeDescriptor {
     public JsonNode getJsonObj(ObjectMapper mapper) {
         var rootNode = mapper.createObjectNode();
 
-        var SymExprAttrs = rootNode.putArray("SymExprAttrs");
-        symExprAttrs.forEach((expr, attrs) -> {
-            var exprNode = SymExprAttrs.addObject();
-            exprNode.put("SymbolExpr", expr.toString());
-            var attrArray = exprNode.putArray("Attributes");
-            attrs.forEach(attr -> attrArray.add(attr.toString()));
-        });
+        var exprs = rootNode.putArray("AssociatedExpr");
+        associatedExpr.forEach(expr -> exprs.add(expr.toString()));
 
         rootNode.put("TotalSize", totalSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(totalSize.iterator().next()));
         rootNode.put("ElementSize", elementSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(elementSize.iterator().next()));
@@ -340,7 +287,7 @@ public class TypeConstraint implements TypeDescriptor {
             offsetNode.put("PtrLevel", ptrLevel.getOrDefault(offset, 0L));
 
             var tagsArray = offsetNode.putArray("tags");
-            fieldTags.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
+            fieldAttrs.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
         });
 
         return rootNode;

@@ -228,10 +228,10 @@ public class PCodeVisitor {
             for (var symExpr: input0Fact) {
                 var indexFacts = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
                 for (var indexExpr: indexFacts) {
-                    ctx.getConstraint(symExpr).addSymExprAttr(symExpr, TypeConstraint.Attribute.MAY_ARRAY);
                     var newExpr = SymbolExpr.add(ctx, symExpr, SymbolExpr.multiply(ctx, indexExpr, scaleExpr));
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
+                symExpr.addAttribute(SymbolExpr.Attribute.MAY_ARRAY);
             }
 
             ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
@@ -382,6 +382,74 @@ public class PCodeVisitor {
         }
     }
 
+    /**
+     * If pcodeOp is a LOAD or STORE operation, it's possible that the offset is a field of a structure.
+     * For instance:
+     * <p>
+     *     <code> varnode_1 = *(varnode_0 + 4) </code>
+     *     <code> *(varnode_1 + 4) = varnode_2 </code>
+     * </p>
+     * And type of this field is determined by the type of loaded/stored varnode's type.
+     * However, be aware that some case might be loaded/store into a context even if they aren't
+     * fields of a structure.
+     * For instance:
+     * <p>
+     *     <code> varnode_1 = *varnode_0 </code>
+     *     <code> *varnode_1 = varnode_2 </code>
+     * </p>
+     * Such cases can be excluded in later stages.
+     * @param pcodeOp The PCodeOp
+     */
+    private void handleLoad(PcodeOp pcodeOp) {
+        var input = pcodeOp.getInput(1);
+        var output = pcodeOp.getOutput();
+
+        // The amount of data loaded by this instruction is determined by the size of the output variable
+        DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
+
+        ctx.addTracedVarnode(funcNode, output);
+
+        var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
+        for (var symExpr : dataFlowFacts) {
+            var type = new PrimitiveTypeDescriptor(outDT);
+            ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
+
+            var newExpr = SymbolExpr.dereference(ctx, symExpr);
+            ctx.addNewSymbolExpr(funcNode, output, newExpr);
+        }
+    }
+
+    /**
+     * Same as handleLoad, but for STORE operation
+     */
+    private void handleStore(PcodeOp pcodeOp) {
+        // the slot index of cur.varnode is 1, which means this varnode
+        // represent the memory location to be stored
+        var storedAddrVn = pcodeOp.getInput(1);
+        var storedValueVn = pcodeOp.getInput(2);
+        var storedValueFacts = ctx.getIntraDataFlowFacts(funcNode, storedValueVn);
+        var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
+
+        var storedTypes = new HashSet<TypeDescriptor>();
+        if (storedValueFacts != null) {
+            storedValueFacts.forEach(symExpr -> {
+                if (symExpr.isGlobal()) {
+                    storedTypes.add(new DummyType("CodePtr_or_DataPtr"));
+                } else {
+                    storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
+                }
+            });
+        } else {
+            storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
+        }
+
+        for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
+            for (var type : storedTypes) {
+                ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
+            }
+        }
+    }
+
 
     private void handleReturn(PcodeOp pcodeOp) {
         for (var retVn : pcodeOp.getInputs()) {
@@ -449,82 +517,15 @@ public class PCodeVisitor {
 
             var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
             for (var argExpr : argFacts) {
+                argExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.setTypeAlias(argExpr, paramExpr);
-                ctx.getConstraint(argExpr).addSymExprAttr(argExpr, TypeConstraint.Attribute.ARGUMENT);
+                ctx.getAccessPoints().addArgAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
             }
         }
     }
 
-
-    /**
-     * If pcodeOp is a LOAD or STORE operation, it's possible that the offset is a field of a structure.
-     * For instance:
-     * <p>
-     *     <code> varnode_1 = *(varnode_0 + 4) </code>
-     *     <code> *(varnode_1 + 4) = varnode_2 </code>
-     * </p>
-     * And type of this field is determined by the type of loaded/stored varnode's type.
-     * However, be aware that some case might be loaded/store into a context even if they aren't
-     * fields of a structure.
-     * For instance:
-     * <p>
-     *     <code> varnode_1 = *varnode_0 </code>
-     *     <code> *varnode_1 = varnode_2 </code>
-     * </p>
-     * Such cases can be excluded in later stages.
-     * @param pcodeOp The PCodeOp
-     */
-    private void handleLoad(PcodeOp pcodeOp) {
-        var input = pcodeOp.getInput(1);
-        var output = pcodeOp.getOutput();
-
-        // The amount of data loaded by this instruction is determined by the size of the output variable
-        DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
-
-        ctx.addTracedVarnode(funcNode, output);
-
-        var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
-        for (var symExpr : dataFlowFacts) {
-            var type = new PrimitiveTypeDescriptor(outDT);
-            ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
-
-            var newExpr = SymbolExpr.dereference(ctx, symExpr);
-            ctx.addNewSymbolExpr(funcNode, output, newExpr);
-        }
-    }
-
-    /**
-     * Same as handleLoad, but for STORE operation
-     */
-    private void handleStore(PcodeOp pcodeOp) {
-        // the slot index of cur.varnode is 1, which means this varnode
-        // represent the memory location to be stored
-        var storedAddrVn = pcodeOp.getInput(1);
-        var storedValueVn = pcodeOp.getInput(2);
-        var storedValueFacts = ctx.getIntraDataFlowFacts(funcNode, storedValueVn);
-        var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
-
-        var storedTypes = new HashSet<TypeDescriptor>();
-        if (storedValueFacts != null) {
-            storedValueFacts.forEach(symExpr -> {
-                if (symExpr.isGlobal()) {
-                    storedTypes.add(new DummyType("CodePtr_or_DataPtr"));
-                } else {
-                    storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
-                }
-            });
-        } else {
-            storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
-        }
-
-        for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
-            for (var type : storedTypes) {
-                ctx.addAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
-            }
-        }
-    }
 
     private void handleExternalCall(PcodeOp pcodeOp, FunctionNode calleeNode) {
         var externalFuncName = calleeNode.value.getName();
@@ -536,12 +537,13 @@ public class PCodeVisitor {
             case "memset" -> {
                 var lengthArg = pcodeOp.getInput(3);
                 if (lengthArg.isConstant()) {
-                    var symExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
-                    for (var symExpr : symExprs) {
-                        var constraint = ctx.getConstraint(symExpr);
-                        constraint.setTotalSize(lengthArg.getOffset());
-                        ctx.getConstraint(symExpr).addSymExprAttr(symExpr, TypeConstraint.Attribute.ARGUMENT);
-                        Logging.info("[PCode] memset: " + symExpr + " size: " + lengthArg.getOffset());
+                    var ptrExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
+                    for (var ptrExpr : ptrExprs) {
+                        ptrExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
+                        ctx.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
+                        ctx.getAccessPoints().addArgAccessPoint(ptrExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+
+                        Logging.info("[PCode] memset: " + ptrExpr + " size: " + lengthArg.getOffset());
                     }
                 }
             }
@@ -560,12 +562,12 @@ public class PCodeVisitor {
                         ctx.setTypeAlias(dstExpr, srcExpr);
                         Logging.info("[PCode] memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
-                            var dstConstraint = ctx.getConstraint(dstExpr);
-                            var srcConstraint = ctx.getConstraint(srcExpr);
-                            dstConstraint.setTotalSize(lengthVn.getOffset());
-                            srcConstraint.setTotalSize(lengthVn.getOffset());
-                            ctx.getConstraint(dstExpr).addSymExprAttr(dstExpr, TypeConstraint.Attribute.ARGUMENT);
-                            ctx.getConstraint(srcExpr).addSymExprAttr(srcExpr, TypeConstraint.Attribute.ARGUMENT);
+                            ctx.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
+                            ctx.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
+                            dstExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
+                            srcExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
+                            ctx.getAccessPoints().addArgAccessPoint(dstExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+                            ctx.getAccessPoints().addArgAccessPoint(srcExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
                             Logging.info("[PCode] memcpy size: " + lengthVn.getOffset());
                         }
                     }

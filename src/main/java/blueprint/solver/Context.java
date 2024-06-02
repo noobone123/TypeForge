@@ -5,7 +5,6 @@ import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
-import blueprint.base.dataflow.constraints.TypeDescriptor;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
@@ -14,7 +13,6 @@ import blueprint.base.dataflow.SymbolExpr;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import ghidra.program.model.data.*;
 import ghidra.program.model.pcode.HighSymbol;
-import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
@@ -63,7 +61,7 @@ public class Context {
     public Set<FunctionNode> solvedFunc;
 
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
-    public AccessPoints AP;
+    public AccessPoints APs;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
     public HashSet<SymbolExpr> parsedSymExprs;
     public UnionFind<SymbolExpr> typeAlias;
@@ -73,7 +71,7 @@ public class Context {
         this.workList = new LinkedList<>();
         this.solvedFunc = new HashSet<>();
         this.intraCtxMap = new HashMap<>();
-        this.AP = new AccessPoints();
+        this.APs = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
         this.parsedSymExprs = new HashSet<>();
         this.typeAlias = new UnionFind<>();
@@ -161,8 +159,8 @@ public class Context {
             var dataType = symbol.getDataType();
             if (symbol.isGlobal()) {
                 expr = new SymbolExpr.Builder().global(symbol.getSymbol().getAddress(), symbol).build();
+                expr.addAttribute(SymbolExpr.Attribute.GLOBAL);
                 constraint = getConstraint(expr);
-                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.GLOBAL);
             } else {
                 expr = new SymbolExpr.Builder().rootSymbol(symbol).build();
                 if (dataType instanceof Array || dataType instanceof Structure || dataType instanceof Union) {
@@ -173,22 +171,22 @@ public class Context {
 
             if (dataType instanceof Array array) {
                 Logging.info("Found decompiler recovered Array " + dataType.getName());
+                expr.addAttribute(SymbolExpr.Attribute.STACK_ARRAY);
                 constraint.setTotalSize(array.getLength());
-                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.STACK_ARRAY);
                 constraint.setElementSize(array.getElementLength());
             }
             else if (dataType instanceof Structure structure) {
                 Logging.info("Found decompiler recovered Structure " + dataType.getName());
+                expr.addAttribute(SymbolExpr.Attribute.STACK_STRUCT);
                 constraint.setTotalSize(structure.getLength());
-                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.STACK_STRUCT);
                 for (var field: structure.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
             }
             else if (dataType instanceof Union union) {
                 Logging.info("Found decompiler recovered Union " + dataType.getName());
+                expr.addAttribute(SymbolExpr.Attribute.STACK_UNION);
                 constraint.setTotalSize(union.getLength());
-                constraint.addSymExprAttr(expr, TypeConstraint.Attribute.STACK_UNION);
                 for (var field: union.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
@@ -217,10 +215,6 @@ public class Context {
         return intraCtx.tracedVarnodes.contains(vn);
     }
 
-    public void addAccessPoint(SymbolExpr symExpr, PcodeOp pcodeOp, TypeDescriptor type, AccessPoints.AccessType accType ) {
-        AP.addAccessPoint(symExpr, pcodeOp, type, accType);
-    }
-
     public KSet<SymbolExpr> getIntraDataFlowFacts(FunctionNode funcNode, Varnode vn) {
         var intraCtx = intraCtxMap.get(funcNode);
         var res = intraCtx.dataFlowFacts.get(vn);
@@ -242,33 +236,22 @@ public class Context {
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
-    // TODO: add offset and Nested Constraints in Type Constraints, handle the cases of nested struct
     public void buildConstraints() {
-        // Parsing all SymbolExpr collected from PCodeVisitor, save them into symExprToConstraints
-        for (var symExpr : AP.getSymbolExprs()) {
-            parseSymbolExpr(symExpr, null, 0, false);
+        // Remove redundant APs
+        APs.removeRedundantAPs(typeAlias);
+
+        // Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor,
+        // and build the constraints for each SymbolExpr, store the constraints in `symExprToConstraints`
+        for (var symExpr : APs.getMemoryAccessMap().keySet()) {
+            parseMemAccessExpr(symExpr, null, 0);
         }
 
-        var tmp = new HashSet<>(AP.getSymbolExprs());
+        for (var symExpr : APs.getArgAccessMap().keySet()) {
+            parseArgAccessExpr(symExpr);
+        }
 
         // merging Type according to the typeAlias
         mergeTypeAlias();
-
-        // After merging, the symExprToConstraints will be updated and more symExprs with Constraints will be
-        // added into the symExprToConstraints, so we need to reparse the new added SymbolExprs
-        // For example:
-        // There is a callsite: foo(local + 0x10, b), local + 0x10 is a ptr to Nested structure
-        // Function foo's prototype is void foo(struct A *a, int b).
-        // In PCodeVisitor, we mark `local + 0x10` and `a` as TypeAlias, but there is no AP for `local + 0x10`, so
-        // in the first parsing, we can not get the constraints for `local + 0x10`, but after merging, local + 0x10
-        // and `a` has the same constraints, so we should reparse these new added SymbolExprs.
-        var newtmp = new HashSet<>(symExprToConstraints.keySet());
-        for (var symExpr : newtmp) {
-            if (!tmp.contains(symExpr)) {
-                Logging.info("[SymExpr] Re-parsing " + symExpr);
-                parseSymbolExpr(symExpr, null, 0, true);
-            }
-        }
 
         // Remove meaningLess constraints
         var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
@@ -322,11 +305,16 @@ public class Context {
         }
     }
 
-
-    private void parseSymbolExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth, boolean isReparsing) {
+    /**
+     * Parse the Memory Access SymbolExpr and build the constraints for it.
+     * @param expr the Expression to parse
+     * @param parentTypeConstraint if the expr is a recursive dereference, the parentTypeConstraint is the constraint of the parent expr
+     * @param derefDepth the dereference depth of the expr
+     */
+    private void parseMemAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
-        Logging.info("[SymExpr] Parsing " + expr + ", parentTypeConstraint: " + (parentTypeConstraint != null ? parentTypeConstraint.getName() : "null")
+        Logging.info("[SymExpr] Parsing MemAccessExpr " + expr + ", parentTypeConstraint: " + (parentTypeConstraint != null ? parentTypeConstraint.getName() : "null")
                             + ", derefDepth: " + derefDepth);
 
         var base = expr.getBase();
@@ -339,14 +327,10 @@ public class Context {
         if (expr.isRootSymExpr() || expr.isDereference()) {
             var constraint = getConstraint(expr);
 
-            updateConstraint(constraint, 0, parentTypeConstraint, AP.getAccessPoints(expr), isReparsing);
-
-            if (derefDepth > 0) {
-                constraint.setPtrLevel(offsetValue, derefDepth);
-            }
+            updateMemAccessConstraint(expr, parentTypeConstraint, derefDepth, offsetValue, constraint);
 
             if (expr.isDereference()) {
-                parseSymbolExpr(expr.getNestedExpr(), constraint, derefDepth + 1, isReparsing);
+                parseMemAccessExpr(expr.getNestedExpr(), constraint, derefDepth + 1);
             }
         }
 
@@ -361,59 +345,67 @@ public class Context {
                 return;
             }
 
-            // Handle the cases MAY_NESTED
-            if (isReparsing && symExprToConstraints.containsKey(expr) && offsetValue != 0) {
-                Logging.info("[SymExpr] Found MAY_NESTED " + expr);
-                var baseConstraint = getConstraint(base);
-                baseConstraint.addFieldTag(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
-                baseConstraint.addNestTo(offsetValue, symExprToConstraints.get(expr));
-                var nestedConstraint = symExprToConstraints.get(expr);
-                nestedConstraint.addNestedBy(offsetValue, baseConstraint);
-            }
-
-            updateConstraint(constraint, offsetValue, parentTypeConstraint, AP.getAccessPoints(expr), isReparsing);
-
-            if (derefDepth > 0) {
-                constraint.setPtrLevel(offsetValue, derefDepth);
-            }
+            updateMemAccessConstraint(expr, parentTypeConstraint, derefDepth, offsetValue, constraint);
 
             if (index != null && scale != null) {
                 if (scale.isNoZeroConst()) {
                     constraint.setElementSize(scale.getConstant());
                 }
             }
-
             if (base.isDereference()) {
-                parseSymbolExpr(base.getNestedExpr(), constraint, derefDepth + 1, isReparsing);
+                parseMemAccessExpr(base.getNestedExpr(), constraint, derefDepth + 1);
             }
         }
-
         else {
             Logging.warn("[SymExpr] Unsupported SymbolExpr: " + expr + " , Skipping...");
         }
     }
 
-
-    private void updateConstraint(TypeConstraint currentTC, long offsetValue, TypeConstraint parentTC, Set<AccessPoints. AP> APs, boolean isReparsing) {
-        if (parentTC != null) {
-            parentTC.addReferencedBy(offsetValue, currentTC);
-            currentTC.addReferenceTo(offsetValue, parentTC);
+    /**
+     * Parse the Argument Access SymbolExpr and build the constraints for it.
+     * @param expr the Expression to parse
+     */
+    private void parseArgAccessExpr(SymbolExpr expr) {
+        var base = expr.getBase();
+        var offset = expr.getOffset();
+        if (base != null && offset != null &&
+                offset.isNoZeroConst() && hasConstraint(expr)) {
+            var constraint = getConstraint(base);
+            long offsetValue = offset.getConstant();
+            updateNestedConstraint(constraint, offsetValue, getConstraint(expr));
         }
-        // If remove else {} block, the addFieldConstraint will be called
-        // each time parsing a NestedExpr, this may cause the same APs to be added multiple times
-        else {
-            if (isReparsing) {
-                return;
-            }
+    }
 
-            for (var ap: APs) {
-                if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE) {
-                    currentTC.addFieldConstraint(offsetValue, ap);
-                }
+
+    private void updateMemAccessConstraint(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth, long offsetValue, TypeConstraint constraint) {
+        if (parentTypeConstraint == null) {
+            updateFieldConstraint(constraint, offsetValue, APs.getMemoryAccessPoints(expr));
+        } else {
+            updateReferenceConstraint(constraint, offsetValue, parentTypeConstraint);
+        }
+        if (derefDepth > 0) {
+            constraint.setPtrLevel(offsetValue, derefDepth);
+        }
+    }
+
+    private void updateFieldConstraint(TypeConstraint currentTC, long offsetValue, Set<AccessPoints.AP> APs) {
+        for (var ap: APs) {
+            if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE) {
+                currentTC.addFieldConstraint(offsetValue, ap);
             }
         }
     }
 
+    private void updateReferenceConstraint(TypeConstraint referencer, long offsetValue, TypeConstraint referencee) {
+        referencee.addReferencedBy(offsetValue, referencer);
+        referencer.addReferenceTo(offsetValue, referencee);
+    }
+
+    private void updateNestedConstraint(TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
+        nester.addNestTo(offsetValue, nestee);
+        nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
+        nestee.addNestedBy(offsetValue, nester);
+    }
 
     public TypeConstraint getConstraint(SymbolExpr symExpr) {
         TypeConstraint constraint;
@@ -422,16 +414,18 @@ public class Context {
         } else {
             constraint = new TypeConstraint();
             symExprToConstraints.put(symExpr, constraint);
+            Logging.info("[Constraint] Create new constraint for " + symExpr);
         }
-        Logging.info("[SymExpr] Get " + symExpr + " -> " + constraint.getName());
         return constraint;
     }
 
-
-    public TypeConstraint hasConstraint(SymbolExpr symExpr) {
-        return symExprToConstraints.get(symExpr);
+    public AccessPoints getAccessPoints() {
+        return APs;
     }
 
+    public boolean hasConstraint(SymbolExpr symExpr) {
+        return symExprToConstraints.containsKey(symExpr);
+    }
 
     public boolean isFunctionSolved(FunctionNode funcNode) {
         return solvedFunc.contains(funcNode);
