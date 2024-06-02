@@ -130,12 +130,6 @@ public class TypeConstraint implements TypeDescriptor {
         Logging.info("TypeConstraint", String.format("Constraint_%s adding referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
-    public void removeReferenceTo(long offset, TypeConstraint other) {
-        if (referenceTo.containsKey(offset)) {
-            referenceTo.get(offset).remove(other);
-        }
-    }
-
     public void addNestTo(long offset, TypeConstraint other) {
         nestTo.putIfAbsent(offset, new HashSet<>());
         nestTo.get(offset).add(other);
@@ -193,7 +187,15 @@ public class TypeConstraint implements TypeDescriptor {
             this.accessOffsets.get(ap).addAll(offsets);
         });
 
-        // Handling referenceTo: update new and remove old
+        mergeXRef(other);
+
+        // Merging size
+        this.totalSize.addAll(other.totalSize);
+        this.elementSize.addAll(other.elementSize);
+    }
+
+
+    public void mergeXRef(TypeConstraint other) {
         other.referenceTo.forEach((offset, constraints) -> {
             constraints.forEach(constraint -> {
                 this.addReferenceTo(offset, constraint);
@@ -201,18 +203,26 @@ public class TypeConstraint implements TypeDescriptor {
             });
         });
 
-        // Handling referencedBy
         other.referencedBy.forEach((constraint, offsets) -> {
             offsets.forEach(offset -> {
                 this.addReferencedBy(offset, constraint);
-                constraint.removeReferenceTo(offset, other);
-                constraint.addReferenceTo(offset,this);
+                constraint.addReferenceTo(offset, this);
             });
         });
 
-        // Merging size
-        this.totalSize.addAll(other.totalSize);
-        this.elementSize.addAll(other.elementSize);
+        other.nestTo.forEach((offset, constraints) -> {
+            constraints.forEach(constraint -> {
+                this.addNestTo(offset, constraint);
+                constraint.addNestedBy(offset, this);
+            });
+        });
+
+        other.nestedBy.forEach((offset, constraints) -> {
+            constraints.forEach(constraint -> {
+                this.addNestedBy(offset, constraint);
+                constraint.addNestTo(offset, this);
+            });
+        });
     }
 
 
