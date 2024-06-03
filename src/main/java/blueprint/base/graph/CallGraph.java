@@ -190,4 +190,20 @@ public class CallGraph extends GraphBase<Function> {
     public FunctionNode getNodebyAddr(Address addr) {
         return addrToNode.get(addr);
     }
+
+    public Set<FunctionNode> getCallees(FunctionNode caller) {
+        Set<FunctionNode> res = new HashSet<>();
+        for (var callee : caller.succ) {
+            res.add((FunctionNode)callee);
+        }
+        return res;
+    }
+
+    public Set<FunctionNode> getCallers(FunctionNode callee) {
+        Set<FunctionNode> res = new HashSet<>();
+        for (var caller : callee.pred) {
+            res.add((FunctionNode)caller);
+        }
+        return res;
+    }
 }

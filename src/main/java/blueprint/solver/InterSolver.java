@@ -6,6 +6,9 @@ import blueprint.utils.*;
 
 import ghidra.program.model.address.Address;
 
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 
 public class InterSolver {
@@ -17,7 +20,10 @@ public class InterSolver {
     public InterSolver(CallGraph cg) {
         this.cg = cg;
         this.ctx = new Context(this.cg);
-        buildWorkListTest();
+
+        var addr = FunctionHelper.getAddress(0x00119337);
+        var startFunc = cg.getNodebyAddr(addr);
+        buildWorkList(startFunc);
     }
 
 
@@ -55,11 +61,28 @@ public class InterSolver {
     /**
      * Build the worklist for intra-procedural solver, the element's order in the worklist is ...
      */
-    private void buildWorkList() {
-        // TODO: implement algorithm to build worklist which first process the leaf nodes in the call graph
-        // TODO: and then process the non-leaf nodes in the call graph hierarchically.
-        // Should traverse the call graph from the leaf nodes to the root nodes, because the handle of Return Value.
-        // So if caller want to merge the return value's expression, the callee's expression should be solved first.
+    private void buildWorkList(FunctionNode root) {
+        List<FunctionNode> sortedFuncs = new ArrayList<>();
+        Set<FunctionNode> visited = new HashSet<>();
+
+        postOrderTraversal(root, visited, sortedFuncs);
+
+        for (FunctionNode funcNode : sortedFuncs) {
+            Logging.info("InterSolver", "Add function to worklist: " + funcNode.value.getName());
+            ctx.workList.add(funcNode);
+        }
+    }
+
+    private void postOrderTraversal(FunctionNode node, Set<FunctionNode> visited, List<FunctionNode> sortedFuncs) {
+        if (visited.contains(node)) {
+            return;
+        }
+        visited.add(node);
+
+        for (FunctionNode callee : cg.getCallees(node)) {
+            postOrderTraversal(callee, visited, sortedFuncs);
+        }
+        sortedFuncs.add(node);
     }
 
     private void buildWorkListTest() {
