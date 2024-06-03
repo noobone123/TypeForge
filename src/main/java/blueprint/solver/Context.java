@@ -418,6 +418,7 @@ public class Context {
             symExprToConstraints.put(symExpr, constraint);
             Logging.debug("Context", String.format("Create Constraint_%s for %s", constraint.shortUUID, symExpr));
         }
+        constraint.addAssociatedExpr(symExpr);
         Logging.debug("Context", String.format("Get Constraint_%s for %s", constraint.shortUUID, symExpr));
         return constraint;
     }

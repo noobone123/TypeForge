@@ -57,7 +57,6 @@ public class InterSolver {
         ctx.dumpResults();
     }
 
-
     /**
      * Build the worklist for intra-procedural solver, the element's order in the worklist is ...
      */

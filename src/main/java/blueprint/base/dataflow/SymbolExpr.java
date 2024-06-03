@@ -186,6 +186,10 @@ public class SymbolExpr {
         return attributes.contains(attr);
     }
 
+    public List<Attribute> getAttributes() {
+        return new ArrayList<>(attributes);
+    }
+
     public String getRepresentation() {
         StringBuilder sb = new StringBuilder();
         if (rootSym != null) {

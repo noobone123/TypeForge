@@ -180,6 +180,12 @@ public class TypeConstraint implements TypeDescriptor {
         Logging.info("TypeConstraint", String.format("Constraint_%s setting element size: %d", shortUUID, size));
     }
 
+    public void addAssociatedExpr(SymbolExpr expr) {
+        if (associatedExpr.add(expr)) {
+            Logging.info("TypeConstraint", String.format("Constraint_%s adding associatedExpr: %s", shortUUID, expr.toString()));
+        }
+    }
+
     public void merge(TypeConstraint other) {
         // merging fieldMap
         other.fieldMap.forEach((offset, typeMap) -> {
@@ -314,8 +320,13 @@ public class TypeConstraint implements TypeDescriptor {
     public JsonNode getJsonObj(ObjectMapper mapper) {
         var rootNode = mapper.createObjectNode();
 
+        // Add associatedExpr and it's attributes
         var exprs = rootNode.putArray("AssociatedExpr");
-        associatedExpr.forEach(expr -> exprs.add(expr.toString()));
+        associatedExpr.forEach(expr -> {
+            var exprNode = exprs.addObject();
+            exprNode.put("Expr", expr.toString());
+            exprNode.put("Attributes", expr.getAttributes().toString());
+        });
 
         rootNode.put("TotalSize", totalSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(totalSize.iterator().next()));
         rootNode.put("ElementSize", elementSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(elementSize.iterator().next()));
