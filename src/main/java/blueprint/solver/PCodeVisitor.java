@@ -409,6 +409,11 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(1);
         var output = pcodeOp.getOutput();
 
+        if (!ctx.isTracedVn(funcNode, input)) {
+            Logging.debug("PCodeVisitor", "[PCode] Load value is not interested: " + input);
+            return;
+        }
+
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
 
@@ -432,6 +437,12 @@ public class PCodeVisitor {
         // represent the memory location to be stored
         var storedAddrVn = pcodeOp.getInput(1);
         var storedValueVn = pcodeOp.getInput(2);
+
+        if (!ctx.isTracedVn(funcNode, storedAddrVn)) {
+            Logging.debug("PCodeVisitor", "[PCode] Store address is not interested: " + storedAddrVn);
+            return;
+        }
+
         var storedValueFacts = ctx.getIntraDataFlowFacts(funcNode, storedValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
@@ -476,18 +487,40 @@ public class PCodeVisitor {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
         var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
 
-        if (calleeNode.isExternal) {
-            handleExternalCall(pcodeOp, calleeNode);
-            return;
-        }
-
-        if (!ctx.isFunctionSolved(calleeNode)) {
+        if (!ctx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
             Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
             return;
         } else {
             Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");
         }
 
+        // TODO: how to handle cases when arguments and parameters are inconsistency?
+        for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
+            var argVn = pcodeOp.getInput(inputIdx);
+            if (!ctx.isTracedVn(funcNode, argVn)) {
+                Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
+                continue;
+            }
+
+            var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
+            for (var argExpr : argFacts) {
+                argExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
+                ctx.getAccessPoints().addCallAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+
+                if (!calleeNode.isExternal) {
+                    var param = calleeNode.parameters.get(inputIdx - 1);
+                    var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
+                    ctx.setTypeAlias(argExpr, paramExpr);
+                }
+            }
+        }
+
+        if (calleeNode.isExternal) {
+            handleExternalCall(pcodeOp, calleeNode);
+            return;
+        }
+
+        // handle ReturnValue's receiver
         var receiverVn = pcodeOp.getOutput();
         if (receiverVn != null) {
             var retExprs = ctx.intraCtxMap.get(calleeNode).getReturnExpr();
@@ -512,24 +545,6 @@ public class PCodeVisitor {
                 }
             }
         }
-
-        // TODO: how to handle cases when arguments and parameters are inconsistency?
-        for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
-            var argVn = pcodeOp.getInput(inputIdx);
-            if (!ctx.isTracedVn(funcNode, argVn)) {
-                Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
-                continue;
-            }
-
-            var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
-            for (var argExpr : argFacts) {
-                argExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
-                var param = calleeNode.parameters.get(inputIdx - 1);
-                var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
-                ctx.setTypeAlias(argExpr, paramExpr);
-                ctx.getAccessPoints().addCallAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
-            }
-        }
     }
 
 
@@ -545,11 +560,8 @@ public class PCodeVisitor {
                 if (lengthArg.isConstant()) {
                     var ptrExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
                     for (var ptrExpr : ptrExprs) {
-                        ptrExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                         ptrExpr.setVariableSize(lengthArg.getOffset());
                         ctx.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
-                        ctx.getAccessPoints().addCallAccessPoint(ptrExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
-
                         Logging.info("PCodeVisitor", "memset: " + ptrExpr + " size: " + lengthArg.getOffset());
                     }
                 }
@@ -571,12 +583,8 @@ public class PCodeVisitor {
                         if (lengthVn.isConstant()) {
                             ctx.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
                             ctx.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
-                            dstExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                             dstExpr.setVariableSize(lengthVn.getOffset());
-                            srcExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                             dstExpr.setVariableSize(lengthVn.getOffset());
-                            ctx.getAccessPoints().addCallAccessPoint(dstExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
-                            ctx.getAccessPoints().addCallAccessPoint(srcExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
                             Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());
                         }
                     }
