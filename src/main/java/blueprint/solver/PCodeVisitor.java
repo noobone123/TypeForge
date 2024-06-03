@@ -5,7 +5,6 @@ import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.DummyType;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
-import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.constraints.TypeDescriptor;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
@@ -467,6 +466,7 @@ public class PCodeVisitor {
             var retFacts = ctx.getIntraDataFlowFacts(funcNode, retVn);
             for (var retExpr : retFacts) {
                 ctx.intraCtxMap.get(funcNode).setReturnExpr(retExpr);
+                ctx.getAccessPoints().addCallAccessPoint(retExpr, pcodeOp, AccessPoints.AccessType.RETURN_VALUE);
                 Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
@@ -527,7 +527,7 @@ public class PCodeVisitor {
                 var param = calleeNode.parameters.get(inputIdx - 1);
                 var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
                 ctx.setTypeAlias(argExpr, paramExpr);
-                ctx.getAccessPoints().addArgAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+                ctx.getAccessPoints().addCallAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
             }
         }
     }
@@ -547,7 +547,7 @@ public class PCodeVisitor {
                     for (var ptrExpr : ptrExprs) {
                         ptrExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                         ctx.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
-                        ctx.getAccessPoints().addArgAccessPoint(ptrExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+                        ctx.getAccessPoints().addCallAccessPoint(ptrExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
 
                         Logging.info("PCodeVisitor", "memset: " + ptrExpr + " size: " + lengthArg.getOffset());
                     }
@@ -572,8 +572,8 @@ public class PCodeVisitor {
                             ctx.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
                             dstExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                             srcExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
-                            ctx.getAccessPoints().addArgAccessPoint(dstExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
-                            ctx.getAccessPoints().addArgAccessPoint(srcExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+                            ctx.getAccessPoints().addCallAccessPoint(dstExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+                            ctx.getAccessPoints().addCallAccessPoint(srcExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
                             Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());
                         }
                     }

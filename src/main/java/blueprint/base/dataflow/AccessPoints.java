@@ -15,7 +15,8 @@ public class AccessPoints {
     public enum AccessType {
         LOAD,
         STORE,
-        ARGUMENT
+        ARGUMENT,
+        RETURN_VALUE,
     }
 
     /**
@@ -31,6 +32,7 @@ public class AccessPoints {
          * 0: load
          * 1: store
          * 2: argument
+         * 3. RETURN_VALUE
          */
         public AccessType accessType;
 
@@ -70,12 +72,15 @@ public class AccessPoints {
      * Each SymbolExpr in function may be accessed by multiple PcodeOps with different types.
      * So we need to record all the access points of each SymbolExpr.
      */
+
+    /** Expressions in memAccessMap: (param + 1) means there is a load/store into (param + 1), loaded value can be represented as *(param + 1) */
     private final Map<SymbolExpr, Set<AP>> memoryAccessMap;
-    private final Map<SymbolExpr, Set<AP>> argAccessMap;
+    /** Expressions in callAccessMap: (param + 1) means there is a callsite, using (param + 1) as an argument, or *(a + 1) as return value */
+    private final Map<SymbolExpr, Set<AP>> callAccessMap;
 
     public AccessPoints() {
         memoryAccessMap = new HashMap<>();
-        argAccessMap = new HashMap<>();
+        callAccessMap = new HashMap<>();
     }
 
     public void addMemAccessPoint(SymbolExpr symExpr, PcodeOp op, TypeDescriptor type, AccessType accessType) {
@@ -84,9 +89,9 @@ public class AccessPoints {
         Logging.info("AccessPoints", String.format("Add %s ap for [%s] with type [%s]", accessType, symExpr, type.getName()));
     }
 
-    public void addArgAccessPoint(SymbolExpr symExpr, PcodeOp op, AccessType accessType) {
-        argAccessMap.putIfAbsent(symExpr, new HashSet<>());
-        argAccessMap.get(symExpr).add(new AP(op, null, accessType));
+    public void addCallAccessPoint(SymbolExpr symExpr, PcodeOp op, AccessType accessType) {
+        callAccessMap.putIfAbsent(symExpr, new HashSet<>());
+        callAccessMap.get(symExpr).add(new AP(op, null, accessType));
         Logging.info("AccessPoints", String.format("Add %s ap for [%s]", accessType, symExpr));
     }
 
@@ -98,21 +103,21 @@ public class AccessPoints {
         return memoryAccessMap.get(symExpr);
     }
 
-    public Map<SymbolExpr, Set<AP>> getArgAccessMap() {
-        return argAccessMap;
+    public Map<SymbolExpr, Set<AP>> getCallAccessMap() {
+        return callAccessMap;
     }
 
     public Set<AP> getArgAccessPoints(SymbolExpr symExpr) {
-        return argAccessMap.get(symExpr);
+        return callAccessMap.get(symExpr);
     }
 
     /**
-     * For all Expressions in AccessPoints, some of them is not considered as Composite DataType, so we need to remove
+     * For all Expressions in callAccessMap, some of them is not considered as Composite DataType, so we need to remove
      * these redundant expressions by checking if their alias Expr has memory access.
      * @param typeAlias the alias of all expressions
      */
-    public void removeRedundantAPs(UnionFind<SymbolExpr> typeAlias) {
-        argAccessMap.keySet().removeIf(symExpr -> {
+    public void removeRedundantCallAPs(UnionFind<SymbolExpr> typeAlias) {
+        callAccessMap.keySet().removeIf(symExpr -> {
             boolean isRedundant = true;
             for (var alias: typeAlias.getCluster(symExpr)) {
                 if (memoryAccessMap.containsKey(alias)) {

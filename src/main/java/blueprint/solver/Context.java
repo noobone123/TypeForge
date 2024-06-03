@@ -238,7 +238,7 @@ public class Context {
      */
     public void buildConstraints() {
         // Remove redundant APs
-        APs.removeRedundantAPs(typeAlias);
+        APs.removeRedundantCallAPs(typeAlias);
 
         // Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor,
         // and build the constraints for each SymbolExpr, store the constraints in `symExprToConstraints`
@@ -246,7 +246,7 @@ public class Context {
             parseMemAccessExpr(symExpr, null, 0);
         }
 
-        for (var symExpr : APs.getArgAccessMap().keySet()) {
+        for (var symExpr : APs.getCallAccessMap().keySet()) {
             parseArgAccessExpr(symExpr);
         }
 
@@ -327,7 +327,7 @@ public class Context {
     private void parseMemAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
-        Logging.info("Context", String.format("Parsing MemAccessExpr %s, parentTypeConstraint: %s, derefDepth: %d", expr, parentTypeConstraint != null ? parentTypeConstraint.getName() : "null", derefDepth));
+        Logging.info("Context", String.format("Parsing MemAccessExpr %s, parentTypeConstraint: Constraint_%s, derefDepth: %d", expr, parentTypeConstraint != null ? parentTypeConstraint.getName() : "null", derefDepth));
 
         var base = expr.getBase();
         var offset = expr.getOffset();
@@ -389,6 +389,13 @@ public class Context {
             long offsetValue = offset.getConstant();
             updateNestedConstraint(constraint, offsetValue, getConstraint(expr));
         }
+
+        // If the expr is a dereference expression, mean there still exists Memory Access related to this expr,
+        // (Expressions not related to Memory Access in CallAccess has been filtered out by removeRedundantCallAPs)
+        // So now we need to parse the Memory Access Expression.
+        else if (expr.isDereference()) {
+            parseMemAccessExpr(expr, null, 0);
+        }
     }
 
 
@@ -404,6 +411,9 @@ public class Context {
     }
 
     private void updateFieldConstraint(TypeConstraint currentTC, long offsetValue, Set<AccessPoints.AP> APs) {
+        if (APs == null) {
+            return;
+        }
         for (var ap: APs) {
             if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE) {
                 currentTC.addFieldConstraint(offsetValue, ap);
