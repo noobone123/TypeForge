@@ -288,14 +288,14 @@ public class Context {
                 for (var aliasSym : cluster) {
                     var constraint = tmpSymExprToConstraints.get(aliasSym);
                     if (constraint != null) {
-                        Logging.info("Context", "Merging " + aliasSym + ": " + constraint.getName() + " into " + mergedConstraint.getName());
+                        Logging.info("Context", String.format("Merge %s: Constraint_%s into Constraint_%s", aliasSym, constraint.getName(), mergedConstraint.getName()));
                         mergedConstraint.merge(constraint);
                     }
                 }
 
                 for (var sym : cluster) {
                     symExprToConstraints.put(sym, mergedConstraint);
-                    Logging.info("Context", String.format("Set %s -> %s", sym, mergedConstraint.getName()));
+                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", sym, mergedConstraint.getName()));
                     updated.add(sym);
                 }
             }
@@ -399,14 +399,14 @@ public class Context {
     }
 
     private void updateReferenceConstraint(TypeConstraint referencer, long offsetValue, TypeConstraint referencee) {
-        referencee.addReferencedBy(offsetValue, referencer);
+        referencee.addReferencedBy(referencer, offsetValue);
         referencer.addReferenceTo(offsetValue, referencee);
     }
 
     private void updateNestedConstraint(TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
         nester.addNestTo(offsetValue, nestee);
         nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
-        nestee.addNestedBy(offsetValue, nester);
+        nestee.addNestedBy(nester, offsetValue);
     }
 
     public TypeConstraint getConstraint(SymbolExpr symExpr) {

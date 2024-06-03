@@ -40,12 +40,12 @@ public class TypeConstraint implements TypeDescriptor {
     public Set<Long> elementSize;
 
     /** The referenceTo is a map from current TypeConstraint's offset to the referenced TypeConstraint */
-    public final HashMap<Long, HashSet<TypeConstraint>> referenceTo;
+    public HashMap<Long, HashSet<TypeConstraint>> referenceTo;
     /** The referencedBy is a map which records which TypeConstraint references the current TypeConstraint and the set of referenced offsets */
     public final HashMap<TypeConstraint, HashSet<Long>> referencedBy;
 
     public final HashMap<Long, HashSet<TypeConstraint>> nestTo;
-    public final HashMap<Long, HashSet<TypeConstraint>> nestedBy;
+    public final HashMap<TypeConstraint, HashSet<Long>> nestedBy;
 
     public final UUID uuid;
     public final String shortUUID;
@@ -118,16 +118,30 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
-    public void addReferencedBy(long offset, TypeConstraint other) {
-        referencedBy.putIfAbsent(other, new HashSet<>());
-        referencedBy.get(other).add(offset);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding referencedBy: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
-    }
-
     public void addReferenceTo(long offset, TypeConstraint other) {
         referenceTo.putIfAbsent(offset, new HashSet<>());
         referenceTo.get(offset).add(other);
         Logging.info("TypeConstraint", String.format("Constraint_%s adding referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+    }
+
+    public void addReferencedBy(TypeConstraint other, long offset) {
+        referencedBy.putIfAbsent(other, new HashSet<>());
+        referencedBy.get(other).add(offset);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+    }
+
+    public void removeReferenceTo(long offset, TypeConstraint other) {
+        if (referenceTo.containsKey(offset)) {
+            referenceTo.get(offset).remove(other);
+            Logging.info("TypeConstraint", String.format("Constraint_%s removing referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+        }
+    }
+
+    public void removeReferencedBy(TypeConstraint other, long offset) {
+        if (referencedBy.containsKey(other)) {
+            referencedBy.get(other).remove(offset);
+            Logging.info("TypeConstraint", String.format("Constraint_%s removing referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+        }
     }
 
     public void addNestTo(long offset, TypeConstraint other) {
@@ -136,10 +150,24 @@ public class TypeConstraint implements TypeDescriptor {
         Logging.info("TypeConstraint", String.format("Constraint_%s adding nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
-    public void addNestedBy(long offset, TypeConstraint other) {
-        nestedBy.putIfAbsent(offset, new HashSet<>());
-        nestedBy.get(offset).add(other);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding nestedBy: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+    public void addNestedBy(TypeConstraint other, long offset) {
+        nestedBy.putIfAbsent(other, new HashSet<>());
+        nestedBy.get(other).add(offset);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+    }
+
+    public void removeNestTo(long offset, TypeConstraint other) {
+        if (nestTo.containsKey(offset)) {
+            nestTo.get(offset).remove(other);
+            Logging.info("TypeConstraint", String.format("Constraint_%s removing nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+        }
+    }
+
+    public void removeNestedBy(TypeConstraint other, long offset) {
+        if (nestedBy.containsKey(other)) {
+            nestedBy.get(other).remove(offset);
+            Logging.info("TypeConstraint", String.format("Constraint_%s removing nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+        }
     }
 
     public void setTotalSize(long size) {
@@ -196,33 +224,52 @@ public class TypeConstraint implements TypeDescriptor {
 
 
     public void mergeXRef(TypeConstraint other) {
+        List<Runnable> changes = new ArrayList<>();
         other.referenceTo.forEach((offset, constraints) -> {
-            constraints.forEach(constraint -> {
-                this.addReferenceTo(offset, constraint);
-                constraint.addReferencedBy(offset, this);
+            constraints.forEach(refee -> {
+                changes.add(() -> {
+                    this.addReferenceTo(offset, refee);
+                    refee.addReferencedBy(this, offset);
+                    other.removeReferenceTo(offset, refee);
+                    refee.removeReferencedBy(other, offset);
+                });
             });
         });
 
-        other.referencedBy.forEach((constraint, offsets) -> {
+        other.referencedBy.forEach((refer, offsets) -> {
             offsets.forEach(offset -> {
-                this.addReferencedBy(offset, constraint);
-                constraint.addReferenceTo(offset, this);
+                changes.add(() -> {
+                    this.addReferencedBy(refer, offset);
+                    refer.addReferenceTo(offset, this);
+                    other.removeReferencedBy(refer, offset);
+                    refer.removeReferenceTo(offset, other);
+                });
             });
         });
 
         other.nestTo.forEach((offset, constraints) -> {
-            constraints.forEach(constraint -> {
-                this.addNestTo(offset, constraint);
-                constraint.addNestedBy(offset, this);
+            constraints.forEach(nestee -> {
+                changes.add(() -> {
+                    this.addNestTo(offset, nestee);
+                    nestee.addNestedBy(this, offset);
+                    other.removeNestTo(offset, nestee);
+                    nestee.removeNestedBy(other, offset);
+                });
             });
         });
 
-        other.nestedBy.forEach((offset, constraints) -> {
-            constraints.forEach(constraint -> {
-                this.addNestedBy(offset, constraint);
-                constraint.addNestTo(offset, this);
+        other.nestedBy.forEach((nester, offsets) -> {
+            offsets.forEach(offset -> {
+                changes.add(() -> {
+                    this.addNestedBy(nester, offset);
+                    nester.addNestTo(offset, this);
+                    other.removeNestedBy(nester, offset);
+                    nester.removeNestTo(offset, other);
+                });
             });
         });
+
+        changes.forEach(Runnable::run);
     }
 
 
@@ -280,9 +327,9 @@ public class TypeConstraint implements TypeDescriptor {
         });
 
         var NestedByNode = rootNode.putObject("nestedBy");
-        nestedBy.forEach((offset, constraints) -> {
-            var constraintArray = NestedByNode.putArray("0x" + Long.toHexString(offset));
-            constraints.forEach(constraint -> constraintArray.add("Constraint_" + constraint.shortUUID));
+        nestedBy.forEach((constraint, offsets) -> {
+            var offsetArray = NestedByNode.putArray("Constraint_" + constraint.shortUUID);
+            offsets.forEach(offset -> offsetArray.add("0x" + Long.toHexString(offset)));
         });
 
         var fieldsNode = rootNode.putObject("fields");
