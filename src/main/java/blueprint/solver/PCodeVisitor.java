@@ -233,7 +233,7 @@ public class PCodeVisitor {
                     var newExpr = SymbolExpr.add(ctx, symExpr, SymbolExpr.multiply(ctx, indexExpr, scaleExpr));
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
-                symExpr.addAttribute(SymbolExpr.Attribute.MAY_ARRAY);
+                symExpr.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
             }
 
             ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
@@ -546,6 +546,7 @@ public class PCodeVisitor {
                     var ptrExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
                     for (var ptrExpr : ptrExprs) {
                         ptrExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
+                        ptrExpr.setVariableSize(lengthArg.getOffset());
                         ctx.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
                         ctx.getAccessPoints().addCallAccessPoint(ptrExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
 
@@ -571,7 +572,9 @@ public class PCodeVisitor {
                             ctx.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
                             ctx.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
                             dstExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
+                            dstExpr.setVariableSize(lengthVn.getOffset());
                             srcExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
+                            dstExpr.setVariableSize(lengthVn.getOffset());
                             ctx.getAccessPoints().addCallAccessPoint(dstExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
                             ctx.getAccessPoints().addCallAccessPoint(srcExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
                             Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());

@@ -17,12 +17,12 @@ public class SymbolExpr {
     public enum Attribute {
         NORMAL,
         ARGUMENT,
-        MAY_ARRAY,
-        STACK_ARRAY,
-        STACK_STRUCT,
-        STACK_UNION,
+        ARRAY,
+        STRUCT,
+        UNION,
         GLOBAL,
         MEM_FUNC_ARG,
+        MAY_ARRAY_PTR
     }
 
 
@@ -45,6 +45,7 @@ public class SymbolExpr {
     public Address globalAddr = null;
 
     public Set<Attribute> attributes = new HashSet<>();
+    public long variableSize = 0;
 
     private static final Map<Integer, SymbolExpr> cache = new HashMap<>();
 
@@ -184,6 +185,10 @@ public class SymbolExpr {
 
     public boolean hasAttribute(Attribute attr) {
         return attributes.contains(attr);
+    }
+
+    public void setVariableSize(long size) {
+        this.variableSize = size;
     }
 
     public List<Attribute> getAttributes() {

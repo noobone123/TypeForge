@@ -14,6 +14,7 @@ public class TypeConstraint implements TypeDescriptor {
     public enum Attribute {
         MULTI_ACCESS,
         MAY_NESTED,
+        MAY_ARRAY_PTR
     }
 
     /**
@@ -29,6 +30,7 @@ public class TypeConstraint implements TypeDescriptor {
      */
     public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
     public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
+    public final HashSet<Attribute> globalAttrs;
     public final TreeMap<Long, Long> ptrLevel;
 
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
@@ -53,6 +55,7 @@ public class TypeConstraint implements TypeDescriptor {
     public TypeConstraint() {
         fieldMap = new TreeMap<>();
         fieldAttrs = new TreeMap<>();
+        globalAttrs = new HashSet<>();
         ptrLevel = new TreeMap<>();
 
         accessOffsets = new HashMap<>();
@@ -110,6 +113,11 @@ public class TypeConstraint implements TypeDescriptor {
         fieldAttrs.putIfAbsent(offset, new HashSet<>());
         fieldAttrs.get(offset).add(tag);
         Logging.info("TypeConstraint", String.format("Constraint_%s adding fieldTag: 0x%x -> %s", shortUUID, offset, tag));
+    }
+
+    public void addGlobalAttr(Attribute tag) {
+        globalAttrs.add(tag);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding globalTag: %s", shortUUID, tag));
     }
 
     public void removeFieldTag(long offset, Attribute tag) {
@@ -202,6 +210,9 @@ public class TypeConstraint implements TypeDescriptor {
             this.fieldAttrs.putIfAbsent(offset, new HashSet<>());
             this.fieldAttrs.get(offset).addAll(tagSet);
         });
+
+        // Merging global attributes
+        this.globalAttrs.addAll(other.globalAttrs);
 
         // Merging associatedExpr
         this.associatedExpr.addAll(other.associatedExpr);
@@ -331,10 +342,12 @@ public class TypeConstraint implements TypeDescriptor {
             var exprNode = exprs.addObject();
             exprNode.put("Expr", expr.toString());
             exprNode.put("Attributes", expr.getAttributes().toString());
+            exprNode.put("Size", expr.variableSize);
         });
 
         rootNode.put("TotalSize", totalSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(totalSize.iterator().next()));
         rootNode.put("ElementSize", elementSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(elementSize.iterator().next()));
+        rootNode.put("GlobalAttrs", globalAttrs.toString());
 
         var referencedByNode = rootNode.putObject("referencedBy");
         referencedBy.forEach((constraint, offsets) -> {

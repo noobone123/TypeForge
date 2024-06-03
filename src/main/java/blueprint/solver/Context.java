@@ -171,13 +171,15 @@ public class Context {
 
             if (dataType instanceof Array array) {
                 Logging.info("Context", "Found decompiler recovered Array " + dataType.getName());
-                expr.addAttribute(SymbolExpr.Attribute.STACK_ARRAY);
-                constraint.setTotalSize(array.getLength());
+                expr.addAttribute(SymbolExpr.Attribute.ARRAY);
+                expr.setVariableSize((long) array.getLength() * array.getElementLength());
+                constraint.setTotalSize((long) array.getLength() * array.getElementLength());
                 constraint.setElementSize(array.getElementLength());
             }
             else if (dataType instanceof Structure structure) {
                 Logging.info("Context", "Found decompiler recovered Structure " + dataType.getName());
-                expr.addAttribute(SymbolExpr.Attribute.STACK_STRUCT);
+                expr.addAttribute(SymbolExpr.Attribute.STRUCT);
+                expr.setVariableSize(structure.getLength());
                 constraint.setTotalSize(structure.getLength());
                 for (var field: structure.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
@@ -185,7 +187,8 @@ public class Context {
             }
             else if (dataType instanceof Union union) {
                 Logging.info("Context", "Found decompiler recovered Union " + dataType.getName());
-                expr.addAttribute(SymbolExpr.Attribute.STACK_UNION);
+                expr.addAttribute(SymbolExpr.Attribute.UNION);
+                expr.setVariableSize(union.getLength());
                 constraint.setTotalSize(union.getLength());
                 for (var field: union.getComponents()) {
                     constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
@@ -308,6 +311,7 @@ public class Context {
 
                 for (var sym : cluster) {
                     symExprToConstraints.put(sym, mergedConstraint);
+                    mergedConstraint.addAssociatedExpr(sym);
                     Logging.info("Context", String.format("Set expr %s -> Constraint_%s", sym, mergedConstraint.getName()));
                     updated.add(sym);
                 }
