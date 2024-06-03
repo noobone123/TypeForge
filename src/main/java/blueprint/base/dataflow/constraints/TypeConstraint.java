@@ -311,9 +311,14 @@ public class TypeConstraint implements TypeDescriptor {
         return false;
     }
 
-    // In some cases, The FieldTag is not meaningful. For example, if there is a callsite
-    // foo(a, b + 1), the b + 1 is a constant, but the fieldTag is MAY_NESTED.
-    public boolean isMeaningful() {
+    /**
+     * This function is used to check whether current TypeConstraint is related to Composite DataType
+     * For detailed information, we determine by:
+     * 1. Whether constraints maybe a Structure, Array or Union
+     * 2. Whether constraints maybe a Pointer which points to a Structure, Array or Union
+     * @return if the TypeConstraint is related to Composite DataType
+     */
+    public boolean isInterested() {
         return !fieldMap.isEmpty() || !totalSize.isEmpty() || !elementSize.isEmpty();
     }
 
