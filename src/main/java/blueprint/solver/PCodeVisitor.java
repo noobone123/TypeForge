@@ -136,7 +136,7 @@ public class PCodeVisitor {
                 var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = SymbolExpr.add(ctx, symExpr, deltaSym);
+                    var newExpr = add(ctx, symExpr, deltaSym);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
                     ctx.addTracedVarnode(funcNode, output);
                 }
@@ -149,7 +149,7 @@ public class PCodeVisitor {
             var inputFact_1 = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
-                    var newExpr = SymbolExpr.add(ctx, symExpr, symExpr_1);
+                    var newExpr = add(ctx, symExpr, symExpr_1);
                     ctx.addNewSymbolExpr(funcNode, output, newExpr);
                     ctx.addTracedVarnode(funcNode, output);
                 }
@@ -171,12 +171,13 @@ public class PCodeVisitor {
 
         ctx.addTracedVarnode(funcNode, outputVn);
 
+        // If output has already held symbolExpr, we can update the symbol alias map
+        var outputFacts = ctx.getIntraDataFlowFacts(funcNode, outputVn);
+
         for (var inputSymExpr: inputFact) {
-            // If output has already held symbolExpr, we can update the symbol alias map
-            var outputFacts = ctx.getIntraDataFlowFacts(funcNode, outputVn);
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    ctx.setTypeAlias(outputSymExpr, inputSymExpr);
+                    ctx.setSoundTypeAlias(outputSymExpr, inputSymExpr);
                 }
             }
             else {
@@ -208,7 +209,7 @@ public class PCodeVisitor {
                 var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = SymbolExpr.add(ctx, symExpr, deltaSym);
+                    var newExpr = add(ctx, symExpr, deltaSym);
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
             }
@@ -230,7 +231,7 @@ public class PCodeVisitor {
             for (var symExpr: input0Fact) {
                 var indexFacts = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
                 for (var indexExpr: indexFacts) {
-                    var newExpr = SymbolExpr.add(ctx, symExpr, SymbolExpr.multiply(ctx, indexExpr, scaleExpr));
+                    var newExpr = add(ctx, symExpr, multiply(ctx, indexExpr, scaleExpr));
                     ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
                 }
                 symExpr.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
@@ -273,7 +274,7 @@ public class PCodeVisitor {
                         ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), expr);
                     } else {
                         for (var fact : outputFacts) {
-                            ctx.setTypeAlias(fact, expr);
+                            ctx.setSoundTypeAlias(fact, expr);
                         }
                     }
                 }
@@ -293,7 +294,7 @@ public class PCodeVisitor {
                         ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), globalSymExpr);
                     } else {
                         for (var fact : outputFacts) {
-                            ctx.setTypeAlias(fact, globalSymExpr);
+                            ctx.setSoundTypeAlias(fact, globalSymExpr);
                         }
                     }
                 }
@@ -380,7 +381,7 @@ public class PCodeVisitor {
         if (OffsetSanityCheck(size)) {
             var sizeExpr = new SymbolExpr.Builder().constant(size).build();
             for (var symExpr : inputFacts) {
-                var newExpr = SymbolExpr.multiply(ctx, symExpr, sizeExpr);
+                var newExpr = multiply(ctx, symExpr, sizeExpr);
                 ctx.addNewSymbolExpr(funcNode, output, newExpr);
             }
             ctx.addTracedVarnode(funcNode, output);
@@ -416,6 +417,7 @@ public class PCodeVisitor {
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
+        var outputFacts = ctx.getIntraDataFlowFacts(funcNode, output);
 
         ctx.addTracedVarnode(funcNode, output);
 
@@ -424,8 +426,17 @@ public class PCodeVisitor {
             var type = new PrimitiveTypeDescriptor(outDT);
             ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
 
-            var newExpr = SymbolExpr.dereference(ctx, symExpr);
+            var newExpr = dereference(ctx, symExpr);
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
+
+            // If Loaded value is not null, means:
+            // a = *(b), so set a and *(b) as type alias
+            if (outputFacts != null) {
+                Logging.debug("PCodeVisitor", "Loaded varnode has already held symbolExpr, set type alias ...");
+                for (var expr : outputFacts) {
+                    ctx.setSoundTypeAlias(expr, newExpr);
+                }
+            }
         }
     }
 
@@ -486,6 +497,7 @@ public class PCodeVisitor {
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
         var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
+        ctx.getIntraContext(funcNode).addCallSite(pcodeOp, calleeNode);
 
         if (!ctx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
             Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
@@ -510,7 +522,7 @@ public class PCodeVisitor {
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(inputIdx - 1);
                     var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
-                    ctx.setTypeAlias(argExpr, paramExpr);
+                    ctx.setSoundTypeAlias(argExpr, paramExpr);
                 }
             }
         }
@@ -532,7 +544,7 @@ public class PCodeVisitor {
                 if (receiverFacts != null) {
                     for (var receiverExpr : receiverFacts) {
                         for (var retValueExpr : retExprs) {
-                            ctx.setTypeAlias(receiverExpr, retValueExpr);
+                            ctx.setSoundTypeAlias(receiverExpr, retValueExpr);
                         }
                     }
                 }
@@ -578,7 +590,7 @@ public class PCodeVisitor {
                 var srcExprs = ctx.getIntraDataFlowFacts(funcNode, srcVn);
                 for (var dstExpr : dstExprs) {
                     for (var srcExpr : srcExprs) {
-                        ctx.setTypeAlias(dstExpr, srcExpr);
+                        ctx.setSoundTypeAlias(dstExpr, srcExpr);
                         Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
                             ctx.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
@@ -592,6 +604,48 @@ public class PCodeVisitor {
 
             }
         }
+    }
+
+
+    private SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
+        var result = SymbolExpr.add(ctx, a, b);
+
+        var tmpCluster = new HashSet<>(ctx.getSoundTypeAlias().getCluster(a));
+        for (var alias: tmpCluster) {
+            Logging.debug("PCodeVisitor", String.format("Found alias: %s", alias));
+            var aliasRes = SymbolExpr.add(ctx, alias, b);
+            ctx.setMayTypeAlias(result, aliasRes);
+        }
+
+        return result;
+    }
+
+
+    private SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
+        var result = SymbolExpr.multiply(ctx, a, b);
+
+        var tmpCluster = new HashSet<>(ctx.getSoundTypeAlias().getCluster(a));
+        for (var alias: tmpCluster) {
+            Logging.debug("PCodeVisitor", String.format("Found alias: %s", alias));
+            var aliasRes = SymbolExpr.multiply(ctx, alias, b);
+            ctx.setMayTypeAlias(result, aliasRes);
+        }
+
+        return result;
+    }
+
+
+    private SymbolExpr dereference(Context ctx, SymbolExpr a) {
+        var result = SymbolExpr.dereference(ctx, a);
+
+        var tmpCluster = new HashSet<>(ctx.getSoundTypeAlias().getCluster(a));
+        for (var alias: tmpCluster) {
+            Logging.debug("PCodeVisitor", String.format("Found alias: %s", alias));
+            var aliasRes = SymbolExpr.dereference(ctx, alias);
+            ctx.setMayTypeAlias(result, aliasRes);
+        }
+
+        return result;
     }
 
     /**

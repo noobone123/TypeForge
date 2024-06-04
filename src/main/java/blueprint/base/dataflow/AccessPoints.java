@@ -111,6 +111,10 @@ public class AccessPoints {
         return callAccessMap.get(symExpr);
     }
 
+    public Set<SymbolExpr> getAllMemAccessExprs() {
+        return memoryAccessMap.keySet();
+    }
+
     /**
      * For all Expressions in callAccessMap, some of them is not considered as Composite DataType, so we need to remove
      * these redundant expressions by checking if their alias Expr has memory access.

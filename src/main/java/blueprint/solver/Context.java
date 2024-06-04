@@ -13,6 +13,7 @@ import blueprint.base.dataflow.SymbolExpr;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import ghidra.program.model.data.*;
 import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
@@ -37,12 +38,15 @@ public class Context {
         public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
         public HashSet<SymbolExpr> returnExprs;
         public int dataFlowFactKSize = 10;
+        public Map<PcodeOp, FunctionNode> callsites;
+        public Map<SymbolExpr, Set<SymbolExpr>> callExprDerivatives;
 
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
             this.tracedVarnodes = new HashSet<>();
             this.dataFlowFacts = new HashMap<>();
             this.returnExprs = new HashSet<>();
+            this.callsites = new HashMap<>();
         }
 
         public void setReturnExpr(SymbolExpr expr) {
@@ -51,6 +55,14 @@ public class Context {
 
         public Set<SymbolExpr> getReturnExpr() {
             return this.returnExprs;
+        }
+
+        public void addCallSite(PcodeOp op, FunctionNode funcNode) {
+            callsites.put(op, funcNode);
+        }
+
+        public Map<PcodeOp, FunctionNode> getCallSites() {
+            return callsites;
         }
     }
 
@@ -64,7 +76,15 @@ public class Context {
     public AccessPoints APs;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
     public HashSet<SymbolExpr> parsedSymExprs;
-    public UnionFind<SymbolExpr> typeAlias;
+
+    /** Sound Type Alias is used to store TypeAlias which is confirmed by the solver,
+     * SymbolExpr in the same cluster must have the explicit data-flow relationship */
+    public UnionFind<SymbolExpr> soundTypeAlias;
+
+    /** May Type Alias is used to store all possible type alias relationships, which may introduce some false positive
+     *  For example: If there is an add operation, a + 0x8, we mark b + 0x8 and a + 0x8 as type alias if a and b are type alias.
+     *  But in program there may not exist b + 0x8, so we need to remove these false positive later. */
+    public UnionFind<SymbolExpr> mayTypeAlias;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
@@ -74,12 +94,17 @@ public class Context {
         this.APs = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
         this.parsedSymExprs = new HashSet<>();
-        this.typeAlias = new UnionFind<>();
+        this.soundTypeAlias = new UnionFind<>();
+        this.mayTypeAlias = new UnionFind<>();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
         IntraContext intraCtx = new IntraContext();
         intraCtxMap.put(funcNode, intraCtx);
+    }
+
+    public IntraContext getIntraContext(FunctionNode funcNode) {
+        return intraCtxMap.get(funcNode);
     }
 
     public void addTracedSymbol(FunctionNode funcNode, HighSymbol highSymbol) {
@@ -172,8 +197,8 @@ public class Context {
             if (dataType instanceof Array array) {
                 Logging.info("Context", "Found decompiler recovered Array " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.ARRAY);
-                expr.setVariableSize((long) array.getLength() * array.getElementLength());
-                constraint.setTotalSize((long) array.getLength() * array.getElementLength());
+                expr.setVariableSize(array.getLength());
+                constraint.setTotalSize(array.getLength());
                 constraint.setElementSize(array.getElementLength());
             }
             else if (dataType instanceof Structure structure) {
@@ -228,10 +253,25 @@ public class Context {
         return res;
     }
 
-    public void setTypeAlias(SymbolExpr sym1, SymbolExpr sym2) {
+    public UnionFind<SymbolExpr> getSoundTypeAlias() {
+        return soundTypeAlias;
+    }
+
+    public UnionFind<SymbolExpr> getMayTypeAlias() {
+        return mayTypeAlias;
+    }
+
+    public void setSoundTypeAlias(SymbolExpr sym1, SymbolExpr sym2) {
         if (!sym1.equals(sym2)) {
-            typeAlias.union(sym1, sym2);
-            Logging.info("Context", String.format("Set type alias: %s == %s", sym1, sym2));
+            soundTypeAlias.union(sym1, sym2);
+            Logging.info("Context", String.format("Set sound type alias: %s == %s", sym1, sym2));
+        }
+    }
+
+    public void setMayTypeAlias(SymbolExpr sym1, SymbolExpr sym2) {
+        if (!sym1.equals(sym2)) {
+            mayTypeAlias.union(sym1, sym2);
+            Logging.info("Context", String.format("Set may type alias: %s == %s", sym1, sym2));
         }
     }
 
@@ -241,7 +281,9 @@ public class Context {
      */
     public void buildConstraints() {
         // Remove redundant APs
-        APs.removeRedundantCallAPs(typeAlias);
+        APs.removeRedundantCallAPs(soundTypeAlias);
+
+        // TODO: handle may Type Aliases ...
 
         // Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor,
         // and build the constraints for each SymbolExpr, store the constraints in `symExprToConstraints`
@@ -259,7 +301,7 @@ public class Context {
         // Remove meaningLess constraints
         removeRedundantConstraints();
 
-        for (var constraint : symExprToConstraints.values()) {
+        for (var constraint : new HashSet<>(symExprToConstraints.values())) {
             constraint.build();
         }
 
@@ -298,7 +340,7 @@ public class Context {
             if (updated.contains(symExpr)) {
                 continue;
             }
-            var cluster = typeAlias.getCluster(symExpr);
+            var cluster = soundTypeAlias.getCluster(symExpr);
             if (cluster.size() > 1) {
                 var mergedConstraint = new TypeConstraint();
                 for (var aliasSym : cluster) {

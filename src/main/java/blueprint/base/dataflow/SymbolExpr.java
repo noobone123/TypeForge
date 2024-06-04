@@ -392,7 +392,7 @@ public class SymbolExpr {
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
-                ctx.setTypeAlias(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build());
+                ctx.setSoundTypeAlias(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build());
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
             } else {
                 builder.base(a).offset(b);
@@ -419,7 +419,6 @@ public class SymbolExpr {
         else {
             Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
         }
-
         return builder.build();
     }
 
@@ -460,7 +459,7 @@ public class SymbolExpr {
         }
         var newExpr = new SymbolExpr.Builder().dereference(a).build();
         if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            ctx.setTypeAlias(newExpr, new SymbolExpr.Builder().dereference(a.baseExpr).build());
+            ctx.setSoundTypeAlias(newExpr, new SymbolExpr.Builder().dereference(a.baseExpr).build());
         }
         return newExpr;
     }

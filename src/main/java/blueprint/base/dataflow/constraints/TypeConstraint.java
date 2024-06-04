@@ -73,18 +73,6 @@ public class TypeConstraint implements TypeDescriptor {
         this.elementSize = new HashSet<>();
     }
 
-
-    public void build() {
-        accessOffsets.forEach((ap, offsets) -> {
-            if (offsets.size() > 1) {
-                for (var offset : offsets) {
-                    // If one pcode Access Multiple fields, we should add a tag to the field
-                    addFieldAttr(offset, Attribute.MULTI_ACCESS);
-                }
-            }
-        });
-    }
-
     public void addFieldConstraint(long offset, AccessPoints.AP ap) {
         accessOffsets.putIfAbsent(ap, new HashSet<>());
         accessOffsets.get(ap).add(offset);
@@ -289,13 +277,24 @@ public class TypeConstraint implements TypeDescriptor {
         changes.forEach(Runnable::run);
     }
 
-
     public List<Long> collectFieldOffsets() {
         Set<Long> offsets = new HashSet<>(fieldMap.keySet());
         offsets.addAll(fieldAttrs.keySet());
         List<Long> sortedOffset = new ArrayList<>(offsets);
         Collections.sort(sortedOffset);
         return sortedOffset;
+    }
+
+
+    public void build() {
+        accessOffsets.forEach((ap, offsets) -> {
+            if (offsets.size() > 1) {
+                for (var offset : offsets) {
+                    // If one pcode Access Multiple fields, we should add a tag to the field
+                    addFieldAttr(offset, Attribute.MULTI_ACCESS);
+                }
+            }
+        });
     }
 
 
