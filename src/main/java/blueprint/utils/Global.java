@@ -1,6 +1,8 @@
 package blueprint.utils;
 
 import ghidra.app.script.GhidraScript;
+import ghidra.features.bsim.query.client.IDSQLResolution;
+import ghidra.framework.Architecture;
 import ghidra.program.model.listing.Program;
 import ghidra.program.flatapi.FlatProgramAPI;
 /**

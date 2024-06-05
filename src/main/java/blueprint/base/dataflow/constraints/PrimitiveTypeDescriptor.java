@@ -11,6 +11,9 @@ public class PrimitiveTypeDescriptor implements TypeDescriptor {
         this.typeName = type.getName();
     }
 
+    public int getDataTypeSize() {
+        return type.getLength();
+    }
 
     @Override
     public String getName() {

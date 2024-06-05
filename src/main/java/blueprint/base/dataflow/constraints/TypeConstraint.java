@@ -2,6 +2,7 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 
 import java.util.*;
@@ -205,15 +206,6 @@ public class TypeConstraint implements TypeDescriptor {
         // Merging associatedExpr
         this.associatedExpr.addAll(other.associatedExpr);
 
-        // Merging ptrLevel
-        other.ptrLevel.forEach((offset, level) -> {
-            if (this.ptrLevel.containsKey(offset)) {
-                this.ptrLevel.put(offset, Math.max(this.ptrLevel.get(offset), level));
-            } else {
-                this.ptrLevel.put(offset, level);
-            }
-        });
-
         // Merging accessOffsets
         other.accessOffsets.forEach((ap, offsets) -> {
             this.accessOffsets.putIfAbsent(ap, new HashSet<>());
@@ -284,22 +276,6 @@ public class TypeConstraint implements TypeDescriptor {
         Collections.sort(sortedOffset);
         return sortedOffset;
     }
-
-
-    public void build() {
-        accessOffsets.forEach((ap, offsets) -> {
-            if (offsets.size() > 1) {
-                for (var offset : offsets) {
-                    // If one pcode Access Multiple fields, we should add a tag to the field
-                    addFieldAttr(offset, Attribute.MULTI_ACCESS);
-                }
-            }
-        });
-
-        // TODO: parse and set ptr level
-        // ...
-    }
-
 
     @Override
     public String getName() {

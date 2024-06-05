@@ -10,18 +10,12 @@ import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
 
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import ghidra.program.model.data.*;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
-
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.io.File;
-import java.io.IOException;
 
 
 /**
@@ -289,7 +283,7 @@ public class Context {
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
-    public void buildConstraints() {
+    public void collectConstraints() {
         // Remove redundant APs
         APs.removeRedundantCallAPs(soundTypeAlias);
 
@@ -309,11 +303,7 @@ public class Context {
         // Remove meaningLess constraints
         removeRedundantConstraints();
 
-        for (var constraint : new HashSet<>(symExprToConstraints.values())) {
-            constraint.build();
-        }
-
-        Logging.info("Context", "Build constraints done.");
+        Logging.info("Context", "Collect constraints done.");
     }
 
     /**
@@ -507,48 +497,5 @@ public class Context {
 
     public boolean isFunctionSolved(FunctionNode funcNode) {
         return solvedFunc.contains(funcNode);
-    }
-
-    public void dumpResults() {
-        String workingDir = System.getProperty("user.dir");
-        Logging.info("Context", "Current working directory: " + workingDir);
-
-        File outputDir = new File(System.getProperty("user.dir") + File.separator + "codes/blueprint/dummy");
-        if (!outputDir.exists()) {
-            outputDir.mkdirs();
-        }
-
-        // dump constraints to JSON file
-        File outputFile = new File(outputDir, "constraints.json");
-        var mapper = new ObjectMapper();
-        var root = mapper.createObjectNode();
-        symExprToConstraints.forEach((symExpr, constraint) -> {
-            root.set("Constraint_" + constraint.shortUUID, constraint.getJsonObj(mapper));
-        });
-
-        // dump metadata to JSON file
-        File outputFile2 = new File(outputDir, "metadata.json");
-        var mapper2 = new ObjectMapper();
-        var root2 = mapper2.createObjectNode();
-        symExprToConstraints.forEach((symExpr, constraint) -> {
-            var prefix = symExpr.prefix;
-            var prefixNode = (ObjectNode) root2.get(prefix);
-            if (prefixNode == null) {
-                prefixNode = mapper2.createObjectNode();
-                root2.set(prefix, prefixNode);
-            }
-            prefixNode.put(symExpr.getRepresentation(), "Constraint_" + constraint.shortUUID);
-        });
-
-        try {
-            mapper.writerWithDefaultPrettyPrinter().writeValue(outputFile, root);
-            Logging.info("Context", "Constraints dumped to " + outputFile.getPath());
-
-            mapper2.writerWithDefaultPrettyPrinter().writeValue(outputFile2, root2);
-            Logging.info("Context", "Metadata dumped to " + outputFile2.getPath());
-
-        } catch (IOException e) {
-            Logging.error("Context", "Error writing JSON to file" + e.getMessage());
-        }
     }
 }

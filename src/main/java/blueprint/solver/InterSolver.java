@@ -54,8 +54,10 @@ public class InterSolver {
             ctx.solvedFunc.add(funcNode);
         }
 
-        ctx.buildConstraints();
-        ctx.dumpResults();
+        ctx.collectConstraints();
+
+        var generator = new Generator(ctx);
+        generator.dumpResults();
     }
 
     /**
