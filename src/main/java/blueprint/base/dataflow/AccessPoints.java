@@ -77,7 +77,7 @@ public class AccessPoints {
     private final Map<SymbolExpr, Set<AP>> memoryAccessMap;
     /** Expressions in callAccessMap: (param + 1) means there is a callsite, using (param + 1) as an argument, or *(a + 1) as return value */
     private final Map<SymbolExpr, Set<AP>> callAccessMap;
-
+    /** Used to filter meaningful expressions in may Type Alias */
     private final Set<SymbolExpr> meaningfulExprs = new HashSet<>();
 
     public AccessPoints() {

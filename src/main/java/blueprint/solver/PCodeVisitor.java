@@ -107,8 +107,6 @@ public class PCodeVisitor {
                 }
             }
         }
-
-        generateMayTypeAlias();
     }
 
     /**
@@ -428,10 +426,6 @@ public class PCodeVisitor {
             var type = new PrimitiveTypeDescriptor(outDT);
 
             ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
-            var nested = symExpr.getNestedAccess();
-            if (nested != null) {
-                ctx.getAccessPoints().addMeaningfulExpr(nested);
-            }
 
             var newExpr = dereference(ctx, symExpr);
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
@@ -481,10 +475,6 @@ public class PCodeVisitor {
             for (var type : storedTypes) {
                 ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
             }
-            var nested = symExpr.getNestedAccess();
-            if (nested != null) {
-                ctx.getAccessPoints().addMeaningfulExpr(nested);
-            }
         }
     }
 
@@ -513,6 +503,11 @@ public class PCodeVisitor {
         if (!ctx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
             Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
             return;
+        } else if (calleeNode.isTypeAgnostic) {
+            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is type agnostic, skip.");
+            return;
+        } else if (!calleeNode.isExternal) {
+            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is an external function");
         } else {
             Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");
         }
@@ -619,13 +614,7 @@ public class PCodeVisitor {
 
 
     private SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
-        var result = SymbolExpr.add(ctx, a, b);
-        var root = a.getRootExpr();
-        if (root != null) {
-            ctx.getIntraContext(funcNode).addDerivedExpr(root, result);
-        }
-
-        return result;
+        return SymbolExpr.add(ctx, a, b);
     }
 
 
@@ -635,38 +624,7 @@ public class PCodeVisitor {
 
 
     private SymbolExpr dereference(Context ctx, SymbolExpr a) {
-        var result = SymbolExpr.dereference(ctx, a);
-        var root = a.getRootExpr();
-        if (root != null) {
-            ctx.getIntraContext(funcNode).addDerivedExpr(root, result);
-        }
-
-        return result;
-    }
-
-    /**
-     * Generate may type alias using derived symbolExprs.
-     * For example:
-     * a -- derived --> a + 0x10, *(a + 0x10), *(a + 0x10) + 0x10, ...
-     * If a is Type Alias with b, then we can replace a with b in all derived symbolExprs.
-     * b --> b + 0x10, *(b + 0x10), *(b + 0x10) + 0x10, ...
-     * and We make *(a + 0x10) as Type Alias with *(b + 0x10), ...
-     */
-    private void generateMayTypeAlias() {
-        Logging.info("PCodeVisitor", "Generate may type alias on derived symbolExprs ...");
-        var intraCtx = ctx.getIntraContext(funcNode);
-        var derivedExprs = intraCtx.getDerivedExprs();
-        for (var rootExpr : derivedExprs.keySet()) {
-            var derived = derivedExprs.get(rootExpr);
-            for (var expr : derived) {
-                for (var typeAlias : ctx.getSoundTypeAlias().getCluster(rootExpr)) {
-                    var newExpr = expr.replaceRoot(typeAlias);
-                    if (newExpr != null) {
-                        ctx.setMayTypeAlias(expr, newExpr);
-                    }
-                }
-            }
-        }
+        return SymbolExpr.dereference(ctx, a);
     }
 
     /**

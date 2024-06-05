@@ -29,6 +29,7 @@ public class FunctionNode extends NodeBase<Function> {
 
     public boolean isMeaningful = false;
     public boolean isExternal = false;
+    public boolean isTypeAgnostic = false;
     public boolean isNormal = false;
 
     public HighFunction hFunc = null;
@@ -50,6 +51,10 @@ public class FunctionNode extends NodeBase<Function> {
         } else {
             this.decompile();
         }
+    }
+
+    public void setTypeAgnostic() {
+        isTypeAgnostic = true;
     }
 
     /**

@@ -295,6 +295,9 @@ public class TypeConstraint implements TypeDescriptor {
                 }
             }
         });
+
+        // TODO: parse and set ptr level
+        // ...
     }
 
 

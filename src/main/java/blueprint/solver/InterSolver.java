@@ -21,16 +21,17 @@ public class InterSolver {
         this.cg = cg;
         this.ctx = new Context(this.cg);
 
-        var addr = FunctionHelper.getAddress(0x00148f23);
+        var addr = FunctionHelper.getAddress(0x001492c8);
         var startFunc = cg.getNodebyAddr(addr);
         buildWorkList(startFunc);
+        setTypeAgnosticFunctions();
     }
 
 
     public void run() {
         while (!ctx.workList.isEmpty()) {
             FunctionNode funcNode = ctx.workList.poll();
-            if (!funcNode.isMeaningful) {
+            if (!funcNode.isMeaningful || funcNode.isTypeAgnostic) {
                 Logging.info("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
@@ -119,6 +120,19 @@ public class InterSolver {
             addr = FunctionHelper.getAddress(a);
             funcNode = cg.getNodebyAddr(addr);
             ctx.workList.add(funcNode);
+        }
+    }
+
+
+    public void setTypeAgnosticFunctions() {
+        var addrList = List.of(
+                0x0015c04e,
+                0x0015bffc
+        );
+
+        for (var addr: addrList) {
+            var funcNode = cg.getNodebyAddr(FunctionHelper.getAddress(addr));
+            funcNode.setTypeAgnostic();
         }
     }
 }
