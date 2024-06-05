@@ -430,7 +430,7 @@ public class PCodeVisitor {
             ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
             var nested = symExpr.getNestedAccess();
             if (nested != null) {
-                ctx.getAccessPoints().addMemAccessPoint(nested, pcodeOp, new DummyType("Struct_Ref"), AccessPoints.AccessType.LOAD);
+                ctx.getAccessPoints().addMeaningfulExpr(nested);
             }
 
             var newExpr = dereference(ctx, symExpr);
@@ -480,10 +480,10 @@ public class PCodeVisitor {
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
             for (var type : storedTypes) {
                 ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
-                var nested = symExpr.getNestedAccess();
-                if (nested != null) {
-                    ctx.getAccessPoints().addMemAccessPoint(nested, pcodeOp, new DummyType("Struct_Ref"), AccessPoints.AccessType.LOAD);
-                }
+            }
+            var nested = symExpr.getNestedAccess();
+            if (nested != null) {
+                ctx.getAccessPoints().addMeaningfulExpr(nested);
             }
         }
     }
@@ -653,6 +653,7 @@ public class PCodeVisitor {
      * and We make *(a + 0x10) as Type Alias with *(b + 0x10), ...
      */
     private void generateMayTypeAlias() {
+        Logging.info("PCodeVisitor", "Generate may type alias on derived symbolExprs ...");
         var intraCtx = ctx.getIntraContext(funcNode);
         var derivedExprs = intraCtx.getDerivedExprs();
         for (var rootExpr : derivedExprs.keySet()) {

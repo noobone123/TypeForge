@@ -309,7 +309,7 @@ public class Context {
         // Remove redundant APs
         APs.removeRedundantCallAPs(soundTypeAlias);
 
-        soundTypeAlias.mergeByAccessed(mayTypeAlias, APs.getAllAccessExprs());
+        soundTypeAlias.mergeByAccessed(mayTypeAlias, APs.getMeaningfulExprs());
 
         // Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor,
         // and build the constraints for each SymbolExpr, store the constraints in `symExprToConstraints`

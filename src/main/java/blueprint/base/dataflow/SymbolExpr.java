@@ -199,13 +199,13 @@ public class SymbolExpr {
      * If Load/Store Access occurs:
      * if SymbolExpr is a + 0x10, we think it's not nested Access.
      * if SymbolExpr is *(a + 0x10) + 0x8, or *(a + 0x10) or *(a) + index * scale + offset
-     * we think it's nested Access because the *(a + 0x10) may indicate a pointer
-     *  pointed to other complex data structure.
+     * we think it's nested Access because the *(a + 0x10) may indicate a pointer, so this expression
+     * is worth to be recorded.
      * @return nested Access SymbolExpr
      */
     public SymbolExpr getNestedAccess() {
         if (isDereference()) {
-            return nestedExpr;
+            return this;
         }
         else if (baseExpr != null && baseExpr.isDereference()) {
             return baseExpr;

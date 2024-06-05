@@ -77,7 +77,7 @@ public class UnionFind<T> {
                 Set<T> clusterToMerge = other.clusters.get(rootInOther);
                 for (T member: clusterToMerge) {
                     if (accessedExpr.contains(member) && member != expr) {
-                        Logging.info("UnionFind", String.format("Found %s in may type alias set, union with %s", member, expr));
+                        Logging.info("UnionFind", String.format("Confirm union between %s and %s in may type alias", expr, member));
                         union(expr, member);
                     }
                 }
