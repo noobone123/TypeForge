@@ -107,6 +107,8 @@ public class PCodeVisitor {
                 }
             }
         }
+
+        generateMayTypeAlias();
     }
 
     /**
@@ -424,7 +426,12 @@ public class PCodeVisitor {
         var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : dataFlowFacts) {
             var type = new PrimitiveTypeDescriptor(outDT);
+
             ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
+            var nested = symExpr.getNestedAccess();
+            if (nested != null) {
+                ctx.getAccessPoints().addMemAccessPoint(nested, pcodeOp, new DummyType("Struct_Ref"), AccessPoints.AccessType.LOAD);
+            }
 
             var newExpr = dereference(ctx, symExpr);
             ctx.addNewSymbolExpr(funcNode, output, newExpr);
@@ -473,6 +480,10 @@ public class PCodeVisitor {
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
             for (var type : storedTypes) {
                 ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
+                var nested = symExpr.getNestedAccess();
+                if (nested != null) {
+                    ctx.getAccessPoints().addMemAccessPoint(nested, pcodeOp, new DummyType("Struct_Ref"), AccessPoints.AccessType.LOAD);
+                }
             }
         }
     }
@@ -609,12 +620,9 @@ public class PCodeVisitor {
 
     private SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
         var result = SymbolExpr.add(ctx, a, b);
-
-        var tmpCluster = new HashSet<>(ctx.getSoundTypeAlias().getCluster(a));
-        for (var alias: tmpCluster) {
-            Logging.debug("PCodeVisitor", String.format("Found alias: %s", alias));
-            var aliasRes = SymbolExpr.add(ctx, alias, b);
-            ctx.setMayTypeAlias(result, aliasRes);
+        var root = a.getRootExpr();
+        if (root != null) {
+            ctx.getIntraContext(funcNode).addDerivedExpr(root, result);
         }
 
         return result;
@@ -622,30 +630,42 @@ public class PCodeVisitor {
 
 
     private SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
-        var result = SymbolExpr.multiply(ctx, a, b);
-
-        var tmpCluster = new HashSet<>(ctx.getSoundTypeAlias().getCluster(a));
-        for (var alias: tmpCluster) {
-            Logging.debug("PCodeVisitor", String.format("Found alias: %s", alias));
-            var aliasRes = SymbolExpr.multiply(ctx, alias, b);
-            ctx.setMayTypeAlias(result, aliasRes);
-        }
-
-        return result;
+        return SymbolExpr.multiply(ctx, a, b);
     }
 
 
     private SymbolExpr dereference(Context ctx, SymbolExpr a) {
         var result = SymbolExpr.dereference(ctx, a);
-
-        var tmpCluster = new HashSet<>(ctx.getSoundTypeAlias().getCluster(a));
-        for (var alias: tmpCluster) {
-            Logging.debug("PCodeVisitor", String.format("Found alias: %s", alias));
-            var aliasRes = SymbolExpr.dereference(ctx, alias);
-            ctx.setMayTypeAlias(result, aliasRes);
+        var root = a.getRootExpr();
+        if (root != null) {
+            ctx.getIntraContext(funcNode).addDerivedExpr(root, result);
         }
 
         return result;
+    }
+
+    /**
+     * Generate may type alias using derived symbolExprs.
+     * For example:
+     * a -- derived --> a + 0x10, *(a + 0x10), *(a + 0x10) + 0x10, ...
+     * If a is Type Alias with b, then we can replace a with b in all derived symbolExprs.
+     * b --> b + 0x10, *(b + 0x10), *(b + 0x10) + 0x10, ...
+     * and We make *(a + 0x10) as Type Alias with *(b + 0x10), ...
+     */
+    private void generateMayTypeAlias() {
+        var intraCtx = ctx.getIntraContext(funcNode);
+        var derivedExprs = intraCtx.getDerivedExprs();
+        for (var rootExpr : derivedExprs.keySet()) {
+            var derived = derivedExprs.get(rootExpr);
+            for (var expr : derived) {
+                for (var typeAlias : ctx.getSoundTypeAlias().getCluster(rootExpr)) {
+                    var newExpr = expr.replaceRoot(typeAlias);
+                    if (newExpr != null) {
+                        ctx.setMayTypeAlias(expr, newExpr);
+                    }
+                }
+            }
+        }
     }
 
     /**

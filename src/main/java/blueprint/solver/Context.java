@@ -39,7 +39,7 @@ public class Context {
         public HashSet<SymbolExpr> returnExprs;
         public int dataFlowFactKSize = 10;
         public Map<PcodeOp, FunctionNode> callsites;
-        public Map<SymbolExpr, Set<SymbolExpr>> callExprDerivatives;
+        public Map<SymbolExpr, Set<SymbolExpr>> derivedExprs;
 
         public IntraContext() {
             this.tracedSymbols = new HashSet<>();
@@ -47,6 +47,7 @@ public class Context {
             this.dataFlowFacts = new HashMap<>();
             this.returnExprs = new HashSet<>();
             this.callsites = new HashMap<>();
+            this.derivedExprs = new HashMap<>();
         }
 
         public void setReturnExpr(SymbolExpr expr) {
@@ -63,6 +64,30 @@ public class Context {
 
         public Map<PcodeOp, FunctionNode> getCallSites() {
             return callsites;
+        }
+
+        public void initDerivedExprs(SymbolExpr expr) {
+            if (expr.isRootSymExpr() || (expr.isReference() && expr.getNestedExpr().isRootSymExpr())) {
+                derivedExprs.put(expr, new HashSet<>());
+                Logging.info("Context", "Init derived exprs for " + expr);
+            }
+            else {
+                Logging.error("Context", "Failed to init derived exprs for " + expr);
+            }
+        }
+
+        public void addDerivedExpr(SymbolExpr root, SymbolExpr derived) {
+            if (derivedExprs.containsKey(root)) {
+                derivedExprs.get(root).add(derived);
+                Logging.info("Context", "Add derived expr " + derived + " for " + root);
+            }
+            else {
+                Logging.error("Context", "Failed to add derived expr " + derived + " for " + root);
+            }
+        }
+
+        public Map<SymbolExpr, Set<SymbolExpr>> getDerivedExprs() {
+            return derivedExprs;
         }
     }
 
@@ -191,6 +216,7 @@ public class Context {
                 if (dataType instanceof Array || dataType instanceof Structure || dataType instanceof Union) {
                     expr = SymbolExpr.reference(this, expr);
                 }
+                intraCtx.initDerivedExprs(expr);
                 constraint = getConstraint(expr);
             }
 
@@ -283,7 +309,7 @@ public class Context {
         // Remove redundant APs
         APs.removeRedundantCallAPs(soundTypeAlias);
 
-        // TODO: handle may Type Aliases ...
+        soundTypeAlias.mergeByAccessed(mayTypeAlias, APs.getAllAccessExprs());
 
         // Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor,
         // and build the constraints for each SymbolExpr, store the constraints in `symExprToConstraints`

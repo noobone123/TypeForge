@@ -66,4 +66,22 @@ public class UnionFind<T> {
     public Set<T> getCluster(T element) {
         return clusters.get(find(element));
     }
+
+
+    public void mergeByAccessed(UnionFind<T> other, Set<T> accessedExpr) {
+        for (T expr: accessedExpr) {
+            // parent is a Map from expr to its parent node in union-find.
+            // in union-find, each element is stored in parent's key set.
+            if (other.parent.containsKey(expr)) {
+                T rootInOther = other.find(expr);
+                Set<T> clusterToMerge = other.clusters.get(rootInOther);
+                for (T member: clusterToMerge) {
+                    if (accessedExpr.contains(member) && member != expr) {
+                        Logging.info("UnionFind", String.format("Found %s in may type alias set, union with %s", member, expr));
+                        union(expr, member);
+                    }
+                }
+            }
+        }
+    }
 }

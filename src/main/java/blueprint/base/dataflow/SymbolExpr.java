@@ -195,6 +195,68 @@ public class SymbolExpr {
         return new ArrayList<>(attributes);
     }
 
+    /**
+     * If Load/Store Access occurs:
+     * if SymbolExpr is a + 0x10, we think it's not nested Access.
+     * if SymbolExpr is *(a + 0x10) + 0x8, or *(a + 0x10) or *(a) + index * scale + offset
+     * we think it's nested Access because the *(a + 0x10) may indicate a pointer
+     *  pointed to other complex data structure.
+     * @return nested Access SymbolExpr
+     */
+    public SymbolExpr getNestedAccess() {
+        if (isDereference()) {
+            return nestedExpr;
+        }
+        else if (baseExpr != null && baseExpr.isDereference()) {
+            return baseExpr;
+        }
+        else {
+            return null;
+        }
+    }
+
+    /**
+     * Get root Expr for a complex SymbolExpr.
+     * For example:
+     * a -> a
+     * a + 0x10 -> a
+     * *(a + 0x10) -> a
+     * *(a + 0x10) + 0x8 -> a
+     * *(a + 0x10) + index * scale + offset -> a
+     * index * scale -> null
+     * const -> null
+     * @return root SymbolExpr
+     */
+    public SymbolExpr getRootExpr() {
+        if (isRootSymExpr()) {
+            return this;
+        }
+        else if (isDereference()) {
+            return nestedExpr.getRootExpr();
+        }
+        else if (baseExpr != null) {
+            return baseExpr.getRootExpr();
+        }
+        else {
+            return null;
+        }
+    }
+
+    public SymbolExpr replaceRoot(SymbolExpr newRoot) {
+        if (isRootSymExpr()) {
+            return newRoot;
+        }
+        else if (isDereference()) {
+            return new Builder().dereference(nestedExpr.replaceRoot(newRoot)).build();
+        }
+        else if (baseExpr != null) {
+            return new Builder().base(baseExpr.replaceRoot(newRoot)).index(indexExpr).scale(scaleExpr).offset(offsetExpr).build();
+        }
+        else {
+            return null;
+        }
+    }
+
     public String getRepresentation() {
         StringBuilder sb = new StringBuilder();
         if (rootSym != null) {

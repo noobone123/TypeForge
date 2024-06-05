@@ -86,13 +86,13 @@ public class AccessPoints {
     public void addMemAccessPoint(SymbolExpr symExpr, PcodeOp op, TypeDescriptor type, AccessType accessType) {
         memoryAccessMap.putIfAbsent(symExpr, new HashSet<>());
         memoryAccessMap.get(symExpr).add(new AP(op, type, accessType));
-        Logging.info("AccessPoints", String.format("Add %s ap for [%s] with type [%s]", accessType, symExpr, type.getName()));
+        Logging.info("AccessPoints", String.format("Add MemAccess %s for [%s] with type [%s]", accessType, symExpr, type.getName()));
     }
 
     public void addCallAccessPoint(SymbolExpr symExpr, PcodeOp op, AccessType accessType) {
         callAccessMap.putIfAbsent(symExpr, new HashSet<>());
         callAccessMap.get(symExpr).add(new AP(op, null, accessType));
-        Logging.info("AccessPoints", String.format("Add %s ap for [%s]", accessType, symExpr));
+        Logging.info("AccessPoints", String.format("Add CallAccess %s for [%s]", accessType, symExpr));
     }
 
     public Map<SymbolExpr, Set<AP>> getMemoryAccessMap() {
@@ -107,12 +107,22 @@ public class AccessPoints {
         return callAccessMap;
     }
 
-    public Set<AP> getArgAccessPoints(SymbolExpr symExpr) {
+    public Set<AP> getCallAccessPoints(SymbolExpr symExpr) {
         return callAccessMap.get(symExpr);
     }
 
     public Set<SymbolExpr> getAllMemAccessExprs() {
         return memoryAccessMap.keySet();
+    }
+
+    public Set<SymbolExpr> getAllCallAccessExprs() {
+        return callAccessMap.keySet();
+    }
+
+    public Set<SymbolExpr> getAllAccessExprs() {
+        Set<SymbolExpr> allAccessExprs = new HashSet<>(memoryAccessMap.keySet());
+        allAccessExprs.addAll(callAccessMap.keySet());
+        return allAccessExprs;
     }
 
     /**
