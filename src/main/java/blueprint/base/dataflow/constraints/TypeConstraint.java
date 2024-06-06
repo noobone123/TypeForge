@@ -29,6 +29,8 @@ public class TypeConstraint implements TypeDescriptor {
      * }
      * </code>
      */
+    public final TreeMap<Long, HashSet<AccessPoints.AP>> fieldAccess;
+    /** The fieldMap should be built by the fieldAccess after merging */
     public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
     public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
     public final HashSet<Attribute> globalAttrs;
@@ -54,6 +56,7 @@ public class TypeConstraint implements TypeDescriptor {
     public final String shortUUID;
 
     public TypeConstraint() {
+        fieldAccess = new TreeMap<>();
         fieldMap = new TreeMap<>();
         fieldAttrs = new TreeMap<>();
         globalAttrs = new HashSet<>();
@@ -77,7 +80,11 @@ public class TypeConstraint implements TypeDescriptor {
     public void addFieldConstraint(long offset, AccessPoints.AP ap) {
         accessOffsets.putIfAbsent(ap, new HashSet<>());
         accessOffsets.get(ap).add(offset);
-        addOffsetTypeConstraint(offset, ap.dataType);
+        fieldAccess.putIfAbsent(offset, new HashSet<>());
+        if (fieldAccess.get(offset).add(ap)) {
+            fieldAccess.get(offset).add(ap);
+            Logging.info("TypeConstraint", String.format("Constraint_%s adding field: 0x%x -> %s", shortUUID, offset, ap.dataType));
+        }
     }
 
     public void addOffsetTypeConstraint(long offset, TypeDescriptor type) {
@@ -184,14 +191,10 @@ public class TypeConstraint implements TypeDescriptor {
     }
 
     public void merge(TypeConstraint other) {
-        // merging fieldMap
-        other.fieldMap.forEach((offset, typeMap) -> {
-            if (!this.fieldMap.containsKey(offset)) {
-                this.fieldMap.put(offset, new HashMap<>(typeMap));
-            } else {
-                typeMap.forEach((type, count) ->
-                        this.fieldMap.get(offset).merge(type, count, Integer::sum));
-            }
+        // merging fieldAccess
+        other.fieldAccess.forEach((offset, aps) -> {
+            this.fieldAccess.putIfAbsent(offset, new HashSet<>());
+            this.fieldAccess.get(offset).addAll(aps);
         });
 
         // Merging field attributes
@@ -270,7 +273,7 @@ public class TypeConstraint implements TypeDescriptor {
     }
 
     public List<Long> collectFieldOffsets() {
-        Set<Long> offsets = new HashSet<>(fieldMap.keySet());
+        Set<Long> offsets = new HashSet<>(fieldAccess.keySet());
         offsets.addAll(fieldAttrs.keySet());
         List<Long> sortedOffset = new ArrayList<>(offsets);
         Collections.sort(sortedOffset);
@@ -308,7 +311,7 @@ public class TypeConstraint implements TypeDescriptor {
      * @return if the TypeConstraint is related to Composite DataType
      */
     public boolean isInterested() {
-        return !fieldMap.isEmpty() || !totalSize.isEmpty() || !elementSize.isEmpty();
+        return !fieldAccess.isEmpty() || !totalSize.isEmpty() || !elementSize.isEmpty();
     }
 
     public JsonNode getJsonObj(ObjectMapper mapper) {
@@ -345,7 +348,7 @@ public class TypeConstraint implements TypeDescriptor {
             var offsetNode = fieldsNode.putObject("0x" + Long.toHexString(offset));
 
             var fieldsArray = offsetNode.putArray("types");
-            fieldMap.getOrDefault(offset, new HashMap<>()).forEach((type, count) -> fieldsArray.add(type.getName() + ": " + count));
+            fieldAccess.getOrDefault(offset, new HashSet<>()).forEach(ap -> fieldsArray.add(ap.dataType.getName()));
 
             var referenceToArray = offsetNode.putArray("referenceTo");
             referenceTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> referenceToArray.add("Constraint_" + ref.shortUUID));

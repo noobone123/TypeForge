@@ -37,8 +37,10 @@ public class Generator {
     public Context solverCtx;
     public final Map<Function, Map<HighSymbol, TypeConstraint>> funcConstraintMap = new HashMap<>();
     public final Map<HighSymbol, TypeConstraint> globalConstraintMap = new HashMap<>();
+
     public final Map<SymbolExpr, TypeConstraint> allConstraints;
-    public final Map<SymbolExpr, TypeConstraint> skeletonCache = new HashMap<>();
+    public final Map<HighSymbol, TypeConstraint> builtConstraints = new HashMap<>();
+
 
     public Generator(Context solverCtx) {
         this.solverCtx = solverCtx;
@@ -62,43 +64,44 @@ public class Generator {
         }
     }
 
-    public void buildSkeletonOfVariable() {
-        var funcNode = solverCtx.callGraph.getNodebyAddr(FunctionHelper.getAddress(0x001492c8));
-        var highSymbol = funcNode.getHighSymbolbyName("param_1");
-
-        var constraint = funcConstraintMap.get(funcNode.value).get(highSymbol);
-        if (constraint != null) {
-            Logging.info("Generator", String.format("Building Skeleton for Function %s -> %s",
-                                funcNode.value.getName(), highSymbol.getName()));
-        } else {
-            Logging.error("Generator", String.format("No Constraint found for Function %s -> %s",
-                                funcNode.value.getName(), highSymbol.getName()));
-        }
-    }
-
-    public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
-        if (skeletonCache.containsKey(expr)) {
-            return;
-        }
-
-        constraint.accessOffsets.forEach((ap, offsets) -> {
-            if (offsets.size() > 1) {
-                for (var offset : offsets) {
-                    // If one pcode Access Multiple fields, we should add a tag to the field
-                    constraint.addFieldAttr(offset, TypeConstraint.Attribute.MULTI_ACCESS);
-                }
-            }
-        });
-
-        if (checkHasMultiRefField(constraint)) {
-            handleMultiReference(constraint);
-        }
-
-        // TODO: parse and set ptr level
-        // ...
-
-        skeletonCache.put(expr, constraint);
-    }
+//    public void buildSkeletonOfVariable() {
+//        var funcNode = solverCtx.callGraph.getNodebyAddr(FunctionHelper.getAddress(0x001492c8));
+//        var highSymbol = funcNode.getHighSymbolbyName("param_1");
+//
+//        var constraint = funcConstraintMap.get(funcNode.value).get(highSymbol);
+//        if (constraint != null) {
+//            Logging.info("Generator", String.format("Building Skeleton for Function %s -> %s",
+//                                funcNode.value.getName(), highSymbol.getName()));
+//            buildSkeleton();
+//        } else {
+//            Logging.error("Generator", String.format("No Constraint found for Function %s -> %s",
+//                                funcNode.value.getName(), highSymbol.getName()));
+//        }
+//    }
+//
+//    public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
+//        if (skeletonCache.containsKey(expr)) {
+//            return;
+//        }
+//
+//        constraint.accessOffsets.forEach((ap, offsets) -> {
+//            if (offsets.size() > 1) {
+//                for (var offset : offsets) {
+//                    // If one pcode Access Multiple fields, we should add a tag to the field
+//                    constraint.addFieldAttr(offset, TypeConstraint.Attribute.MULTI_ACCESS);
+//                }
+//            }
+//        });
+//
+//        if (checkHasMultiRefField(constraint)) {
+//            handleMultiReference(constraint);
+//        }
+//
+//        // TODO: parse and set ptr level
+//        // ...
+//
+//        skeletonCache.put(expr, constraint);
+//    }
 
     /**
      * Sometimes one field may reference multiple constraints, For example:

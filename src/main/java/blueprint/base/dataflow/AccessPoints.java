@@ -17,6 +17,7 @@ public class AccessPoints {
         STORE,
         ARGUMENT,
         RETURN_VALUE,
+        INDIRECT
     }
 
     /**
@@ -77,8 +78,6 @@ public class AccessPoints {
     private final Map<SymbolExpr, Set<AP>> memoryAccessMap;
     /** Expressions in callAccessMap: (param + 1) means there is a callsite, using (param + 1) as an argument, or *(a + 1) as return value */
     private final Map<SymbolExpr, Set<AP>> callAccessMap;
-    /** Used to filter meaningful expressions in may Type Alias */
-    private final Set<SymbolExpr> meaningfulExprs = new HashSet<>();
 
     public AccessPoints() {
         memoryAccessMap = new HashMap<>();
@@ -88,25 +87,15 @@ public class AccessPoints {
     public void addMemAccessPoint(SymbolExpr symExpr, PcodeOp op, TypeDescriptor type, AccessType accessType) {
         memoryAccessMap.putIfAbsent(symExpr, new HashSet<>());
         memoryAccessMap.get(symExpr).add(new AP(op, type, accessType));
-        addMeaningfulExpr(symExpr);
         Logging.info("AccessPoints", String.format("Add MemAccess %s for [%s] with type [%s]", accessType, symExpr, type.getName()));
     }
 
     public void addCallAccessPoint(SymbolExpr symExpr, PcodeOp op, AccessType accessType) {
         callAccessMap.putIfAbsent(symExpr, new HashSet<>());
         callAccessMap.get(symExpr).add(new AP(op, null, accessType));
-        addMeaningfulExpr(symExpr);
         Logging.info("AccessPoints", String.format("Add CallAccess %s for [%s]", accessType, symExpr));
     }
 
-    public void addMeaningfulExpr(SymbolExpr symExpr) {
-        Logging.info("AccessPoints", String.format("Add meaningful expr [%s]", symExpr));
-        meaningfulExprs.add(symExpr);
-    }
-
-    public Set<SymbolExpr> getMeaningfulExprs() {
-        return meaningfulExprs;
-    }
 
     public Map<SymbolExpr, Set<AP>> getMemoryAccessMap() {
         return memoryAccessMap;

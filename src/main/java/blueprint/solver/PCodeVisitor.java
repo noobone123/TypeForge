@@ -105,6 +105,10 @@ public class PCodeVisitor {
                     Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleReturn(pcode);
                 }
+                case PcodeOp.CALLIND -> {
+                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    handleINDCall(pcode);
+                }
             }
         }
     }
@@ -180,9 +184,7 @@ public class PCodeVisitor {
                     ctx.setSoundTypeAlias(outputSymExpr, inputSymExpr);
                 }
             }
-            else {
-                ctx.addNewSymbolExpr(funcNode, outputVn, inputSymExpr);
-            }
+            ctx.addNewSymbolExpr(funcNode, outputVn, inputSymExpr);
         }
     }
 
@@ -269,14 +271,13 @@ public class PCodeVisitor {
                     expr = SymbolExpr.reference(ctx, expr);
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
-                    if (outputFacts == null) {
-                        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), expr);
-                    } else {
+                    if (outputFacts != null) {
                         for (var fact : outputFacts) {
                             ctx.setSoundTypeAlias(fact, expr);
                         }
                     }
+                    ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), expr);
                 }
             }
         }
@@ -289,14 +290,13 @@ public class PCodeVisitor {
                     var globalSymExpr = new SymbolExpr.Builder().global(globalSym.getSymbol().getAddress(), globalSym).build();
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
-                    if (outputFacts == null) {
-                        ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-                        ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), globalSymExpr);
-                    } else {
+                    if (outputFacts != null) {
                         for (var fact : outputFacts) {
                             ctx.setSoundTypeAlias(fact, globalSymExpr);
                         }
                     }
+                    ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
+                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), globalSymExpr);
                 }
             }
         }
@@ -424,11 +424,9 @@ public class PCodeVisitor {
         var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : dataFlowFacts) {
             var type = new PrimitiveTypeDescriptor(outDT);
+            var newExpr = dereference(ctx, symExpr);
 
             ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
-
-            var newExpr = dereference(ctx, symExpr);
-            ctx.addNewSymbolExpr(funcNode, output, newExpr);
 
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
@@ -438,6 +436,8 @@ public class PCodeVisitor {
                     ctx.setSoundTypeAlias(expr, newExpr);
                 }
             }
+
+            ctx.addNewSymbolExpr(funcNode, output, newExpr);
         }
     }
 
@@ -474,6 +474,21 @@ public class PCodeVisitor {
         for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
             for (var type : storedTypes) {
                 ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
+            }
+        }
+    }
+
+    private void handleINDCall(PcodeOp pcodeOp) {
+        var indirectCallVn = pcodeOp.getInput(0);
+        if (!ctx.isTracedVn(funcNode, indirectCallVn)) {
+            Logging.debug("PCodeVisitor", "[PCode] Indirect Call is not interested: " + indirectCallVn);
+            return;
+        }
+
+        var indirectCallFacts = ctx.getIntraDataFlowFacts(funcNode, indirectCallVn);
+        for (var symExpr : indirectCallFacts) {
+            if (symExpr.isDereference()) {
+                ctx.getAccessPoints().addMemAccessPoint(symExpr.getNestedExpr(), pcodeOp, new DummyType("CodePtr"), AccessPoints.AccessType.INDIRECT);
             }
         }
     }

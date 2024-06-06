@@ -68,13 +68,10 @@ public class Context {
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
     public AccessPoints APs;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
-    public HashSet<SymbolExpr> parsedSymExprs;
 
     /** Sound Type Alias is used to store TypeAlias which is confirmed by the solver,
      * SymbolExpr in the same cluster must have the explicit data-flow relationship */
     public UnionFind<SymbolExpr> soundTypeAlias;
-
-    public Map<SymbolExpr, Set<SymbolExpr>> derivedExprs;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
@@ -83,9 +80,7 @@ public class Context {
         this.intraCtxMap = new HashMap<>();
         this.APs = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
-        this.parsedSymExprs = new HashSet<>();
         this.soundTypeAlias = new UnionFind<>();
-        this.derivedExprs = new HashMap<>();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -95,30 +90,6 @@ public class Context {
 
     public IntraContext getIntraContext(FunctionNode funcNode) {
         return intraCtxMap.get(funcNode);
-    }
-
-    public void initDerivedExprs(SymbolExpr expr) {
-        if (expr.isRootSymExpr() || (expr.isReference() && expr.getNestedExpr().isRootSymExpr())) {
-            derivedExprs.put(expr, new HashSet<>());
-            Logging.info("Context", "Init derived exprs for " + expr);
-        }
-        else {
-            Logging.error("Context", "Failed to init derived exprs for " + expr);
-        }
-    }
-
-    public void addDerivedExpr(SymbolExpr root, SymbolExpr derived) {
-        if (derivedExprs.containsKey(root)) {
-            derivedExprs.get(root).add(derived);
-            Logging.info("Context", "Add derived expr " + derived + " for " + root);
-        }
-        else {
-            Logging.error("Context", "Failed to add derived expr " + derived + " for " + root);
-        }
-    }
-
-    public Map<SymbolExpr, Set<SymbolExpr>> getDerivedExprs() {
-        return derivedExprs;
     }
 
     public void addTracedSymbol(FunctionNode funcNode, HighSymbol highSymbol) {
@@ -205,7 +176,6 @@ public class Context {
                 if (dataType instanceof Array || dataType instanceof Structure || dataType instanceof Union) {
                     expr = SymbolExpr.reference(this, expr);
                 }
-                initDerivedExprs(expr);
                 constraint = getConstraint(expr);
             }
 
@@ -249,7 +219,6 @@ public class Context {
                     addNewSymbolExpr(funcNode, vn, expr);
                 }
             }
-
         }
     }
 
@@ -287,15 +256,7 @@ public class Context {
         // Remove redundant APs
         APs.removeRedundantCallAPs(soundTypeAlias);
 
-        // Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor,
-        // and build the constraints for each SymbolExpr, store the constraints in `symExprToConstraints`
-        for (var symExpr : APs.getMemoryAccessMap().keySet()) {
-            parseMemAccessExpr(symExpr, null, 0);
-        }
-
-        for (var symExpr : APs.getCallAccessMap().keySet()) {
-            parseArgAccessExpr(symExpr);
-        }
+        parseExpressions();
 
         // merging Type according to the typeAlias
         mergeTypeAlias();
@@ -327,6 +288,18 @@ public class Context {
         }
 
         symExprToConstraints = finalResult;
+    }
+
+    /**
+     *  Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor.
+     */
+    private void parseExpressions() {
+        for (var symExpr : APs.getMemoryAccessMap().keySet()) {
+            parseMemAccessExpr(symExpr, null, 0);
+        }
+        for (var symExpr : APs.getCallAccessMap().keySet()) {
+            parseCallAccessExpr(symExpr);
+        }
     }
 
 
@@ -412,6 +385,7 @@ public class Context {
                 parseMemAccessExpr(base.getNestedExpr(), constraint, derefDepth + 1);
             }
         }
+
         else {
             Logging.warn("Context", String.format("Failed to parse MemAccessExpr %s", expr));
         }
@@ -421,12 +395,15 @@ public class Context {
      * Parse the Argument Access SymbolExpr and build the constraints for it.
      * @param expr the Expression to parse
      */
-    private void parseArgAccessExpr(SymbolExpr expr) {
+    private void parseCallAccessExpr(SymbolExpr expr) {
         if (expr == null) return;
         Logging.info("Context", String.format("Parsing ArgAccessExpr %s", expr));
 
         var base = expr.getBase();
         var offset = expr.getOffset();
+        // If the CallSite Arguments are Expressions like base + offset, For example
+        // foo(a+0x10, *(a+0x10) + 0x10), it's source code may be: foo(&a.field, &(a->field1).field2)
+        // which means there may exist a nested constraint.
         if (base != null && offset != null &&
                 offset.isNoZeroConst() && hasConstraint(expr)) {
             var constraint = getConstraint(base);
@@ -434,10 +411,13 @@ public class Context {
             updateNestedConstraint(constraint, offsetValue, getConstraint(expr));
         }
 
-        // If the expr is a dereference expression, mean there still exists Memory Access related to this expr,
-        // (Expressions not related to Memory Access in CallAccess has been filtered out by removeRedundantCallAPs)
+        // If the CallSite Arguments and Return Values are dereference expressions, For example:
+        // foo(*(a+0x10), *(b+0x10)), it's source code may be: foo(a->field, b->field)
+        // which mean a->field and b->field is a reference to other DataType
+        // (Expressions not reference to other dataType in CallAccess has been filtered out by removeRedundantCallAPs)
         // So now we need to parse the Memory Access Expression.
         else if (expr.isDereference()) {
+            Logging.info("Context", String.format("Parsing CallAccessExpr %s as MemAccessExpr", expr));
             parseMemAccessExpr(expr, null, 0);
         }
     }
@@ -456,7 +436,8 @@ public class Context {
             return;
         }
         for (var ap: APs) {
-            if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE) {
+            if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE ||
+                    ap.accessType == AccessPoints.AccessType.INDIRECT) {
                 currentTC.addFieldConstraint(offsetValue, ap);
             }
         }
