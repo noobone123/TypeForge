@@ -3,17 +3,17 @@ package blueprint.solver;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.utils.FunctionHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import ghidra.program.model.listing.Function;
+import ghidra.program.model.pcode.HighSymbol;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * This Class should create a set of Structure Builder for each SymbolExpr, and can be used to import into Ghidra.
@@ -34,20 +34,53 @@ import java.util.Set;
  * Finally, We take the pseudo code and Calculate the score for them, and find the best one as the final Structure Type
  */
 public class Generator {
+    public Context solverCtx;
+    public final Map<Function, Map<HighSymbol, TypeConstraint>> funcConstraintMap = new HashMap<>();
+    public final Map<HighSymbol, TypeConstraint> globalConstraintMap = new HashMap<>();
     public final Map<SymbolExpr, TypeConstraint> allConstraints;
+    public final Map<SymbolExpr, TypeConstraint> skeletonCache = new HashMap<>();
 
     public Generator(Context solverCtx) {
+        this.solverCtx = solverCtx;
         this.allConstraints = new HashMap<>(solverCtx.symExprToConstraints);
+        buildConstraintMap();
     }
 
-    public void buildAllSkeleton() {
-        var tmp = new HashMap<>(allConstraints);
-        tmp.forEach((expr, constraint) -> {
-            buildSkeleton(expr, constraint);
-        });
+    public void buildConstraintMap() {
+        for (var entry : allConstraints.entrySet()) {
+            var expr = entry.getKey();
+            if (expr.isVariable()) {
+                var highSym = expr.getRootHighSymbol();
+                if (highSym.isGlobal()) {
+                    globalConstraintMap.put(highSym, entry.getValue());
+                } else {
+                    var func = highSym.getHighFunction().getFunction();
+                    funcConstraintMap.computeIfAbsent(func, k -> new HashMap<>());
+                    funcConstraintMap.get(func).put(highSym, entry.getValue());
+                }
+            }
+        }
+    }
+
+    public void buildSkeletonOfVariable() {
+        var funcNode = solverCtx.callGraph.getNodebyAddr(FunctionHelper.getAddress(0x001492c8));
+        var highSymbol = funcNode.getHighSymbolbyName("param_1");
+
+        var constraint = funcConstraintMap.get(funcNode.value).get(highSymbol);
+        if (constraint != null) {
+            Logging.info("Generator", String.format("Building Skeleton for Function %s -> %s",
+                                funcNode.value.getName(), highSymbol.getName()));
+        } else {
+            Logging.error("Generator", String.format("No Constraint found for Function %s -> %s",
+                                funcNode.value.getName(), highSymbol.getName()));
+        }
     }
 
     public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
+        if (skeletonCache.containsKey(expr)) {
+            return;
+        }
+
         constraint.accessOffsets.forEach((ap, offsets) -> {
             if (offsets.size() > 1) {
                 for (var offset : offsets) {
@@ -57,10 +90,14 @@ public class Generator {
             }
         });
 
-        handleMultiReference(constraint);
+        if (checkHasMultiRefField(constraint)) {
+            handleMultiReference(constraint);
+        }
 
         // TODO: parse and set ptr level
         // ...
+
+        skeletonCache.put(expr, constraint);
     }
 
     /**
@@ -70,9 +107,17 @@ public class Generator {
      * and these two constraints will be put into same offset when merging a and b.
      * However, we think these two constraints are actually the same type, so we should merge them here.
      */
-    // TODO: should this method change the value in allConstraints?
-    // Add candidate: if merged constraint still has multiple referenceTo, merge them Recursively.
     private void handleMultiReference(TypeConstraint constraint) {
+        var workList = new LinkedList<TypeConstraint>();
+        workList.add(constraint);
+
+        while (!workList.isEmpty()) {
+            var cur = workList.poll();
+            mergeMultiReference(cur, workList);
+        }
+    }
+
+    private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
         for (var entry: constraint.referenceTo.entrySet()) {
             if (entry.getValue().size() > 1) {
                 Logging.info("Generator", String.format("Constraint_%s has multiple referenceTo at 0x%x", constraint.shortUUID, entry.getKey()));
@@ -87,16 +132,23 @@ public class Generator {
                     newMergedConstraint.merge(ref);
                 }
 
-                syncMergedConstraint(newMergedConstraint);
+//                if (checkHasMultiRefField(newMergedConstraint)) {
+//                    workList.add(newMergedConstraint);
+//                }
             }
         }
     }
 
 
-    private void syncMergedConstraint(TypeConstraint newMergedConstraint) {
-        for (var expr: newMergedConstraint.associatedExpr) {
-            allConstraints.put(expr, newMergedConstraint);
+    private boolean checkHasMultiRefField(TypeConstraint constraint) {
+        boolean hasMultiRefField = false;
+        for (var entry: constraint.referenceTo.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                hasMultiRefField = true;
+                break;
+            }
         }
+        return hasMultiRefField;
     }
 
 

@@ -36,6 +36,7 @@ public class FunctionNode extends NodeBase<Function> {
     public List<PcodeOp> pCodes = new LinkedList<>();
     public PcodeOp returnOp = null;
     DecompileResults decompileResults = null;
+    Map<String, HighSymbol> nameToSymbolMap = null;
 
     public FunctionNode(Function value, int id) {
         super(value, id);
@@ -44,6 +45,7 @@ public class FunctionNode extends NodeBase<Function> {
     public void setDecompileResult (DecompileResults res) {
         this.decompileResults = res;
         this.hFunc = res.getHighFunction();
+        this.nameToSymbolMap = hFunc.getLocalSymbolMap().getNameToSymbolMap();
         if (setPrototype()) {
             setLocalVariables();
             setGlobalVariables();
@@ -163,6 +165,10 @@ public class FunctionNode extends NodeBase<Function> {
                 }
             }
         }
+    }
+
+    public HighSymbol getHighSymbolbyName(String varName) {
+        return nameToSymbolMap.get(varName);
     }
 
     /**

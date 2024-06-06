@@ -118,4 +118,8 @@ public class FunctionHelper {
     public static Address getAddress(long offset) {
         return Global.currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(offset);
     }
+
+    public static Function getFunction(long offset) {
+        return Global.currentProgram.getFunctionManager().getFunctionAt(getAddress(offset));
+    }
 }

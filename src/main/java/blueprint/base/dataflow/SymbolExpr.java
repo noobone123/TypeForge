@@ -195,6 +195,21 @@ public class SymbolExpr {
         return new ArrayList<>(attributes);
     }
 
+    public boolean isVariable() {
+        if (isRootSymExpr()) {
+            return true;
+        } else if (isReference() && nestedExpr.isRootSymExpr()) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public HighSymbol getRootHighSymbol() {
+        return getRootSymExpr().getRootSymbol();
+    }
+
+
     /**
      * If Load/Store Access occurs:
      * if SymbolExpr is a + 0x10, we think it's not nested Access.
