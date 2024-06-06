@@ -6,6 +6,7 @@ import blueprint.utils.*;
 
 import ghidra.program.model.address.Address;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
@@ -57,7 +58,8 @@ public class InterSolver {
         ctx.collectConstraints();
 
         var generator = new Generator(ctx);
-        generator.dumpResults();
+        generator.buildAllSkeleton();
+        generator.dumpResults(new File("D:\\Projects\\blueprint\\dummy"));
     }
 
     /**

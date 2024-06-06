@@ -15,6 +15,24 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * This Class should create a set of Structure Builder for each SymbolExpr, and can be used to import into Ghidra.
+ * Each DataType Constraints has a member named associatedExpr, which can be used to get the function which uses this DataType.
+ *
+ * So the Generator should be able to output:
+ * 1. A set of Structure Builder for each HighSymbol. (Or one specified HighSymbol in Testing or Practice)
+ * 2. A set of Function and its HighSymbol which uses this DataType.
+ *
+ * Next, above information can be taken as input to the DataType Importer component.
+ * DataType Importer will create retype HighSymbols for each Structure Builder and get each Function's updated pseudo code.
+ * Retype process should be done from callee to caller, which can utilize.
+ * result: {
+ *     "StructureBuilder_1": [pseudo_code_1, pseudo_code_2, ...],
+ *     "StructureBuilder_2": [pseudo_code_3, pseudo_code_4, ...],
+ *     ...
+ * }
+ * Finally, We take the pseudo code and Calculate the score for them, and find the best one as the final Structure Type
+ */
 public class Generator {
     public final Map<SymbolExpr, TypeConstraint> allConstraints;
 
@@ -22,23 +40,24 @@ public class Generator {
         this.allConstraints = new HashMap<>(solverCtx.symExprToConstraints);
     }
 
-    public void generateSkeleton() {
-        allConstraints.forEach((symExpr, constraint) -> {
-            buildSkeleton(constraint);
+    public void buildAllSkeleton() {
+        var tmp = new HashMap<>(allConstraints);
+        tmp.forEach((expr, constraint) -> {
+            buildSkeleton(expr, constraint);
         });
     }
 
-    public void buildSkeleton(TypeConstraint con) {
-        con.accessOffsets.forEach((ap, offsets) -> {
+    public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
+        constraint.accessOffsets.forEach((ap, offsets) -> {
             if (offsets.size() > 1) {
                 for (var offset : offsets) {
                     // If one pcode Access Multiple fields, we should add a tag to the field
-                    con.addFieldAttr(offset, TypeConstraint.Attribute.MULTI_ACCESS);
+                    constraint.addFieldAttr(offset, TypeConstraint.Attribute.MULTI_ACCESS);
                 }
             }
         });
 
-        handleMultiReference(con);
+        handleMultiReference(constraint);
 
         // TODO: parse and set ptr level
         // ...
@@ -51,6 +70,8 @@ public class Generator {
      * and these two constraints will be put into same offset when merging a and b.
      * However, we think these two constraints are actually the same type, so we should merge them here.
      */
+    // TODO: should this method change the value in allConstraints?
+    // Add candidate: if merged constraint still has multiple referenceTo, merge them Recursively.
     private void handleMultiReference(TypeConstraint constraint) {
         for (var entry: constraint.referenceTo.entrySet()) {
             if (entry.getValue().size() > 1) {
@@ -66,9 +87,15 @@ public class Generator {
                     newMergedConstraint.merge(ref);
                 }
 
-                // Updated into Context
-                constraint.referenceTo.put(entry.getKey(), new HashSet<>(Set.of(newMergedConstraint)));
+                syncMergedConstraint(newMergedConstraint);
             }
+        }
+    }
+
+
+    private void syncMergedConstraint(TypeConstraint newMergedConstraint) {
+        for (var expr: newMergedConstraint.associatedExpr) {
+            allConstraints.put(expr, newMergedConstraint);
         }
     }
 
@@ -89,11 +116,10 @@ public class Generator {
 
 
 
-    public void dumpResults() {
+    public void dumpResults(File outputDir) {
         String workingDir = System.getProperty("user.dir");
         Logging.info("Generator", "Current working directory: " + workingDir);
 
-        File outputDir = new File(System.getProperty("user.dir") + File.separator + "codes/blueprint/dummy");
         if (!outputDir.exists()) {
             outputDir.mkdirs();
         }
