@@ -117,26 +117,5 @@ public class AccessPoints {
         allAccessExprs.addAll(callAccessMap.keySet());
         return allAccessExprs;
     }
-
-    /**
-     * For all Expressions in callAccessMap, some of them is not considered as Composite DataType, so we need to remove
-     * these redundant expressions by checking if their alias Expr has memory access.
-     * @param typeAlias the alias of all expressions
-     */
-    public void removeRedundantCallAPs(UnionFind<SymbolExpr> typeAlias) {
-        callAccessMap.keySet().removeIf(symExpr -> {
-            boolean isRedundant = true;
-            for (var alias: typeAlias.getCluster(symExpr)) {
-                if (memoryAccessMap.containsKey(alias)) {
-                    isRedundant = false;
-                    break;
-                }
-            }
-            if (isRedundant) {
-                Logging.info("AccessPoints", String.format("Remove redundant argument ap for [%s]", symExpr));
-            }
-            return isRedundant;
-        });
-    }
 }
 

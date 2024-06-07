@@ -138,6 +138,10 @@ public class TypeConstraint implements TypeDescriptor {
         if (referenceTo.containsKey(offset)) {
             referenceTo.get(offset).remove(other);
             Logging.info("TypeConstraint", String.format("Constraint_%s removing referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+
+            if (referenceTo.get(offset).isEmpty()) {
+                referenceTo.remove(offset);
+            }
         }
     }
 
@@ -145,6 +149,10 @@ public class TypeConstraint implements TypeDescriptor {
         if (referencedBy.containsKey(other)) {
             referencedBy.get(other).remove(offset);
             Logging.info("TypeConstraint", String.format("Constraint_%s removing referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+
+            if (referencedBy.get(other).isEmpty()) {
+                referencedBy.remove(other);
+            }
         }
     }
 
@@ -164,6 +172,10 @@ public class TypeConstraint implements TypeDescriptor {
         if (nestTo.containsKey(offset)) {
             nestTo.get(offset).remove(other);
             Logging.info("TypeConstraint", String.format("Constraint_%s removing nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+
+            if (nestTo.get(offset).isEmpty()) {
+                nestTo.remove(offset);
+            }
         }
     }
 
@@ -171,6 +183,10 @@ public class TypeConstraint implements TypeDescriptor {
         if (nestedBy.containsKey(other)) {
             nestedBy.get(other).remove(offset);
             Logging.info("TypeConstraint", String.format("Constraint_%s removing nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+
+            if (nestedBy.get(other).isEmpty()) {
+                nestedBy.remove(other);
+            }
         }
     }
 

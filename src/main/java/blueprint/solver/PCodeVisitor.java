@@ -524,7 +524,7 @@ public class PCodeVisitor {
         } else if (calleeNode.isTypeAgnostic) {
             Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is type agnostic, skip.");
             return;
-        } else if (!calleeNode.isExternal) {
+        } else if (calleeNode.isExternal) {
             Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is an external function");
         } else {
             Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");

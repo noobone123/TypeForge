@@ -269,19 +269,16 @@ public class Context {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void collectConstraints() {
-        // Remove redundant APs
-        APs.removeRedundantCallAPs(soundTypeAlias);
-
         parseExpressions();
 
         // merging Type according to the typeAlias
         mergeTypeAlias();
 
-        // Remove meaningLess constraints
-        removeRedundantConstraints();
-
         // merge constraints according to memory alias
         mergeConstraints();
+
+        // Remove meaningLess constraints
+        removeRedundantConstraints();
 
         Logging.info("Context", "Collect constraints done.");
     }
@@ -439,17 +436,19 @@ public class Context {
      */
     private void parseCallAccessExpr(SymbolExpr expr) {
         if (expr == null) return;
-        Logging.info("Context", String.format("Parsing ArgAccessExpr %s", expr));
+        Logging.info("Context", String.format("Parsing CallAccessExpr %s", expr));
 
         var base = expr.getBase();
         var offset = expr.getOffset();
         // If the CallSite Arguments are Expressions like base + offset, For example
-        // foo(a+0x10, *(a+0x10) + 0x10), it's source code may be: foo(&a.field, &(a->field1).field2)
+        // foo(a+0x10, *(a+0x10)+0x10), it's source code may be:
+        // foo(&a.field, &(a->field1).field2) or foo(&a->field, ...)
         // which means there may exist a nested constraint.
         if (base != null && offset != null &&
-                offset.isNoZeroConst() && hasConstraint(expr)) {
+                offset.isNoZeroConst() && hasConstraint(base)) {
             var constraint = getConstraint(base);
             long offsetValue = offset.getConstant();
+            Logging.info("Context", String.format("There may exist a nested constraint in %s: offset %d", expr, offsetValue));
             updateNestedConstraint(constraint, offsetValue, getConstraint(expr));
         }
 
