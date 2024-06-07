@@ -363,47 +363,6 @@ public class Context {
         }
     }
 
-    private boolean hasMultiReferenceField(TypeConstraint constraint) {
-        for (var entry : constraint.referenceTo.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-
-    private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
-        for (var entry : constraint.referenceTo.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                Logging.info("Context", String.format("Constraint_%s has multiple referenceTo at 0x%x", constraint.shortUUID, entry.getKey()));
-                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
-                if (!shouldMerge) {
-                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
-                    continue;
-                }
-
-                TypeConstraint newMergedConstraint = new TypeConstraint();
-                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
-                var toMerge = new HashSet<>(entry.getValue());
-                for (var ref : toMerge) {
-                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
-                    newMergedConstraint.merge(ref);
-                }
-
-                if (hasMultiReferenceField(newMergedConstraint)) {
-                    workList.add(newMergedConstraint);
-                }
-
-                // add the new merged constraint in the symExprToConstraints
-                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
-                    symExprToConstraints.put(symExpr, newMergedConstraint);
-                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
-                }
-            }
-        }
-    }
-
     /**
      * Parse the Memory Access SymbolExpr and build the constraints for it.
      * @param expr the Expression to parse
@@ -522,6 +481,47 @@ public class Context {
         nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
         nestee.addNestedBy(nester, offsetValue);
     }
+
+    private boolean hasMultiReferenceField(TypeConstraint constraint) {
+        for (var entry : constraint.referenceTo.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
+        for (var entry : constraint.referenceTo.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                Logging.info("Context", String.format("Constraint_%s has multiple referenceTo at 0x%x", constraint.shortUUID, entry.getKey()));
+                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
+                if (!shouldMerge) {
+                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
+                    continue;
+                }
+
+                TypeConstraint newMergedConstraint = new TypeConstraint();
+                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
+                var toMerge = new HashSet<>(entry.getValue());
+                for (var ref : toMerge) {
+                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
+                    newMergedConstraint.merge(ref);
+                }
+
+                if (hasMultiReferenceField(newMergedConstraint)) {
+                    workList.add(newMergedConstraint);
+                }
+
+                // add the new merged constraint in the symExprToConstraints
+                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
+                    symExprToConstraints.put(symExpr, newMergedConstraint);
+                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
+                }
+            }
+        }
+    }
+
 
     public TypeConstraint getConstraint(SymbolExpr symExpr) {
         TypeConstraint constraint;
