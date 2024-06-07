@@ -74,6 +74,8 @@ public class Context {
     /** Sound Type Alias is used to store TypeAlias which is confirmed by the solver,
      * SymbolExpr in the same cluster must have the explicit data-flow relationship */
     public UnionFind<SymbolExpr> soundTypeAlias;
+    public Set<SymbolExpr> memAccessExprParseCandidates;
+    public Set<SymbolExpr> callAccessExprParseCandidates;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
@@ -83,6 +85,8 @@ public class Context {
         this.APs = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
         this.soundTypeAlias = new UnionFind<>();
+        this.memAccessExprParseCandidates = new HashSet<>();
+        this.callAccessExprParseCandidates = new HashSet<>();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -108,6 +112,16 @@ public class Context {
         if (tracedVns.add(vn)) {
             Logging.debug("Context", "Add traced varnode: " + vn);
         }
+    }
+
+    public void addMemExprToParse(SymbolExpr expr) {
+        Logging.info("Context", "Add MemExpr to parse: " + expr.toString());
+        memAccessExprParseCandidates.add(expr);
+    }
+
+    public void addCallExprToParse(SymbolExpr expr) {
+        Logging.info("Context", "Add CallExpr to parse: " + expr.toString());
+        callAccessExprParseCandidates.add(expr);
     }
 
     /**
@@ -299,10 +313,10 @@ public class Context {
      *  Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor.
      */
     private void parseExpressions() {
-        for (var symExpr : APs.getMemoryAccessMap().keySet()) {
+        for (var symExpr : memAccessExprParseCandidates) {
             parseMemAccessExpr(symExpr, null, 0);
         }
-        for (var symExpr : APs.getCallAccessMap().keySet()) {
+        for (var symExpr : callAccessExprParseCandidates) {
             parseCallAccessExpr(symExpr);
         }
     }

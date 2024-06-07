@@ -288,7 +288,6 @@ public class PCodeVisitor {
                 var globalSym = inputs[1].getHigh().getSymbol();
                 if (globalSym != null && globalSym.isGlobal()) {
                     var globalSymExpr = new SymbolExpr.Builder().global(globalSym.getSymbol().getAddress(), globalSym).build();
-                    globalSymExpr = SymbolExpr.reference(ctx, globalSymExpr);
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
                     if (outputFacts != null) {
@@ -418,27 +417,31 @@ public class PCodeVisitor {
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
-        var outputFacts = ctx.getIntraDataFlowFacts(funcNode, output);
+        var leftValueExprs = ctx.getIntraDataFlowFacts(funcNode, output);
         var primitiveType = new PrimitiveTypeDescriptor(outDT);
 
         ctx.addTracedVarnode(funcNode, output);
 
-        var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
-        for (var symExpr : dataFlowFacts) {
-            var newExpr = dereference(ctx, symExpr);
+        var loadAddrExprs = ctx.getIntraDataFlowFacts(funcNode, input);
+        for (var loadAddrExpr : loadAddrExprs) {
+            var loadedValueExpr = dereference(ctx, loadAddrExpr);
 
-            ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, primitiveType, AccessPoints.AccessType.LOAD);
+            ctx.getAccessPoints().addMemAccessPoint(loadAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.LOAD);
+            ctx.addMemExprToParse(loadAddrExpr);
 
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
-            if (outputFacts != null) {
+            if (leftValueExprs != null) {
                 Logging.debug("PCodeVisitor", "Loaded varnode has already held symbolExpr, set type alias ...");
-                for (var expr : outputFacts) {
-                    ctx.setSoundTypeAlias(expr, newExpr);
+                for (var leftValueExpr : leftValueExprs) {
+                    ctx.setSoundTypeAlias(leftValueExpr, loadedValueExpr);
+                    if (checkIfHoldsCompositeType(leftValueExpr)) {
+                        ctx.addMemExprToParse(loadedValueExpr);
+                    }
                 }
             }
 
-            ctx.addNewSymbolExpr(funcNode, output, newExpr);
+            ctx.addNewSymbolExpr(funcNode, output, loadedValueExpr);
         }
     }
 
@@ -449,25 +452,28 @@ public class PCodeVisitor {
         // the slot index of cur.varnode is 1, which means this varnode
         // represent the memory location to be stored
         var storedAddrVn = pcodeOp.getInput(1);
-        var storedValueVn = pcodeOp.getInput(2);
+        var rightValueVn = pcodeOp.getInput(2);
 
         if (!ctx.isTracedVn(funcNode, storedAddrVn)) {
             Logging.debug("PCodeVisitor", "Store address is not interested: " + storedAddrVn);
             return;
         }
 
-        var storedValueFacts = ctx.getIntraDataFlowFacts(funcNode, storedValueVn);
+        var rightValueExprs = ctx.getIntraDataFlowFacts(funcNode, rightValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
         var primitiveType = new PrimitiveTypeDescriptor(storedValueDT);
 
-        for (var addrExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
-
-            ctx.getAccessPoints().addMemAccessPoint(addrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.STORE);
-
-            if (storedValueFacts != null) {
-                for (var valueExpr : storedValueFacts) {
+        for (var storedAddrExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
+            var storedValueExpr = SymbolExpr.dereference(ctx, storedAddrExpr);
+            ctx.getAccessPoints().addMemAccessPoint(storedAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.STORE);
+            ctx.addMemExprToParse(storedAddrExpr);
+            if (rightValueExprs != null) {
+                for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
-                    ctx.setSoundTypeAlias(SymbolExpr.dereference(ctx, addrExpr), valueExpr);
+                    ctx.setSoundTypeAlias(storedValueExpr, rightValueExpr);
+                    if (checkIfHoldsCompositeType(rightValueExpr)) {
+                        ctx.addMemExprToParse(storedValueExpr);
+                    }
                 }
             }
         }
@@ -484,6 +490,7 @@ public class PCodeVisitor {
         for (var symExpr : indirectCallFacts) {
             if (symExpr.isDereference()) {
                 ctx.getAccessPoints().addMemAccessPoint(symExpr.getNestedExpr(), pcodeOp, new DummyType("CodePtr"), AccessPoints.AccessType.INDIRECT);
+                ctx.addMemExprToParse(symExpr.getNestedExpr());
             }
         }
     }
@@ -500,6 +507,7 @@ public class PCodeVisitor {
             for (var retExpr : retFacts) {
                 ctx.intraCtxMap.get(funcNode).setReturnExpr(retExpr);
                 ctx.getAccessPoints().addCallAccessPoint(retExpr, pcodeOp, AccessPoints.AccessType.RETURN_VALUE);
+                ctx.addCallExprToParse(retExpr);
                 Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
@@ -534,6 +542,7 @@ public class PCodeVisitor {
             for (var argExpr : argFacts) {
                 argExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
                 ctx.getAccessPoints().addCallAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+                ctx.addCallExprToParse(argExpr);
 
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(inputIdx - 1);
@@ -636,6 +645,14 @@ public class PCodeVisitor {
     private SymbolExpr dereference(Context ctx, SymbolExpr a) {
         return SymbolExpr.dereference(ctx, a);
     }
+
+
+    private boolean checkIfHoldsCompositeType(SymbolExpr expr) {
+        return expr.hasAttribute(SymbolExpr.Attribute.ARRAY) ||
+                expr.hasAttribute(SymbolExpr.Attribute.STRUCT) ||
+                expr.hasAttribute(SymbolExpr.Attribute.UNION);
+    }
+
 
     /**
      * Check if the offset is sane to be a structure offset

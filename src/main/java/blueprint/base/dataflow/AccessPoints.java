@@ -96,17 +96,8 @@ public class AccessPoints {
         Logging.info("AccessPoints", String.format("Add CallAccess %s for [%s]", accessType, symExpr));
     }
 
-
-    public Map<SymbolExpr, Set<AP>> getMemoryAccessMap() {
-        return memoryAccessMap;
-    }
-
     public Set<AP> getMemoryAccessPoints(SymbolExpr symExpr) {
         return memoryAccessMap.get(symExpr);
-    }
-
-    public Map<SymbolExpr, Set<AP>> getCallAccessMap() {
-        return callAccessMap;
     }
 
     public Set<AP> getCallAccessPoints(SymbolExpr symExpr) {

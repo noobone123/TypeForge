@@ -59,7 +59,7 @@ public class InterSolver {
 
         var generator = new Generator(ctx);
         // generator.buildSkeletonOfVariable();
-        generator.dumpResults(new File("D:\\Projects\\blueprint\\dummy"));
+        generator.dumpResults(new File("/home/h1k0/codes/blueprint/dummy/"));
     }
 
     /**
