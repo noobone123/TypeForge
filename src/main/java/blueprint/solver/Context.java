@@ -7,6 +7,7 @@ import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
 
@@ -15,6 +16,7 @@ import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
+import java.lang.reflect.Type;
 import java.util.*;
 
 
@@ -264,6 +266,9 @@ public class Context {
         // Remove meaningLess constraints
         removeRedundantConstraints();
 
+        // merge constraints according to memory alias
+        mergeConstraints();
+
         Logging.info("Context", "Collect constraints done.");
     }
 
@@ -331,6 +336,70 @@ public class Context {
             }
             else {
                 Logging.info("Context", symExpr + " is not type aliased with others.");
+            }
+        }
+    }
+
+
+    /**
+     * Sometimes one field may reference multiple constraints, For example:
+     * If FuncA: *(a + 0x10) and FuncB: *(b + 0x10) has no direct data-flow relation,
+     * but a and b has a direct data-flow relation, then Solver will create 2 constraints for a + 0x10 and b + 0x10
+     * and these two constraints will be put into same offset when merging a and b.
+     * However, we think these two constraints are actually the same type, so we should merge them here.
+     */
+    private void mergeConstraints() {
+        var workList = new LinkedList<TypeConstraint>();
+        var allConstraints = new HashSet<>(symExprToConstraints.values());
+        for (var constraint : allConstraints) {
+            if (hasMultiReferenceField(constraint)) {
+                workList.add(constraint);
+            }
+        }
+
+        while (!workList.isEmpty()) {
+            var cur = workList.poll();
+            mergeMultiReference(cur, workList);
+        }
+    }
+
+    private boolean hasMultiReferenceField(TypeConstraint constraint) {
+        for (var entry : constraint.referenceTo.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+
+    private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
+        for (var entry : constraint.referenceTo.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                Logging.info("Context", String.format("Constraint_%s has multiple referenceTo at 0x%x", constraint.shortUUID, entry.getKey()));
+                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
+                if (!shouldMerge) {
+                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
+                    continue;
+                }
+
+                TypeConstraint newMergedConstraint = new TypeConstraint();
+                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
+                var toMerge = new HashSet<>(entry.getValue());
+                for (var ref : toMerge) {
+                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
+                    newMergedConstraint.merge(ref);
+                }
+
+                if (hasMultiReferenceField(newMergedConstraint)) {
+                    workList.add(newMergedConstraint);
+                }
+
+                // add the new merged constraint in the symExprToConstraints
+                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
+                    symExprToConstraints.put(symExpr, newMergedConstraint);
+                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
+                }
             }
         }
     }
@@ -467,6 +536,21 @@ public class Context {
         Logging.debug("Context", String.format("Get Constraint_%s for %s", constraint.shortUUID, symExpr));
         return constraint;
     }
+
+
+    private boolean checkOffsetSize(TypeConstraint constraint, long offset, int wantedSize) {
+        boolean result = true;
+        for (var access: constraint.fieldAccess.get(offset)) {
+            if (access.dataType instanceof PrimitiveTypeDescriptor primDataType) {
+                if (primDataType.getDataTypeSize() != wantedSize) {
+                    result = false;
+                    break;
+                }
+            }
+        }
+        return result;
+    }
+
 
     public AccessPoints getAccessPoints() {
         return APs;

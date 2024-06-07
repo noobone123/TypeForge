@@ -190,6 +190,10 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
+    public Set<SymbolExpr> getAssociatedExpr() {
+        return associatedExpr;
+    }
+
     public void merge(TypeConstraint other) {
         // merging fieldAccess
         other.fieldAccess.forEach((offset, aps) -> {
