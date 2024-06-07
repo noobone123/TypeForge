@@ -288,6 +288,7 @@ public class PCodeVisitor {
                 var globalSym = inputs[1].getHigh().getSymbol();
                 if (globalSym != null && globalSym.isGlobal()) {
                     var globalSymExpr = new SymbolExpr.Builder().global(globalSym.getSymbol().getAddress(), globalSym).build();
+                    globalSymExpr = SymbolExpr.reference(ctx, globalSymExpr);
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
                     if (outputFacts != null) {
@@ -418,15 +419,15 @@ public class PCodeVisitor {
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
         var outputFacts = ctx.getIntraDataFlowFacts(funcNode, output);
+        var primitiveType = new PrimitiveTypeDescriptor(outDT);
 
         ctx.addTracedVarnode(funcNode, output);
 
         var dataFlowFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : dataFlowFacts) {
-            var type = new PrimitiveTypeDescriptor(outDT);
             var newExpr = dereference(ctx, symExpr);
 
-            ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.LOAD);
+            ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, primitiveType, AccessPoints.AccessType.LOAD);
 
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
@@ -451,29 +452,23 @@ public class PCodeVisitor {
         var storedValueVn = pcodeOp.getInput(2);
 
         if (!ctx.isTracedVn(funcNode, storedAddrVn)) {
-            Logging.debug("PCodeVisitor", "[PCode] Store address is not interested: " + storedAddrVn);
+            Logging.debug("PCodeVisitor", "Store address is not interested: " + storedAddrVn);
             return;
         }
 
         var storedValueFacts = ctx.getIntraDataFlowFacts(funcNode, storedValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
+        var primitiveType = new PrimitiveTypeDescriptor(storedValueDT);
 
-        var storedTypes = new HashSet<TypeDescriptor>();
-        if (storedValueFacts != null) {
-            storedValueFacts.forEach(symExpr -> {
-                if (symExpr.isGlobal()) {
-                    storedTypes.add(new DummyType("CodePtr_or_DataPtr"));
-                } else {
-                    storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
+        for (var addrExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
+
+            ctx.getAccessPoints().addMemAccessPoint(addrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.STORE);
+
+            if (storedValueFacts != null) {
+                for (var valueExpr : storedValueFacts) {
+                    Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
+                    ctx.setSoundTypeAlias(SymbolExpr.dereference(ctx, addrExpr), valueExpr);
                 }
-            });
-        } else {
-            storedTypes.add(new PrimitiveTypeDescriptor(storedValueDT));
-        }
-
-        for (var symExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
-            for (var type : storedTypes) {
-                ctx.getAccessPoints().addMemAccessPoint(symExpr, pcodeOp, type, AccessPoints.AccessType.STORE);
             }
         }
     }
