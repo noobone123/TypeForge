@@ -2,7 +2,6 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr;
-import blueprint.utils.Global;
 import blueprint.utils.Logging;
 
 import java.util.*;
@@ -13,7 +12,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 public class TypeConstraint implements TypeDescriptor {
 
     public enum Attribute {
-        MULTI_ACCESS,
+        SAME_ACCESS_ON_MULTI_OFFSETS,
         MAY_NESTED,
         MAY_ARRAY_PTR
     }
@@ -77,7 +76,7 @@ public class TypeConstraint implements TypeDescriptor {
         this.elementSize = new HashSet<>();
     }
 
-    public void addFieldConstraint(long offset, AccessPoints.AP ap) {
+    public void addFieldAccess(long offset, AccessPoints.AP ap) {
         accessOffsets.putIfAbsent(ap, new HashSet<>());
         accessOffsets.get(ap).add(offset);
         fieldAccess.putIfAbsent(offset, new HashSet<>());
@@ -331,7 +330,14 @@ public class TypeConstraint implements TypeDescriptor {
      * @return if the TypeConstraint is related to Composite DataType
      */
     public boolean isInterested() {
-        return !fieldAccess.isEmpty() || !totalSize.isEmpty() || !elementSize.isEmpty();
+        for (var aps : fieldAccess.values()) {
+            for (AccessPoints.AP ap : aps) {
+                if (ap.dataType != null) {
+                    return true;
+                }
+            }
+        }
+        return !totalSize.isEmpty() || !elementSize.isEmpty();
     }
 
     public JsonNode getJsonObj(ObjectMapper mapper) {
@@ -368,7 +374,11 @@ public class TypeConstraint implements TypeDescriptor {
             var offsetNode = fieldsNode.putObject("0x" + Long.toHexString(offset));
 
             var fieldsArray = offsetNode.putArray("types");
-            fieldAccess.getOrDefault(offset, new HashSet<>()).forEach(ap -> fieldsArray.add(ap.dataType.getName()));
+            fieldAccess.getOrDefault(offset, new HashSet<>()).forEach(ap -> {
+                if (ap.dataType != null) {
+                    fieldsArray.add(ap.dataType.getName());
+                }
+            });
 
             var referenceToArray = offsetNode.putArray("referenceTo");
             referenceTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> referenceToArray.add("Constraint_" + ref.shortUUID));
@@ -378,7 +388,7 @@ public class TypeConstraint implements TypeDescriptor {
 
             offsetNode.put("PtrLevel", ptrLevel.getOrDefault(offset, 0L));
 
-            var tagsArray = offsetNode.putArray("tags");
+            var tagsArray = offsetNode.putArray("Attrs");
             fieldAttrs.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
         });
 

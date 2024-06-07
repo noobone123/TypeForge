@@ -16,7 +16,6 @@ import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
-import java.lang.reflect.Type;
 import java.util.*;
 
 
@@ -444,12 +443,18 @@ public class Context {
         // foo(a+0x10, *(a+0x10)+0x10), it's source code may be:
         // foo(&a.field, &(a->field1).field2) or foo(&a->field, ...)
         // which means there may exist a nested constraint.
-        if (base != null && offset != null &&
-                offset.isNoZeroConst() && hasConstraint(base)) {
+        if (base != null && offset != null && expr.hasAttribute(SymbolExpr.Attribute.ARGUMENT) &&
+                offset.isConst() && hasConstraint(base)) {
             var constraint = getConstraint(base);
             long offsetValue = offset.getConstant();
-            Logging.info("Context", String.format("There may exist a nested constraint in %s: offset %d", expr, offsetValue));
-            updateNestedConstraint(constraint, offsetValue, getConstraint(expr));
+            Logging.info("Context", String.format("There may exist a nested constraint in %s: offset 0x%x", expr, offsetValue));
+            updateNestedConstraint(expr, constraint, offsetValue, getConstraint(expr));
+        }
+        // If the Callsite Arguments is just like foo(a, b), we can just think it has a field Access of
+        // a+0x0 and b+0x0
+        else if (expr.hasAttribute(SymbolExpr.Attribute.ARGUMENT) && offset == null) {
+            var constraint = getConstraint(expr);
+            updateFieldAccess(constraint, 0, APs.getCallAccessPoints(expr));
         }
 
         // If the CallSite Arguments and Return Values are dereference expressions, For example:
@@ -457,7 +462,7 @@ public class Context {
         // which mean a->field and b->field is a reference to other DataType
         // (Expressions not reference to other dataType in CallAccess has been filtered out by removeRedundantCallAPs)
         // So now we need to parse the Memory Access Expression.
-        else if (expr.isDereference()) {
+        if (expr.isDereference()) {
             Logging.info("Context", String.format("Parsing CallAccessExpr %s as MemAccessExpr", expr));
             parseMemAccessExpr(expr, null, 0);
         }
@@ -466,21 +471,9 @@ public class Context {
 
     private void updateMemAccessConstraint(SymbolExpr expr, TypeConstraint parentTypeConstraint, long offsetValue, TypeConstraint constraint) {
         if (parentTypeConstraint == null) {
-            updateFieldConstraint(constraint, offsetValue, APs.getMemoryAccessPoints(expr));
+            updateFieldAccess(constraint, offsetValue, APs.getMemoryAccessPoints(expr));
         } else {
             updateReferenceConstraint(constraint, offsetValue, parentTypeConstraint);
-        }
-    }
-
-    private void updateFieldConstraint(TypeConstraint currentTC, long offsetValue, Set<AccessPoints.AP> APs) {
-        if (APs == null) {
-            return;
-        }
-        for (var ap: APs) {
-            if (ap.accessType == AccessPoints.AccessType.LOAD || ap.accessType == AccessPoints.AccessType.STORE ||
-                    ap.accessType == AccessPoints.AccessType.INDIRECT) {
-                currentTC.addFieldConstraint(offsetValue, ap);
-            }
         }
     }
 
@@ -489,11 +482,23 @@ public class Context {
         referencer.addReferenceTo(offsetValue, referencee);
     }
 
-    private void updateNestedConstraint(TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
+    private void updateNestedConstraint(SymbolExpr expr, TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
+        var ap = APs.getCallAccessPoints(expr);
+        updateFieldAccess(nester, offsetValue, ap);
         nester.addNestTo(offsetValue, nestee);
         nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
         nestee.addNestedBy(nester, offsetValue);
     }
+
+    private void updateFieldAccess(TypeConstraint currentTC, long offsetValue, Set<AccessPoints.AP> APs) {
+        if (APs == null) {
+            return;
+        }
+        for (var ap: APs) {
+            currentTC.addFieldAccess(offsetValue, ap);
+        }
+    }
+
 
     private boolean hasMultiReferenceField(TypeConstraint constraint) {
         for (var entry : constraint.referenceTo.entrySet()) {

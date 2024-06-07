@@ -46,6 +46,10 @@ public class Generator {
         this.solverCtx = solverCtx;
         this.allConstraints = new HashMap<>(solverCtx.symExprToConstraints);
         buildConstraintMap();
+
+        for (var entry: allConstraints.entrySet()) {
+            buildSkeleton(entry.getKey(), entry.getValue());
+        }
     }
 
     public void buildConstraintMap() {
@@ -79,29 +83,16 @@ public class Generator {
 //        }
 //    }
 //
-//    public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
-//        if (skeletonCache.containsKey(expr)) {
-//            return;
-//        }
-//
-//        constraint.accessOffsets.forEach((ap, offsets) -> {
-//            if (offsets.size() > 1) {
-//                for (var offset : offsets) {
-//                    // If one pcode Access Multiple fields, we should add a tag to the field
-//                    constraint.addFieldAttr(offset, TypeConstraint.Attribute.MULTI_ACCESS);
-//                }
-//            }
-//        });
-//
-//        if (checkHasMultiRefField(constraint)) {
-//            handleMultiReference(constraint);
-//        }
-//
-//        // TODO: parse and set ptr level
-//        // ...
-//
-//        skeletonCache.put(expr, constraint);
-//    }
+    public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
+        constraint.accessOffsets.forEach((ap, offsets) -> {
+            if (offsets.size() > 1) {
+                for (var offset : offsets) {
+                    // If one pcode Access Multiple fields, we should add a tag to the field
+                    constraint.addFieldAttr(offset, TypeConstraint.Attribute.SAME_ACCESS_ON_MULTI_OFFSETS);
+                }
+            }
+        });
+    }
 
 
     public void dumpResults(File outputDir) {
