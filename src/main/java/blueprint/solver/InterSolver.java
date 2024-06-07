@@ -22,7 +22,7 @@ public class InterSolver {
         this.cg = cg;
         this.ctx = new Context(this.cg);
 
-        var addr = FunctionHelper.getAddress(0x0014d39d);
+        var addr = FunctionHelper.getAddress(0x0014d5b5);
         var startFunc = cg.getNodebyAddr(addr);
         buildWorkList(startFunc);
         setTypeAgnosticFunctions();

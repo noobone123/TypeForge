@@ -51,7 +51,7 @@ public class AccessPoints {
 
         @Override
         public int hashCode() {
-            return Objects.hash(pcodeOp, dataType, accessType);
+            return Objects.hash(pcodeOp, accessType);
         }
 
         @Override
@@ -59,8 +59,7 @@ public class AccessPoints {
             if (obj instanceof AP other) {
                 if (accessType != AccessType.ARGUMENT) {
                     if (!pcodeOp.equals(other.pcodeOp)) return false;
-                    assert dataType != null;
-                    return dataType.equals(other.dataType) && accessType == other.accessType;
+                    return accessType == other.accessType;
                 } else {
                     return pcodeOp.equals(other.pcodeOp) && accessType == other.accessType;
                 }

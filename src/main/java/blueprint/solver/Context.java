@@ -283,29 +283,6 @@ public class Context {
     }
 
     /**
-     * We created Constraints for all HighSymbols in the function, but not all of them can indicate the composite data type.
-     * We only want HighSymbol which is:
-     * 1. Structure, Array or Union
-     * 2. Pointer to Structure, Array or Union
-     * So we need to remove these Constraints which are not meaningful.
-     */
-    private void removeRedundantConstraints() {
-        var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
-        for (var symExpr : symExprToConstraints.keySet()) {
-            var constraint = symExprToConstraints.get(symExpr);
-            if (constraint.isInterested()) {
-                finalResult.put(symExpr, constraint);
-            } else {
-
-                Logging.warn("Context", String.format("Remove meaningless %s -> Constraint_%s",
-                        symExpr.toString(), constraint.getName()));
-            }
-        }
-
-        symExprToConstraints = finalResult;
-    }
-
-    /**
      *  Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor.
      */
     private void parseExpressions() {
@@ -372,6 +349,31 @@ public class Context {
             mergeMultiReference(cur, workList);
         }
     }
+
+
+    /**
+     * We created Constraints for all HighSymbols in the function, but not all of them can indicate the composite data type.
+     * We only want HighSymbol which is:
+     * 1. Structure, Array or Union
+     * 2. Pointer to Structure, Array or Union
+     * So we need to remove these Constraints which are not meaningful.
+     */
+    private void removeRedundantConstraints() {
+        var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
+        for (var symExpr : symExprToConstraints.keySet()) {
+            var constraint = symExprToConstraints.get(symExpr);
+            if (constraint.isInterested()) {
+                finalResult.put(symExpr, constraint);
+            } else {
+                TypeConstraint.remove(constraint);
+                Logging.warn("Context", String.format("Remove meaningless %s -> Constraint_%s",
+                        symExpr.toString(), constraint.getName()));
+            }
+        }
+
+        symExprToConstraints = finalResult;
+    }
+
 
     /**
      * Parse the Memory Access SymbolExpr and build the constraints for it.

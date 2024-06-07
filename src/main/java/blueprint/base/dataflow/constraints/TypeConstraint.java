@@ -299,6 +299,29 @@ public class TypeConstraint implements TypeDescriptor {
         return sortedOffset;
     }
 
+    /**
+     * Remove current constraint, which means remove all reference and nest edges
+     * @param constraint the constraint to be removed
+     */
+    public static void remove(TypeConstraint constraint) {
+        constraint.referenceTo.forEach((offset, constraints) -> {
+            constraints.forEach(refee -> refee.removeReferencedBy(constraint, offset));
+        });
+
+        constraint.referencedBy.forEach((refer, offsets) -> {
+            offsets.forEach(offset -> refer.removeReferenceTo(offset, constraint));
+        });
+
+        constraint.nestTo.forEach((offset, constraints) -> {
+            constraints.forEach(nestee -> nestee.removeNestedBy(constraint, offset));
+        });
+
+        constraint.nestedBy.forEach((nester, offsets) -> {
+            offsets.forEach(offset -> nester.removeNestTo(offset, constraint));
+        });
+    }
+
+
     @Override
     public String getName() {
         return shortUUID;
