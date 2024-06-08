@@ -306,6 +306,7 @@ public class Context {
             var cluster = soundTypeAlias.getCluster(symExpr);
             if (cluster.size() > 1) {
                 var mergedConstraint = new TypeConstraint();
+                Logging.info("Context", String.format("Created new merged constraint: Constraint_%s", mergedConstraint.getName()));
                 for (var aliasSym : cluster) {
                     var constraint = tmpSymExprToConstraints.get(aliasSym);
                     if (constraint != null) {

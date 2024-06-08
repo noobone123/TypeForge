@@ -124,19 +124,19 @@ public class TypeConstraint implements TypeDescriptor {
     public void addReferenceTo(long offset, TypeConstraint other) {
         referenceTo.putIfAbsent(offset, new HashSet<>());
         referenceTo.get(offset).add(other);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s adding referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
     public void addReferencedBy(TypeConstraint other, long offset) {
         referencedBy.putIfAbsent(other, new HashSet<>());
         referencedBy.get(other).add(offset);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s adding referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
     }
 
     public void removeReferenceTo(long offset, TypeConstraint other) {
         if (referenceTo.containsKey(offset)) {
             referenceTo.get(offset).remove(other);
-            Logging.info("TypeConstraint", String.format("Constraint_%s removing referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+            Logging.debug("TypeConstraint", String.format("Constraint_%s removing referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
 
             if (referenceTo.get(offset).isEmpty()) {
                 referenceTo.remove(offset);
@@ -147,7 +147,7 @@ public class TypeConstraint implements TypeDescriptor {
     public void removeReferencedBy(TypeConstraint other, long offset) {
         if (referencedBy.containsKey(other)) {
             referencedBy.get(other).remove(offset);
-            Logging.info("TypeConstraint", String.format("Constraint_%s removing referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+            Logging.debug("TypeConstraint", String.format("Constraint_%s removing referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
 
             if (referencedBy.get(other).isEmpty()) {
                 referencedBy.remove(other);
@@ -158,19 +158,19 @@ public class TypeConstraint implements TypeDescriptor {
     public void addNestTo(long offset, TypeConstraint other) {
         nestTo.putIfAbsent(offset, new HashSet<>());
         nestTo.get(offset).add(other);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s adding nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
     }
 
     public void addNestedBy(TypeConstraint other, long offset) {
         nestedBy.putIfAbsent(other, new HashSet<>());
         nestedBy.get(other).add(offset);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s adding nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
     }
 
     public void removeNestTo(long offset, TypeConstraint other) {
         if (nestTo.containsKey(offset)) {
             nestTo.get(offset).remove(other);
-            Logging.info("TypeConstraint", String.format("Constraint_%s removing nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
+            Logging.debug("TypeConstraint", String.format("Constraint_%s removing nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
 
             if (nestTo.get(offset).isEmpty()) {
                 nestTo.remove(offset);
@@ -181,7 +181,7 @@ public class TypeConstraint implements TypeDescriptor {
     public void removeNestedBy(TypeConstraint other, long offset) {
         if (nestedBy.containsKey(other)) {
             nestedBy.get(other).remove(offset);
-            Logging.info("TypeConstraint", String.format("Constraint_%s removing nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
+            Logging.debug("TypeConstraint", String.format("Constraint_%s removing nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
 
             if (nestedBy.get(other).isEmpty()) {
                 nestedBy.remove(other);
@@ -243,49 +243,98 @@ public class TypeConstraint implements TypeDescriptor {
 
 
     public void mergeXRef(TypeConstraint other) {
+        // Be careful with Recursive Reference or Recursive Nest
         List<Runnable> changes = new ArrayList<>();
         other.referenceTo.forEach((offset, constraints) -> {
             constraints.forEach(refee -> {
-                changes.add(() -> {
-                    this.addReferenceTo(offset, refee);
-                    refee.addReferencedBy(this, offset);
-                    other.removeReferenceTo(offset, refee);
-                    refee.removeReferencedBy(other, offset);
-                });
+                if (refee != other) {
+                    changes.add(() -> {
+                        this.addReferenceTo(offset, refee);
+                        refee.addReferencedBy(this, offset);
+                        other.removeReferenceTo(offset, refee);
+                        refee.removeReferencedBy(other, offset);
+                    });
+                }
+                // Recursive Reference to
+                else {
+                    changes.add(() -> {
+                        this.addReferenceTo(offset, this);
+                        this.addReferencedBy(this, offset);
+                        other.removeReferenceTo(offset, refee);
+                        refee.removeReferencedBy(other, offset);
+                    });
+                }
             });
         });
 
         other.referencedBy.forEach((refer, offsets) -> {
-            offsets.forEach(offset -> {
-                changes.add(() -> {
-                    this.addReferencedBy(refer, offset);
-                    refer.addReferenceTo(offset, this);
-                    other.removeReferencedBy(refer, offset);
-                    refer.removeReferenceTo(offset, other);
+            if (refer != other) {
+                offsets.forEach(offset -> {
+                    changes.add(() -> {
+                        this.addReferencedBy(refer, offset);
+                        refer.addReferenceTo(offset, this);
+                        other.removeReferencedBy(refer, offset);
+                        refer.removeReferenceTo(offset, other);
+                    });
                 });
-            });
+            }
+            // Recursive Reference by
+            else {
+                offsets.forEach(offset -> {
+                    changes.add(() -> {
+                        this.addReferencedBy(this, offset);
+                        this.addReferenceTo(offset, this);
+                        other.removeReferencedBy(refer, offset);
+                        refer.removeReferenceTo(offset, other);
+                    });
+                });
+            }
         });
 
         other.nestTo.forEach((offset, constraints) -> {
             constraints.forEach(nestee -> {
-                changes.add(() -> {
-                    this.addNestTo(offset, nestee);
-                    nestee.addNestedBy(this, offset);
-                    other.removeNestTo(offset, nestee);
-                    nestee.removeNestedBy(other, offset);
-                });
+                if (nestee != other) {
+                    changes.add(() -> {
+                        this.addNestTo(offset, nestee);
+                        nestee.addNestedBy(this, offset);
+                        other.removeNestTo(offset, nestee);
+                        nestee.removeNestedBy(other, offset);
+                    });
+                }
+                // Recursive Nest to
+                else {
+                    changes.add(() -> {
+                        this.addNestTo(offset, this);
+                        this.addNestedBy(this, offset);
+                        other.removeNestTo(offset, nestee);
+                        nestee.removeNestedBy(other, offset);
+                    });
+                }
             });
         });
 
         other.nestedBy.forEach((nester, offsets) -> {
-            offsets.forEach(offset -> {
-                changes.add(() -> {
-                    this.addNestedBy(nester, offset);
-                    nester.addNestTo(offset, this);
-                    other.removeNestedBy(nester, offset);
-                    nester.removeNestTo(offset, other);
+            if (nester != other) {
+                offsets.forEach(offset -> {
+                    changes.add(() -> {
+                        this.addNestedBy(nester, offset);
+                        nester.addNestTo(offset, this);
+                        other.removeNestedBy(nester, offset);
+                        nester.removeNestTo(offset, other);
+                    });
                 });
-            });
+            }
+            // Recursive Nested by
+            else {
+                offsets.forEach(offset -> {
+                    changes.add(() -> {
+                        this.addNestedBy(this, offset);
+                        this.addNestTo(offset, this);
+                        other.removeNestedBy(nester, offset);
+                        nester.removeNestTo(offset, other);
+                    });
+                });
+            }
         });
 
         changes.forEach(Runnable::run);
