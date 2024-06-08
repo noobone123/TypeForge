@@ -129,7 +129,7 @@ public class Context {
      * @param vn the varnode which holds the dataflow fact
      * @param symbolExpr the new symbolExpr
      */
-    public void addNewSymbolExpr(FunctionNode funcNode, Varnode vn, SymbolExpr symbolExpr) {
+    public void addNewExprIntoDataFlowFacts(FunctionNode funcNode, Varnode vn, SymbolExpr symbolExpr) {
         var intraCtx = intraCtxMap.get(funcNode);
         if (intraCtx == null) {
             Logging.error("Context", "Failed to get intraContext for " + funcNode.value.getName());
@@ -140,6 +140,7 @@ public class Context {
         if (curDataFlowFact.add(symbolExpr)) {
             Logging.debug("Context", "New " + vn + " -> " + curDataFlowFact);
         }
+        addTracedVarnode(funcNode, vn);
     }
 
 
@@ -167,6 +168,7 @@ public class Context {
         }
 
         outputFacts.merge(inputFacts);
+        addTracedVarnode(funcNode, output);
         Logging.debug("Context", "Merge " + output + " -> " + outputFacts);
     }
 
@@ -188,9 +190,6 @@ public class Context {
                 constraint = getConstraint(expr);
             } else {
                 expr = new SymbolExpr.Builder().rootSymbol(symbol).build();
-                if (dataType instanceof Array || dataType instanceof Structure || dataType instanceof Union) {
-                    expr = SymbolExpr.reference(this, expr);
-                }
                 constraint = getConstraint(expr);
             }
 
@@ -231,7 +230,7 @@ public class Context {
                 // TODO: this may cause flow-insensitive, ... we can improve it in the future
                 for (var vn: symbol.getHighVariable().getInstances()) {
                     addTracedVarnode(funcNode, vn);
-                    addNewSymbolExpr(funcNode, vn, expr);
+                    addNewExprIntoDataFlowFacts(funcNode, vn, expr);
                 }
             }
         }

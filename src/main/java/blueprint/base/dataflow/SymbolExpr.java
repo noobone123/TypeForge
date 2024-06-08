@@ -306,6 +306,10 @@ public class SymbolExpr {
             sb.append(")");
         }
 
+        if (hasAttribute(Attribute.ARRAY) || hasAttribute(Attribute.STRUCT) || hasAttribute(Attribute.UNION)) {
+            sb.append("[Composite]");
+        }
+
         return sb.toString();
     }
 
@@ -449,6 +453,7 @@ public class SymbolExpr {
     public static SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
         if (a.hasIndexScale() && b.hasIndexScale()) {
             Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
         }
 
         // ensure that the constant value is always on the right side of the expression
@@ -495,6 +500,7 @@ public class SymbolExpr {
         }
         else {
             Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
         }
         return builder.build();
     }
@@ -502,6 +508,7 @@ public class SymbolExpr {
     public static SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
         if (!a.isConst() && !b.isConst) {
             Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
         }
 
         // ensure that the constant value is always on the right side of the expression
@@ -524,6 +531,7 @@ public class SymbolExpr {
         }
         else {
             Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
         }
 
         return builder.build();

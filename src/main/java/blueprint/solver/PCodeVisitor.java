@@ -5,7 +5,6 @@ import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.DummyType;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
-import blueprint.base.dataflow.constraints.TypeDescriptor;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
@@ -141,8 +140,9 @@ public class PCodeVisitor {
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
                     var newExpr = add(ctx, symExpr, deltaSym);
-                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
-                    ctx.addTracedVarnode(funcNode, output);
+                    if (newExpr != null) {
+                        ctx.addNewExprIntoDataFlowFacts(funcNode, output, newExpr);
+                    }
                 }
             }
         } else {
@@ -154,8 +154,9 @@ public class PCodeVisitor {
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
                     var newExpr = add(ctx, symExpr, symExpr_1);
-                    ctx.addNewSymbolExpr(funcNode, output, newExpr);
-                    ctx.addTracedVarnode(funcNode, output);
+                    if (newExpr != null) {
+                        ctx.addNewExprIntoDataFlowFacts(funcNode, output, newExpr);
+                    }
                 }
             }
         }
@@ -173,8 +174,6 @@ public class PCodeVisitor {
         var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputVn);
         assert inputFact != null;
 
-        ctx.addTracedVarnode(funcNode, outputVn);
-
         // If output has already held symbolExpr, we can update the symbol alias map
         var outputFacts = ctx.getIntraDataFlowFacts(funcNode, outputVn);
 
@@ -184,7 +183,7 @@ public class PCodeVisitor {
                     ctx.setSoundTypeAlias(outputSymExpr, inputSymExpr);
                 }
             }
-            ctx.addNewSymbolExpr(funcNode, outputVn, inputSymExpr);
+            ctx.addNewExprIntoDataFlowFacts(funcNode, outputVn, inputSymExpr);
         }
     }
 
@@ -212,11 +211,11 @@ public class PCodeVisitor {
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
                     var newExpr = add(ctx, symExpr, deltaSym);
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                    if (newExpr != null) {
+                        ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), newExpr);
+                    }
                 }
             }
-
-            ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
         }
         // inputs[1] is index and inputs[2] is element size
         else if (!inputs[1].isConstant() && inputs[2].isConstant()) {
@@ -233,13 +232,16 @@ public class PCodeVisitor {
             for (var symExpr: input0Fact) {
                 var indexFacts = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
                 for (var indexExpr: indexFacts) {
-                    var newExpr = add(ctx, symExpr, multiply(ctx, indexExpr, scaleExpr));
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), newExpr);
+                    var newIndexScale = multiply(ctx, indexExpr, scaleExpr);
+                    if (newIndexScale != null) {
+                        var newExpr = add(ctx, symExpr, newIndexScale);
+                        if (newExpr != null) {
+                            ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), newExpr);
+                        }
+                    }
                 }
                 symExpr.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
             }
-
-            ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
         }
         else {
             Logging.warn("PCodeVisitor", String.format("%s + %s * %s can not resolve", inputs[0], inputs[1], inputs[2]));
@@ -268,7 +270,6 @@ public class PCodeVisitor {
                 var sym = inputs[1].getHigh().getSymbol();
                 if (sym != null) {
                     var expr = new SymbolExpr.Builder().rootSymbol(sym).build();
-                    expr = SymbolExpr.reference(ctx, expr);
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
                     if (outputFacts != null) {
@@ -276,8 +277,7 @@ public class PCodeVisitor {
                             ctx.setSoundTypeAlias(fact, expr);
                         }
                     }
-                    ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), expr);
+                    ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), expr);
                 }
             }
         }
@@ -295,8 +295,7 @@ public class PCodeVisitor {
                             ctx.setSoundTypeAlias(fact, globalSymExpr);
                         }
                     }
-                    ctx.addTracedVarnode(funcNode, pcodeOp.getOutput());
-                    ctx.addNewSymbolExpr(funcNode, pcodeOp.getOutput(), globalSymExpr);
+                    ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), globalSymExpr);
                 }
             }
         }
@@ -310,10 +309,15 @@ public class PCodeVisitor {
     private void handleMultiEqual(PcodeOp pcodeOp) {
         var output = pcodeOp.getOutput();
         var inputs = pcodeOp.getInputs();
-        ctx.addTracedVarnode(funcNode, output);
-        for (var input : inputs) {
-            ctx.mergeSymbolExpr(funcNode, input, output, false);
+
+        if (output.getHigh() != null && output.getHigh().getSymbol() != null) {
+            ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().rootSymbol(output.getHigh().getSymbol()).build());
+        } else {
+            for (var input : inputs) {
+                ctx.mergeSymbolExpr(funcNode, input, output, false);
+            }
         }
+
     }
 
 
@@ -326,11 +330,10 @@ public class PCodeVisitor {
             return;
         }
 
-        ctx.addTracedVarnode(funcNode, output);
         var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : inputFacts) {
             // TODO: IntZext need add constraint ?
-            ctx.addNewSymbolExpr(funcNode, output, symExpr);
+            ctx.addNewExprIntoDataFlowFacts(funcNode, output, symExpr);
         }
     }
 
@@ -344,11 +347,10 @@ public class PCodeVisitor {
             return;
         }
 
-        ctx.addTracedVarnode(funcNode, output);
         var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var symExpr : inputFacts) {
             // TODO: IntSext need add constraint ?
-            ctx.addNewSymbolExpr(funcNode, output, symExpr);
+            ctx.addNewExprIntoDataFlowFacts(funcNode, output, symExpr);
         }
     }
 
@@ -382,9 +384,10 @@ public class PCodeVisitor {
             var sizeExpr = new SymbolExpr.Builder().constant(size).build();
             for (var symExpr : inputFacts) {
                 var newExpr = multiply(ctx, symExpr, sizeExpr);
-                ctx.addNewSymbolExpr(funcNode, output, newExpr);
+                if (newExpr != null) {
+                    ctx.addNewExprIntoDataFlowFacts(funcNode, output, newExpr);
+                }
             }
-            ctx.addTracedVarnode(funcNode, output);
         }
     }
 
@@ -411,7 +414,7 @@ public class PCodeVisitor {
         var output = pcodeOp.getOutput();
 
         if (!ctx.isTracedVn(funcNode, input)) {
-            Logging.debug("PCodeVisitor", "[PCode] Load value is not interested: " + input);
+            Logging.debug("PCodeVisitor", "[PCode] Load addr is not interested: " + input);
             return;
         }
 
@@ -419,8 +422,6 @@ public class PCodeVisitor {
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
         var leftValueExprs = ctx.getIntraDataFlowFacts(funcNode, output);
         var primitiveType = new PrimitiveTypeDescriptor(outDT);
-
-        ctx.addTracedVarnode(funcNode, output);
 
         var loadAddrExprs = ctx.getIntraDataFlowFacts(funcNode, input);
         for (var loadAddrExpr : loadAddrExprs) {
@@ -441,7 +442,7 @@ public class PCodeVisitor {
                 }
             }
 
-            ctx.addNewSymbolExpr(funcNode, output, loadedValueExpr);
+            ctx.addNewExprIntoDataFlowFacts(funcNode, output, loadedValueExpr);
         }
     }
 
@@ -576,9 +577,8 @@ public class PCodeVisitor {
                 // If receiverFacts has no corresponding symbolExpr
                 else {
                     for (var retValueExpr : retExprs) {
-                        ctx.addNewSymbolExpr(funcNode, receiverVn, retValueExpr);
+                        ctx.addNewExprIntoDataFlowFacts(funcNode, receiverVn, retValueExpr);
                     }
-                    ctx.addTracedVarnode(funcNode, receiverVn);
                 }
             }
         }

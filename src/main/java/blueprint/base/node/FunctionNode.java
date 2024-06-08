@@ -131,9 +131,14 @@ public class FunctionNode extends NodeBase<Function> {
         var newParams = new ArrayList<HighSymbol>();
         for (var i = 0; i < proto.getNumParams(); i++) {
             var param = proto.getParam(i);
-            if (param.getStorage().getRegister().getName().contains("XMM")) {
-                Logging.warn("FunctionNode", "Remove XMM register parameter: " + param.getName());
-            } else {
+            if (param.getStorage().getRegister() != null) {
+                if (param.getStorage().getRegister().getName().contains("XMM")) {
+                    Logging.warn("FunctionNode", "Remove XMM register parameter: " + param.getName());
+                } else {
+                    newParams.add(param);
+                }
+            }
+             else {
                 newParams.add(param);
             }
         }
