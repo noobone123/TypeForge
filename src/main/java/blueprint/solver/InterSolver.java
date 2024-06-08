@@ -131,7 +131,8 @@ public class InterSolver {
     public void setTypeAgnosticFunctions() {
         var addrList = List.of(
                 0x0015c04e, // ck_realloc_u32
-                0x0015bffc  // ck_calloc
+                0x0015bffc,  // ck_calloc
+                0x0015bfb5  // ck_malloc
         );
 
         for (var addr: addrList) {

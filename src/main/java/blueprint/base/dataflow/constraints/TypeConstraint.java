@@ -86,7 +86,7 @@ public class TypeConstraint implements TypeDescriptor {
         }
     }
 
-    public void addOffsetTypeConstraint(long offset, TypeDescriptor type) {
+    public void addField(long offset, TypeDescriptor type) {
         fieldMap.putIfAbsent(offset, new HashMap<>());
         fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
         Logging.info("TypeConstraint", String.format("Constraint_%s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));

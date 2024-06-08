@@ -207,7 +207,7 @@ public class Context {
                 expr.setVariableSize(structure.getLength());
                 constraint.setTotalSize(structure.getLength());
                 for (var field: structure.getComponents()) {
-                    constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
+                    constraint.addField(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
             }
             else if (dataType instanceof Union union) {
@@ -216,7 +216,7 @@ public class Context {
                 expr.setVariableSize(union.getLength());
                 constraint.setTotalSize(union.getLength());
                 for (var field: union.getComponents()) {
-                    constraint.addOffsetTypeConstraint(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
+                    constraint.addField(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
                 }
             }
 
