@@ -116,7 +116,7 @@ public class Generator {
         var mapper2 = new ObjectMapper();
         var root2 = mapper2.createObjectNode();
         allConstraints.forEach((symExpr, constraint) -> {
-            if (!symExpr.isRootSymExpr()) {
+            if (!symExpr.isVariable()) {
                 return;
             }
             var prefix = symExpr.prefix;

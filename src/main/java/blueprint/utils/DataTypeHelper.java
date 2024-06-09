@@ -142,4 +142,9 @@ public class DataTypeHelper {
 
         return result;
     }
+
+
+    public boolean isDecompilerRecoveredCompositeType(DataType dt) {
+        return dt instanceof Structure || dt instanceof Array || dt instanceof Union;
+    }
 }

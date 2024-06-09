@@ -270,6 +270,9 @@ public class PCodeVisitor {
                 var sym = inputs[1].getHigh().getSymbol();
                 if (sym != null) {
                     var expr = new SymbolExpr.Builder().rootSymbol(sym).build();
+                    if (!checkIfHoldsCompositeType(expr)) {
+                        expr = SymbolExpr.reference(ctx, expr);
+                    }
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
                     if (outputFacts != null) {
@@ -288,6 +291,9 @@ public class PCodeVisitor {
                 var globalSym = inputs[1].getHigh().getSymbol();
                 if (globalSym != null && globalSym.isGlobal()) {
                     var globalSymExpr = new SymbolExpr.Builder().global(globalSym.getSymbol().getAddress(), globalSym).build();
+                    if (!checkIfHoldsCompositeType(globalSymExpr)) {
+                        globalSymExpr = SymbolExpr.reference(ctx, globalSymExpr);
+                    }
                     var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
 
                     if (outputFacts != null) {
@@ -652,7 +658,6 @@ public class PCodeVisitor {
                 expr.hasAttribute(SymbolExpr.Attribute.STRUCT) ||
                 expr.hasAttribute(SymbolExpr.Attribute.UNION);
     }
-
 
     /**
      * Check if the offset is sane to be a structure offset

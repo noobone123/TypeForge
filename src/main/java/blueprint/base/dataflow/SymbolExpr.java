@@ -317,7 +317,7 @@ public class SymbolExpr {
     @Override
     public int hashCode() {
         if (isGlobal) {
-            return Objects.hash(globalAddr);
+            return Objects.hash(globalAddr, reference);
         }
         else {
             return Objects.hash(baseExpr, indexExpr, scaleExpr,
@@ -331,20 +331,7 @@ public class SymbolExpr {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof SymbolExpr that)) return false;
-        if (isGlobal) {
-            return Objects.equals(globalAddr, that.globalAddr);
-        } else {
-            return Objects.equals(baseExpr, that.baseExpr) &&
-                    Objects.equals(indexExpr, that.indexExpr) &&
-                    Objects.equals(scaleExpr, that.scaleExpr) &&
-                    Objects.equals(offsetExpr, that.offsetExpr) &&
-                    Objects.equals(rootSym, that.rootSym) &&
-                    constant == that.constant &&
-                    dereference == that.dereference &&
-                    reference == that.reference &&
-                    Objects.equals(nestedExpr, that.nestedExpr) &&
-                    isConst == that.isConst;
-        }
+        return this.hashCode() == that.hashCode();
     }
 
     @Override
@@ -430,7 +417,7 @@ public class SymbolExpr {
 
             int hash;
             if (isGlobal) {
-                hash = Objects.hash(globalAddr);
+                hash = Objects.hash(globalAddr, reference);
             } else {
                 hash = Objects.hash(baseExpr, indexExpr, scaleExpr,
                         offsetExpr, rootSym, constant,
