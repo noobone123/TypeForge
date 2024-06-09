@@ -421,7 +421,7 @@ public class TypeConstraint implements TypeDescriptor {
             var exprNode = exprs.addObject();
             exprNode.put("Expr", expr.toString());
             exprNode.put("Attributes", expr.getAttributes().toString());
-            exprNode.put("Size", expr.variableSize);
+            exprNode.put("Size", Long.toHexString(expr.variableSize));
         });
 
         rootNode.put("TotalSize", totalSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(totalSize.iterator().next()));

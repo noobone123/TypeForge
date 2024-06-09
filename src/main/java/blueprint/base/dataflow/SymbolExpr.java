@@ -21,6 +21,7 @@ public class SymbolExpr {
         STRUCT,
         UNION,
         GLOBAL,
+        POINTER_TO_COMPOSITE,
         MEM_FUNC_ARG,
         MAY_ARRAY_PTR
     }

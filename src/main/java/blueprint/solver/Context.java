@@ -193,6 +193,15 @@ public class Context {
                 constraint = getConstraint(expr);
             }
 
+            if (dataType instanceof Pointer ptr) {
+                var ptrEE = ptr.getDataType();
+                if (ptrEE instanceof Array || ptrEE instanceof Structure || ptrEE instanceof Union) {
+                    Logging.info("Context", "Found decompiler recovered Pointer, points to " + dataType.getName());
+                    expr.addAttribute(SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
+                    dataType = ptrEE;
+                }
+            }
+
             if (dataType instanceof Array array) {
                 Logging.info("Context", "Found decompiler recovered Array " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.ARRAY);
