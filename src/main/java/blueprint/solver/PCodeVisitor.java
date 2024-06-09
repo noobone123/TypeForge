@@ -317,7 +317,12 @@ public class PCodeVisitor {
         var inputs = pcodeOp.getInputs();
 
         if (output.getHigh() != null && output.getHigh().getSymbol() != null) {
-            ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().rootSymbol(output.getHigh().getSymbol()).build());
+            var highSym = output.getHigh().getSymbol();
+            if (!highSym.isGlobal()) {
+                ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().rootSymbol(highSym).build());
+            } else {
+                ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().global(highSym.getSymbol().getAddress(), highSym).build());
+            }
         } else {
             for (var input : inputs) {
                 ctx.mergeSymbolExpr(funcNode, input, output, false);
