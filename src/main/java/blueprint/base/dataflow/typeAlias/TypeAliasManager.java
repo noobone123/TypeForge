@@ -85,6 +85,39 @@ public class TypeAliasManager<T> {
         return exprToGraph.get(node);
     }
 
+    /**
+     * If a graph has no symbol expressions in the given set, remove it from the manager
+     * @param memExprs the set of memory access symbol expressions
+     */
+    public void removeRedundantGraphs(Set<SymbolExpr> memExprs) {
+        Set<SymbolExpr> memExprRootSymbols = new HashSet<>();
+        for (var expr: memExprs) {
+            memExprRootSymbols.add(expr.getRootSymExpr());
+        }
+
+        Set<TypeAliasGraph<T>> toRemove = new HashSet<>();
+        for (var graph: graphs) {
+            boolean hasMemExpr = false;
+            for (var node: graph.getNodes()) {
+                if (node instanceof SymbolExpr expr && memExprRootSymbols.contains(expr)) {
+                    hasMemExpr = true;
+                    break;
+                }
+            }
+            if (!hasMemExpr) {
+                toRemove.add(graph);
+            }
+        }
+
+        for (var graph: toRemove) {
+            graphs.remove(graph);
+            for (var node: graph.getNodes()) {
+                exprToGraph.remove(node);
+            }
+        }
+    }
+
+
     public void dump(String dirName) throws IOException {
         if (!new File(dirName).exists()) {
             new File(dirName).mkdirs();
@@ -111,7 +144,7 @@ public class TypeAliasManager<T> {
             exprToGraphID.put(entry.getKey().toString(), entry.getValue().toString());
         }
         for (var graph: graphs) {
-            graphIDs.add(graph.getShortUUID());
+            graphIDs.add("TypeAliasGraph_" + graph.getShortUUID());
         }
         metadata.put("graphs", graphIDs);
         metadata.put("exprToGraph", exprToGraphID);

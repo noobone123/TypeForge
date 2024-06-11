@@ -272,6 +272,8 @@ public class Context {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void collectConstraints() {
+        typeAliasManager.removeRedundantGraphs(memAccessExprParseCandidates);
+
         parseExpressions();
 
         try {
