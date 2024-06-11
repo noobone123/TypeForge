@@ -5,6 +5,7 @@ import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.base.dataflow.constraints.DummyType;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
+import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
@@ -180,7 +181,7 @@ public class PCodeVisitor {
         for (var inputSymExpr: inputFact) {
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    ctx.setSoundTypeAlias(outputSymExpr, inputSymExpr);
+                    ctx.addTypeAliasRelation(inputSymExpr, outputSymExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                 }
             }
             ctx.addNewExprIntoDataFlowFacts(funcNode, outputVn, inputSymExpr);
@@ -277,7 +278,7 @@ public class PCodeVisitor {
 
                     if (outputFacts != null) {
                         for (var fact : outputFacts) {
-                            ctx.setSoundTypeAlias(fact, expr);
+                            ctx.addTypeAliasRelation(expr, fact, TypeAliasGraph.EdgeType.DATAFLOW);
                         }
                     }
                     ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), expr);
@@ -298,7 +299,7 @@ public class PCodeVisitor {
 
                     if (outputFacts != null) {
                         for (var fact : outputFacts) {
-                            ctx.setSoundTypeAlias(fact, globalSymExpr);
+                            ctx.addTypeAliasRelation(globalSymExpr, fact, TypeAliasGraph.EdgeType.DATAFLOW);
                         }
                     }
                     ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), globalSymExpr);
@@ -446,7 +447,7 @@ public class PCodeVisitor {
             if (leftValueExprs != null) {
                 Logging.debug("PCodeVisitor", "Loaded varnode has already held symbolExpr, set type alias ...");
                 for (var leftValueExpr : leftValueExprs) {
-                    ctx.setSoundTypeAlias(leftValueExpr, loadedValueExpr);
+                    ctx.addTypeAliasRelation(loadedValueExpr, leftValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                     if (checkIfHoldsCompositeType(leftValueExpr)) {
                         ctx.addMemExprToParse(loadedValueExpr);
                     }
@@ -482,7 +483,7 @@ public class PCodeVisitor {
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
-                    ctx.setSoundTypeAlias(storedValueExpr, rightValueExpr);
+                    ctx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                     if (checkIfHoldsCompositeType(rightValueExpr)) {
                         ctx.addMemExprToParse(storedValueExpr);
                     }
@@ -559,7 +560,7 @@ public class PCodeVisitor {
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(inputIdx - 1);
                     var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
-                    ctx.setSoundTypeAlias(argExpr, paramExpr);
+                    ctx.addTypeAliasRelation(argExpr, paramExpr, TypeAliasGraph.EdgeType.CALL);
                 }
             }
         }
@@ -581,7 +582,7 @@ public class PCodeVisitor {
                 if (receiverFacts != null) {
                     for (var receiverExpr : receiverFacts) {
                         for (var retValueExpr : retExprs) {
-                            ctx.setSoundTypeAlias(receiverExpr, retValueExpr);
+                            ctx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeAliasGraph.EdgeType.RETURN);
                         }
                     }
                 }
@@ -626,7 +627,7 @@ public class PCodeVisitor {
                 var srcExprs = ctx.getIntraDataFlowFacts(funcNode, srcVn);
                 for (var dstExpr : dstExprs) {
                     for (var srcExpr : srcExprs) {
-                        ctx.setSoundTypeAlias(dstExpr, srcExpr);
+                        ctx.addTypeAliasRelation(srcExpr, dstExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                         Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
                             ctx.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());

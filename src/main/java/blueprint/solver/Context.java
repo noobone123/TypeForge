@@ -2,9 +2,10 @@ package blueprint.solver;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.KSet;
-import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
+import blueprint.base.dataflow.typeAlias.TypeAliasManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Global;
@@ -70,9 +71,7 @@ public class Context {
     public AccessPoints APs;
     public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
 
-    /** Sound Type Alias is used to store TypeAlias which is confirmed by the solver,
-     * SymbolExpr in the same cluster must have the explicit data-flow relationship */
-    public UnionFind<SymbolExpr> soundTypeAlias;
+    public TypeAliasManager<SymbolExpr> typeAliasManager;
     public Set<SymbolExpr> memAccessExprParseCandidates;
     public Set<SymbolExpr> callAccessExprParseCandidates;
 
@@ -83,7 +82,7 @@ public class Context {
         this.intraCtxMap = new HashMap<>();
         this.APs = new AccessPoints();
         this.symExprToConstraints = new HashMap<>();
-        this.soundTypeAlias = new UnionFind<>();
+        this.typeAliasManager = new TypeAliasManager<>();
         this.memAccessExprParseCandidates = new HashSet<>();
         this.callAccessExprParseCandidates = new HashSet<>();
     }
@@ -260,15 +259,11 @@ public class Context {
         return res;
     }
 
-    public UnionFind<SymbolExpr> getSoundTypeAlias() {
-        return soundTypeAlias;
-    }
-
-    public void setSoundTypeAlias(SymbolExpr sym1, SymbolExpr sym2) {
-        if (!sym1.equals(sym2)) {
-            soundTypeAlias.union(sym1, sym2);
-            Logging.info("Context", String.format("Set sound type alias: %s == %s", sym1, sym2));
+    public void addTypeAliasRelation(SymbolExpr from, SymbolExpr to, TypeAliasGraph.EdgeType edgeType) {
+        if (from.equals(to)) {
+            return;
         }
+        typeAliasManager.addEdge(from, to, edgeType);
     }
 
     /**
@@ -304,6 +299,7 @@ public class Context {
 
 
     private void mergeTypeAlias() {
+        // TODO: identify the TypeAgnoistic Arguments.
         HashSet<SymbolExpr> updated = new HashSet<>();
         var tmpSymExprToConstraints = new HashMap<>(symExprToConstraints);
 
@@ -311,11 +307,16 @@ public class Context {
             if (updated.contains(symExpr)) {
                 continue;
             }
-            var cluster = soundTypeAlias.getCluster(symExpr);
-            if (cluster.size() > 1) {
+            var graph = typeAliasManager.getTypeAliasGraph(symExpr);
+            if (graph == null) {
+                Logging.warn("Context", symExpr + " has no type alias graph.");
+                continue;
+            }
+
+            if (graph.getNumNodes() > 1) {
                 var mergedConstraint = new TypeConstraint();
                 Logging.info("Context", String.format("Created new merged constraint: Constraint_%s", mergedConstraint.getName()));
-                for (var aliasSym : cluster) {
+                for (var aliasSym : graph.getNodes()) {
                     var constraint = tmpSymExprToConstraints.get(aliasSym);
                     if (constraint != null) {
                         Logging.info("Context", String.format("Merge %s: Constraint_%s into Constraint_%s", aliasSym, constraint.getName(), mergedConstraint.getName()));
@@ -323,7 +324,7 @@ public class Context {
                     }
                 }
 
-                for (var sym : cluster) {
+                for (var sym : graph.getNodes()) {
                     symExprToConstraints.put(sym, mergedConstraint);
                     mergedConstraint.addAssociatedExpr(sym);
                     Logging.info("Context", String.format("Set expr %s -> Constraint_%s", sym, mergedConstraint.getName()));

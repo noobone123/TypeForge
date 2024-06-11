@@ -1,5 +1,6 @@
 package blueprint.base.dataflow;
 
+import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.solver.Context;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
@@ -462,7 +463,7 @@ public class SymbolExpr {
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
-                ctx.setSoundTypeAlias(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build());
+                ctx.addTypeAliasRelation(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), TypeAliasGraph.EdgeType.INDIRECT);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
             } else {
                 builder.base(a).offset(b);
@@ -532,7 +533,7 @@ public class SymbolExpr {
         }
         var newExpr = new SymbolExpr.Builder().dereference(a).build();
         if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            ctx.setSoundTypeAlias(newExpr, new SymbolExpr.Builder().dereference(a.baseExpr).build());
+            ctx.addTypeAliasRelation(newExpr, new SymbolExpr.Builder().dereference(a.baseExpr).build(), TypeAliasGraph.EdgeType.INDIRECT);
         }
         return newExpr;
     }
