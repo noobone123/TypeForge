@@ -23,6 +23,10 @@ public class TypeAliasGraph<T> {
         shortUUID = uuid.toString().substring(0, 8);
     }
 
+    public String getShortUUID() {
+        return shortUUID;
+    }
+
     public void addEdge(T src, T dst, EdgeType edgeType) {
         adjList.computeIfAbsent(src, k -> new HashMap<>()).put(dst, edgeType);
         Logging.info("TypeAliasGraph", String.format("TypeAliasGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
@@ -87,6 +91,21 @@ public class TypeAliasGraph<T> {
             }
         }
     }
+
+
+    public String toGraphviz() {
+        StringBuilder builder = new StringBuilder();
+        builder.append("digraph TypeAliasGraph_").append(shortUUID).append(" {\n");
+        for (var entry : adjList.entrySet()) {
+            for (var edge : entry.getValue().entrySet()) {
+                builder.append("  \"").append(entry.getKey()).append("\" -> \"")
+                        .append(edge.getKey()).append("\" [label=\"").append(edge.getValue()).append("\"];\n");
+            }
+        }
+        builder.append("}\n");
+        return builder.toString();
+    }
+
 
     @Override
     public String toString() {

@@ -2,11 +2,13 @@ package blueprint.base.dataflow.typeAlias;
 
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.Map;
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.util.*;
 
 public class TypeAliasManager<T> {
     private final Set<TypeAliasGraph<T>> graphs;
@@ -25,6 +27,7 @@ public class TypeAliasManager<T> {
             newGraph.addEdge(from, to, type);
             exprToGraph.put(from, newGraph);
             exprToGraph.put(to, newGraph);
+            graphs.add(newGraph);
         } else if (fromGraph == null) {
             toGraph.addEdge(from, to, type);
             exprToGraph.put(from, toGraph);
@@ -82,4 +85,44 @@ public class TypeAliasManager<T> {
         return exprToGraph.get(node);
     }
 
+    public void dump(String dirName) throws IOException {
+        if (!new File(dirName).exists()) {
+            new File(dirName).mkdirs();
+        } else {
+            // remove directory and recreate
+            File dir = new File(dirName);
+            for (File file: dir.listFiles()) {
+                if (!file.delete()) {
+                    throw new IOException("Failed to delete file: " + file);
+                }
+            }
+        }
+
+        File metadataFile = new File(dirName, "metadata.json");
+
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.enable(SerializationFeature.INDENT_OUTPUT);
+
+        Map<String, Object> metadata = new HashMap<>();
+        Map<String, String> exprToGraphID = new HashMap<>();
+        List<String> graphIDs = new ArrayList<>();
+
+        for (var entry: exprToGraph.entrySet()) {
+            exprToGraphID.put(entry.getKey().toString(), entry.getValue().toString());
+        }
+        for (var graph: graphs) {
+            graphIDs.add(graph.getShortUUID());
+        }
+        metadata.put("graphs", graphIDs);
+        metadata.put("exprToGraph", exprToGraphID);
+        mapper.writeValue(metadataFile, metadata);
+
+        assert graphs.size() == exprToGraph.values().stream().distinct().count();
+
+        for (var graph: graphs) {
+            String graphName = "TypeAliasGraph_" + graph.getShortUUID();
+            File graphFile = new File(dirName, graphName + ".dot");
+            Files.write(graphFile.toPath(), graph.toGraphviz().getBytes());
+        }
+    }
 }

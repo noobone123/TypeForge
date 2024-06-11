@@ -17,6 +17,7 @@ import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
+import java.io.IOException;
 import java.util.*;
 
 
@@ -272,6 +273,12 @@ public class Context {
      */
     public void collectConstraints() {
         parseExpressions();
+
+        try {
+            typeAliasManager.dump("/home/h1k0/codes/blueprint/dummy/typeAlias");
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
         // merging Type according to the typeAlias
         mergeTypeAlias();
