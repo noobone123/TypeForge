@@ -5,9 +5,12 @@ import ghidra.program.model.listing.Function;
 
 import blueprint.base.graph.CallGraph;
 import blueprint.utils.*;
+import org.apache.commons.io.FileUtils;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+import java.io.File;
 
 public class BluePrint extends GhidraScript {
     @Override
@@ -45,6 +48,7 @@ public class BluePrint extends GhidraScript {
 
     protected boolean prepareAnalysis() {
         parseArgs();
+        prepareOutputDirectory();
 
         Global.currentProgram = this.currentProgram;
         Global.flatAPI = this;
@@ -81,6 +85,27 @@ public class BluePrint extends GhidraScript {
                 System.exit(1);
             }
         }
+    }
 
+    protected void prepareOutputDirectory() {
+        if (Global.outputDirectory == null) {
+            Logging.error("GhidraScript","Output directory not specified");
+            System.exit(1);
+        }
+
+        File outputDir = new File(Global.outputDirectory);
+        // If the output directory does not exist, create it
+        if (!outputDir.exists()) {
+            if (!outputDir.mkdirs()) {
+                Logging.error("GhidraScript", "Failed to create output directory");
+                System.exit(1);
+            }
+        } else {
+            try {
+                FileUtils.cleanDirectory(outputDir);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }
     }
 }

@@ -13,14 +13,15 @@ public class TypeAliasGraph<T> {
         INDIRECT
     }
 
-    private final Map<T, Map<T, EdgeType>> adjList;
+    private final Map<T, Map<T, EdgeType>> adjMap;
     private final UUID uuid;
     private final String shortUUID;
 
     public TypeAliasGraph() {
-        adjList = new HashMap<>();
+        adjMap = new HashMap<>();
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
+        Logging.debug("TypeAliasGraph", String.format("Create TypeAliasGraph_%s", shortUUID));
     }
 
     public String getShortUUID() {
@@ -28,44 +29,48 @@ public class TypeAliasGraph<T> {
     }
 
     public void addEdge(T src, T dst, EdgeType edgeType) {
-        adjList.computeIfAbsent(src, k -> new HashMap<>()).put(dst, edgeType);
-        Logging.info("TypeAliasGraph", String.format("TypeAliasGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
+        adjMap.computeIfAbsent(src, k -> new HashMap<>()).put(dst, edgeType);
+        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
     }
 
     public void removeEdge(T src, T dst) {
-        var edges = adjList.get(src);
+        var edges = adjMap.get(src);
         if (edges != null) {
             edges.remove(dst);
             if (edges.isEmpty()) {
-                adjList.remove(src);
+                adjMap.remove(src);
             }
         }
     }
 
     public void removeNode(T node) {
-        adjList.remove(node);
-        for (var edges: adjList.values()) {
+        adjMap.remove(node);
+        for (var edges: adjMap.values()) {
             edges.remove(node);
         }
     }
 
     public int getNumNodes() {
-        return adjList.size();
+        return adjMap.size();
     }
 
     public Set<T> getNodes() {
-        return adjList.keySet();
+        Set<T> nodes = new HashSet<>(adjMap.keySet());
+        for (var edges: adjMap.values()) {
+            nodes.addAll(edges.keySet());
+        }
+        return nodes;
     }
 
-    public Map<T, Map<T, EdgeType>> getAdjList() {
-        return adjList;
+    public Map<T, Map<T, EdgeType>> getAdjMap() {
+        return adjMap;
     }
 
     public Set<TypeAliasGraph<T>> getConnectedComponents() {
         Set<TypeAliasGraph<T>> components = new HashSet<>();
         Set<T> visited = new HashSet<>();
 
-        for (var node: adjList.keySet()) {
+        for (var node: adjMap.keySet()) {
             if (!visited.contains(node)) {
                 TypeAliasGraph<T> component = new TypeAliasGraph<>();
                 dfs(node, visited, component);
@@ -79,12 +84,13 @@ public class TypeAliasGraph<T> {
     private void dfs(T node, Set<T> visited, TypeAliasGraph<T> component) {
         Stack<T> stack = new Stack<>();
         stack.push(node);
+        visited.add(node);
 
         while (!stack.isEmpty()) {
             var curNode = stack.pop();
             if (!visited.contains(curNode)) {
                 visited.add(curNode);
-                for (var neighbor: adjList.getOrDefault(curNode, Collections.emptyMap()).entrySet()) {
+                for (var neighbor: adjMap.getOrDefault(curNode, Collections.emptyMap()).entrySet()) {
                     component.addEdge(curNode, neighbor.getKey(), neighbor.getValue());
                     stack.push(neighbor.getKey());
                 }
@@ -96,7 +102,7 @@ public class TypeAliasGraph<T> {
     public String toGraphviz() {
         StringBuilder builder = new StringBuilder();
         builder.append("digraph TypeAliasGraph_").append(shortUUID).append(" {\n");
-        for (var entry : adjList.entrySet()) {
+        for (var entry : adjMap.entrySet()) {
             for (var edge : entry.getValue().entrySet()) {
                 builder.append("  \"").append(entry.getKey()).append("\" -> \"")
                         .append(edge.getKey()).append("\" [label=\"").append(edge.getValue()).append("\"];\n");

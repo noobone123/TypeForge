@@ -25,9 +25,9 @@ public class TypeAliasManager<T> {
         if (fromGraph == null && toGraph == null) {
             TypeAliasGraph<T> newGraph = new TypeAliasGraph<T>();
             newGraph.addEdge(from, to, type);
+            graphs.add(newGraph);
             exprToGraph.put(from, newGraph);
             exprToGraph.put(to, newGraph);
-            graphs.add(newGraph);
         } else if (fromGraph == null) {
             toGraph.addEdge(from, to, type);
             exprToGraph.put(from, toGraph);
@@ -35,8 +35,8 @@ public class TypeAliasManager<T> {
             fromGraph.addEdge(from, to, type);
             exprToGraph.put(to, fromGraph);
         } else if (fromGraph != toGraph) {
-            mergeGraphs(fromGraph, toGraph);
             fromGraph.addEdge(from, to, type);
+            mergeGraphs(fromGraph, toGraph);
         } else {
             // fromGraph == toGraph
             fromGraph.addEdge(from, to, type);
@@ -49,13 +49,27 @@ public class TypeAliasManager<T> {
      * @param graph2 the graph to merge
      */
     public void mergeGraphs(TypeAliasGraph<T> graph1, TypeAliasGraph<T> graph2) {
-        for (var node: graph2.getAdjList().keySet()) {
+        for (var node: graph2.getNodes()) {
             exprToGraph.put(node, graph1);
         }
 
-        graph1.getAdjList().putAll(graph2.getAdjList());
+        for (var entry: graph2.getAdjMap().entrySet()) {
+            T src = entry.getKey();
+            Map<T, TypeAliasGraph.EdgeType> existingEdges = graph1.getAdjMap().computeIfAbsent(src, k -> new HashMap<>());
+            for (var edge: entry.getValue().entrySet()) {
+                T dst = edge.getKey();
+                var edgeType = edge.getValue();
+                if (existingEdges.containsKey(dst) && existingEdges.get(dst) != edgeType) {
+                    var oldEdgeType = existingEdges.get(dst);
+                    Logging.warn("TypeAliasManager", String.format("Conflict edge type: %s --%s---> %s, %s --%s---> %s", src, oldEdgeType, dst, src, edgeType, dst));
+                } else {
+                    existingEdges.put(dst, edgeType);
+                }
+            }
+        }
+
         graphs.remove(graph2);
-        Logging.info("TypeAliasManager", String.format("Merge %s into %s", graph2, graph1));
+        Logging.info("TypeAliasManager", String.format("Merge: %s <-- %s", graph1, graph2));
     }
 
 
@@ -63,7 +77,10 @@ public class TypeAliasManager<T> {
         var graph = exprToGraph.get(node);
         if (graph != null) {
             graph.removeNode(node);
-            splitGraph(graph);
+            if (graph.getConnectedComponents().size() > 1) {
+                Logging.debug("TypeAliasManager", String.format("Split graph %s", graph));
+                splitGraph(graph);
+            }
         }
     }
 
@@ -73,11 +90,10 @@ public class TypeAliasManager<T> {
             graphs.remove(graph);
             for (var component: components) {
                 graphs.add(component);
-                for (var node: component.getAdjList().keySet()) {
+                for (var node: component.getNodes()) {
                     exprToGraph.put(node, component);
                 }
             }
-            graphs.remove(graph);
         }
     }
 
@@ -85,19 +101,36 @@ public class TypeAliasManager<T> {
         return exprToGraph.get(node);
     }
 
-    public void dump(String dirName) throws IOException {
-        if (!new File(dirName).exists()) {
-            new File(dirName).mkdirs();
-        } else {
-            // remove directory and recreate
-            File dir = new File(dirName);
-            for (File file: dir.listFiles()) {
-                if (!file.delete()) {
-                    throw new IOException("Failed to delete file: " + file);
+    /**
+     * If a graph has no symbol expressions in the given interested set, remove it from the manager
+     * @param interested the set of symbol expressions which constraints are meaningful (possibly composite data type)
+     */
+    public void removeRedundantGraphs(Set<SymbolExpr> interested) {
+        Set<TypeAliasGraph<T>> toRemove = new HashSet<>();
+        for (var graph: graphs) {
+            boolean hasInterestedNode = false;
+            for (var node: graph.getNodes()) {
+                if (node instanceof SymbolExpr expr && interested.contains(expr)) {
+                    hasInterestedNode = true;
+                    break;
                 }
+            }
+            if (!hasInterestedNode) {
+                Logging.debug("TypeAliasManager", String.format("Remove redundant graph %s", graph));
+                toRemove.add(graph);
             }
         }
 
+        for (var graph: toRemove) {
+            graphs.remove(graph);
+            for (var node: graph.getNodes()) {
+                exprToGraph.remove(node);
+            }
+        }
+    }
+
+
+    public void dump(String dirName) throws IOException {
         File metadataFile = new File(dirName, "TypeAliasManager.json");
 
         ObjectMapper mapper = new ObjectMapper();
@@ -117,7 +150,10 @@ public class TypeAliasManager<T> {
         metadata.put("exprToGraph", exprToGraphID);
         mapper.writeValue(metadataFile, metadata);
 
-        assert graphs.size() == exprToGraph.values().stream().distinct().count();
+        if (graphs.size() != exprToGraph.values().stream().distinct().count()) {
+            Logging.error("TypeAliasManager", "Graphs and exprToGraph are inconsistent");
+            System.exit(1);
+        }
 
         for (var graph: graphs) {
             String graphName = "TypeAliasGraph_" + graph.getShortUUID();

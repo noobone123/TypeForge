@@ -274,14 +274,16 @@ public class Context {
     public void collectConstraints() {
         parseExpressions();
 
+        removeRedundantConstraints();
+
+        // merging Type according to the typeAlias
+        mergeTypeAlias();
+
         try {
             typeAliasManager.dump(Global.outputDirectory);
         } catch (IOException e) {
             e.printStackTrace();
         }
-
-        // merging Type according to the typeAlias
-        mergeTypeAlias();
 
         // merge constraints according to memory alias
         mergeConstraints();
@@ -307,6 +309,8 @@ public class Context {
 
     private void mergeTypeAlias() {
         // TODO: identify the TypeAgnoistic Arguments.
+        typeAliasManager.removeRedundantGraphs(symExprToConstraints.keySet());
+
         HashSet<SymbolExpr> updated = new HashSet<>();
         var tmpSymExprToConstraints = new HashMap<>(symExprToConstraints);
 
