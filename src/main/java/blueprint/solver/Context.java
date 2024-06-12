@@ -296,12 +296,6 @@ public class Context {
             parseCallAccessExpr(symExpr);
         }
 
-        try {
-            typeAliasManager.dump(Global.outputDirectory);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
         // merge constraints according to memory alias
         mergeConstraints();
 

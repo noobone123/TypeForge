@@ -96,11 +96,11 @@ public class Generator {
 
 
     public void dumpResults(File outputDir) {
-        String workingDir = System.getProperty("user.dir");
-        Logging.info("Generator", "Current working directory: " + workingDir);
-
-        if (!outputDir.exists()) {
-            outputDir.mkdirs();
+        // dump typeAliasManager to JSON file
+        try {
+            solverCtx.typeAliasManager.dump(outputDir);
+        } catch (IOException e) {
+            Logging.error("Generator", "Error writing typeAliasManager info to file" + e.getMessage());
         }
 
         // dump constraints to JSON file

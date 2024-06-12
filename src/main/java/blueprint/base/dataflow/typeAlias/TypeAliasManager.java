@@ -138,8 +138,8 @@ public class TypeAliasManager<T> {
     }
 
 
-    public void dump(String dirName) throws IOException {
-        File metadataFile = new File(dirName, "TypeAliasManager.json");
+    public void dump(File outputDir) throws IOException {
+        File metadataFile = new File(outputDir, "TypeAliasManager.json");
 
         ObjectMapper mapper = new ObjectMapper();
         mapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -165,7 +165,7 @@ public class TypeAliasManager<T> {
 
         for (var graph: graphs) {
             String graphName = "TypeAliasGraph_" + graph.getShortUUID();
-            File graphFile = new File(dirName, graphName + ".dot");
+            File graphFile = new File(outputDir, graphName + ".dot");
             Files.write(graphFile.toPath(), graph.toGraphviz().getBytes());
         }
     }
