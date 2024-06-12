@@ -272,12 +272,10 @@ public class Context {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void collectConstraints() {
-        typeAliasManager.removeRedundantGraphs(memAccessExprParseCandidates);
-
         parseExpressions();
 
         try {
-            typeAliasManager.dump("/home/h1k0/codes/blueprint/dummy/typeAlias");
+            typeAliasManager.dump(Global.outputDirectory);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -318,7 +316,7 @@ public class Context {
             }
             var graph = typeAliasManager.getTypeAliasGraph(symExpr);
             if (graph == null) {
-                Logging.warn("Context", symExpr + " has no type alias graph.");
+                Logging.warn("Context", symExpr + " has no data-flow relation with others.");
                 continue;
             }
 

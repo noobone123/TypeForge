@@ -463,7 +463,7 @@ public class SymbolExpr {
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
-                ctx.addTypeAliasRelation(a, new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), TypeAliasGraph.EdgeType.INDIRECT);
+                ctx.addTypeAliasRelation(new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeAliasGraph.EdgeType.INDIRECT);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
             } else {
                 builder.base(a).offset(b);

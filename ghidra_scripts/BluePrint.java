@@ -44,9 +44,12 @@ public class BluePrint extends GhidraScript {
     }
 
     protected boolean prepareAnalysis() {
+        parseArgs();
+
         Global.currentProgram = this.currentProgram;
         Global.flatAPI = this;
         Global.ghidraScript = this;
+
         Language language = this.currentProgram.getLanguage();
         if (language == null) {
             Logging.error("GhidraScript","Language not found");
@@ -55,5 +58,29 @@ public class BluePrint extends GhidraScript {
             Logging.info("GhidraScript","Language: " + language.getLanguageID());
             return true;
         }
+    }
+
+    protected void parseArgs() {
+        String[] args = getScriptArgs();
+        for (String arg : args) {
+            Logging.info("GhidraScript", "Arg: " + arg);
+            // split the arguments string by "="
+            String[] argParts = arg.split("=");
+            if (argParts.length != 2) {
+                Logging.error("GhidraScript", "Invalid argument: " + arg);
+                System.exit(1);
+            }
+
+            String key = argParts[0];
+            String value = argParts[1];
+
+            if (key.equals("output")) {
+                Global.outputDirectory = value;
+            } else {
+                Logging.error("GhidraScript", "Invalid argument: " + arg);
+                System.exit(1);
+            }
+        }
+
     }
 }

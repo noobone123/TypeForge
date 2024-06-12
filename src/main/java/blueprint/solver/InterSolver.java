@@ -22,7 +22,7 @@ public class InterSolver {
         this.cg = cg;
         this.ctx = new Context(this.cg);
 
-        var addr = FunctionHelper.getAddress(0x0015a5bb);
+        var addr = FunctionHelper.getAddress(0x001492c8);
         var startFunc = cg.getNodebyAddr(addr);
         buildWorkList(startFunc);
         setTypeAgnosticFunctions();
@@ -59,7 +59,7 @@ public class InterSolver {
 
         var generator = new Generator(ctx);
         // generator.buildSkeletonOfVariable();
-        generator.dumpResults(new File("/home/h1k0/codes/blueprint/dummy/"));
+        generator.dumpResults(new File(Global.outputDirectory));
     }
 
     /**
