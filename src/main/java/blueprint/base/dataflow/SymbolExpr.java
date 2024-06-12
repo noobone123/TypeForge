@@ -465,6 +465,7 @@ public class SymbolExpr {
                 // Set `base + index * scale` and `base` type alias
                 ctx.addTypeAliasRelation(new SymbolExpr.Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeAliasGraph.EdgeType.INDIRECT);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
+                a.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
             } else {
                 builder.base(a).offset(b);
             }
@@ -485,6 +486,7 @@ public class SymbolExpr {
                 builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(add(ctx, a.offsetExpr, b));
             } else {
                 builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(b);
+                a.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
             }
         }
         else {

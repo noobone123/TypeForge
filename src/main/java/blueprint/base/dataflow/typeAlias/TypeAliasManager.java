@@ -35,8 +35,8 @@ public class TypeAliasManager<T> {
             fromGraph.addEdge(from, to, type);
             exprToGraph.put(to, fromGraph);
         } else if (fromGraph != toGraph) {
-            fromGraph.addEdge(from, to, type);
             mergeGraphs(fromGraph, toGraph);
+            fromGraph.addEdge(from, to, type); // `mergeGraphs` should be called before `addEdge`
         } else {
             // fromGraph == toGraph
             fromGraph.addEdge(from, to, type);
@@ -53,6 +53,10 @@ public class TypeAliasManager<T> {
             exprToGraph.put(node, graph1);
         }
 
+        // merge nodes
+        graph1.getNodes().addAll(graph2.getNodes());
+
+        // merge edges
         for (var entry: graph2.getAdjMap().entrySet()) {
             T src = entry.getKey();
             Map<T, TypeAliasGraph.EdgeType> existingEdges = graph1.getAdjMap().computeIfAbsent(src, k -> new HashMap<>());
@@ -69,7 +73,7 @@ public class TypeAliasManager<T> {
         }
 
         graphs.remove(graph2);
-        Logging.info("TypeAliasManager", String.format("Merge: %s <-- %s", graph1, graph2));
+        Logging.info("TypeAliasManager", String.format("Merge TypeAliasGraph: %s <-- %s", graph1, graph2));
     }
 
 
@@ -99,6 +103,10 @@ public class TypeAliasManager<T> {
 
     public TypeAliasGraph<T> getTypeAliasGraph(T node) {
         return exprToGraph.get(node);
+    }
+
+    public Set<TypeAliasGraph<T>> getGraphs() {
+        return graphs;
     }
 
     /**

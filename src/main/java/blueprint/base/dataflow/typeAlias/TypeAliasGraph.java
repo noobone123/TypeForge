@@ -13,11 +13,13 @@ public class TypeAliasGraph<T> {
         INDIRECT
     }
 
+    private final Set<T> nodes;
     private final Map<T, Map<T, EdgeType>> adjMap;
     private final UUID uuid;
     private final String shortUUID;
 
     public TypeAliasGraph() {
+        nodes = new HashSet<>();
         adjMap = new HashMap<>();
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
@@ -30,6 +32,8 @@ public class TypeAliasGraph<T> {
 
     public void addEdge(T src, T dst, EdgeType edgeType) {
         adjMap.computeIfAbsent(src, k -> new HashMap<>()).put(dst, edgeType);
+        nodes.add(src);
+        nodes.add(dst);
         Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
     }
 
@@ -39,11 +43,18 @@ public class TypeAliasGraph<T> {
             edges.remove(dst);
             if (edges.isEmpty()) {
                 adjMap.remove(src);
+                if (isIsolatedNode(src)) {
+                    nodes.remove(src);
+                }
             }
+        }
+        if (isIsolatedNode(dst)) {
+            nodes.remove(dst);
         }
     }
 
     public void removeNode(T node) {
+        nodes.remove(node);
         adjMap.remove(node);
         for (var edges: adjMap.values()) {
             edges.remove(node);
@@ -51,19 +62,19 @@ public class TypeAliasGraph<T> {
     }
 
     public int getNumNodes() {
-        return adjMap.size();
+        return nodes.size();
     }
 
     public Set<T> getNodes() {
-        Set<T> nodes = new HashSet<>(adjMap.keySet());
-        for (var edges: adjMap.values()) {
-            nodes.addAll(edges.keySet());
-        }
         return nodes;
     }
 
     public Map<T, Map<T, EdgeType>> getAdjMap() {
         return adjMap;
+    }
+
+    private boolean isIsolatedNode(T node) {
+        return !adjMap.containsKey(node) && adjMap.values().stream().noneMatch(edges -> edges.containsKey(node));
     }
 
     public Set<TypeAliasGraph<T>> getConnectedComponents() {

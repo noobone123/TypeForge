@@ -75,6 +75,7 @@ public class Context {
     public TypeAliasManager<SymbolExpr> typeAliasManager;
     public Set<SymbolExpr> memAccessExprParseCandidates;
     public Set<SymbolExpr> callAccessExprParseCandidates;
+    public Set<SymbolExpr> fieldExprParseCandidates;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
@@ -86,6 +87,7 @@ public class Context {
         this.typeAliasManager = new TypeAliasManager<>();
         this.memAccessExprParseCandidates = new HashSet<>();
         this.callAccessExprParseCandidates = new HashSet<>();
+        this.fieldExprParseCandidates = new HashSet<>();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -121,6 +123,11 @@ public class Context {
     public void addCallExprToParse(SymbolExpr expr) {
         Logging.info("Context", "Add CallExpr to parse: " + expr.toString());
         callAccessExprParseCandidates.add(expr);
+    }
+
+    public void addFieldExprToParse(SymbolExpr expr) {
+        Logging.info("Context", "Add FieldExpr to parse: " + expr.toString());
+        fieldExprParseCandidates.add(expr);
     }
 
     /**
@@ -272,12 +279,22 @@ public class Context {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void collectConstraints() {
-        parseExpressions();
-
+        // Parsing all MemAccessExpr first to build the constraint's skeleton
+        for (var symExpr : memAccessExprParseCandidates) {
+            parseMemAccessExpr(symExpr, null, 0);
+        }
         removeRedundantConstraints();
+        // merging
+        mergeByTypeAliasGraph();
 
-        // merging Type according to the typeAlias
-        mergeTypeAlias();
+        // Parsing all FieldAccessExpr to refine the constraint's skeleton
+        for (var symExpr : fieldExprParseCandidates) {
+            parseFieldAccessExpr(symExpr);
+        }
+        // Parsing all CallAccessExpr to add Tags for the constraint's skeleton
+        for (var symExpr : callAccessExprParseCandidates) {
+            parseCallAccessExpr(symExpr);
+        }
 
         try {
             typeAliasManager.dump(Global.outputDirectory);
@@ -294,56 +311,27 @@ public class Context {
         Logging.info("Context", "Collect constraints done.");
     }
 
-    /**
-     *  Parsing all SymbolExpr in AccessPoints, which is collected from the PCodeVisitor.
-     */
-    private void parseExpressions() {
-        for (var symExpr : memAccessExprParseCandidates) {
-            parseMemAccessExpr(symExpr, null, 0);
-        }
-        for (var symExpr : callAccessExprParseCandidates) {
-            parseCallAccessExpr(symExpr);
-        }
-    }
 
-
-    private void mergeTypeAlias() {
-        // TODO: identify the TypeAgnoistic Arguments.
+    // TODO: identify the TypeAgnoistic Arguments.
+    private void mergeByTypeAliasGraph() {
         typeAliasManager.removeRedundantGraphs(symExprToConstraints.keySet());
 
-        HashSet<SymbolExpr> updated = new HashSet<>();
-        var tmpSymExprToConstraints = new HashMap<>(symExprToConstraints);
-
-        for (var symExpr : tmpSymExprToConstraints.keySet()) {
-            if (updated.contains(symExpr)) {
-                continue;
-            }
-            var graph = typeAliasManager.getTypeAliasGraph(symExpr);
-            if (graph == null) {
-                Logging.warn("Context", symExpr + " has no data-flow relation with others.");
-                continue;
-            }
-
+        for (var graph: typeAliasManager.getGraphs()) {
             if (graph.getNumNodes() > 1) {
+                // TODO: handling TypeAgnoistic Arguments
                 var mergedConstraint = new TypeConstraint();
                 Logging.info("Context", String.format("Created new merged constraint: Constraint_%s", mergedConstraint.getName()));
-                for (var aliasSym : graph.getNodes()) {
-                    var constraint = tmpSymExprToConstraints.get(aliasSym);
+                for (var expr: graph.getNodes()) {
+                    var constraint = symExprToConstraints.get(expr);
                     if (constraint != null) {
-                        Logging.info("Context", String.format("Merge %s: Constraint_%s into Constraint_%s", aliasSym, constraint.getName(), mergedConstraint.getName()));
+                        Logging.debug("Context", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", expr, mergedConstraint.getName(), constraint.getName()));
                         mergedConstraint.merge(constraint);
                     }
-                }
 
-                for (var sym : graph.getNodes()) {
-                    symExprToConstraints.put(sym, mergedConstraint);
-                    mergedConstraint.addAssociatedExpr(sym);
-                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", sym, mergedConstraint.getName()));
-                    updated.add(sym);
+                    symExprToConstraints.put(expr, mergedConstraint);
+                    mergedConstraint.addAssociatedExpr(expr);
+                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", expr, mergedConstraint.getName()));
                 }
-            }
-            else {
-                Logging.info("Context", symExpr + " is not type aliased with others.");
             }
         }
     }
@@ -387,7 +375,7 @@ public class Context {
                 finalResult.put(symExpr, constraint);
             } else {
                 TypeConstraint.remove(constraint);
-                Logging.warn("Context", String.format("Remove meaningless %s -> Constraint_%s",
+                Logging.warn("Context", String.format("Remove not interested %s -> Constraint_%s",
                         symExpr.toString(), constraint.getName()));
             }
         }
@@ -398,6 +386,7 @@ public class Context {
 
     /**
      * Parse the Memory Access SymbolExpr and build the constraints for it.
+     * For example: if there is a MemAccessExpr: *(a+0x8)=b, the MemAccessExpr is a+0x8
      * @param expr the Expression to parse
      * @param parentTypeConstraint if the expr is a recursive dereference, the parentTypeConstraint is the constraint of the parent expr
      * @param derefDepth the dereference depth of the expr
@@ -453,6 +442,39 @@ public class Context {
     }
 
     /**
+     * For example: if there is a MemAccessExpr: *(a + 0x8) = b, the FieldAccessExpr is *(a + 0x8).
+     * We need to parse the FieldAccessExpr only when this FieldAccessExpr is a pointer which points to a composite data type.
+     * @param expr the Expression to parse
+     */
+    private void parseFieldAccessExpr(SymbolExpr expr) {
+        if (!expr.isDereference()) {
+            return;
+        }
+        Logging.info("Context", String.format("Parsing FieldAccessExpr %s", expr));
+
+        // If FieldAccessExpr is a pointer points to a composite data type,
+        // this FieldAccessExpr should have aliases in TypeAliasGraph with composite data type.
+        var aliasGraph = typeAliasManager.getTypeAliasGraph(expr);
+        if (aliasGraph == null) {
+            Logging.debug("Context", String.format("FieldAccessExpr %s has no type alias", expr));
+            return;
+        }
+
+        boolean isFieldPointToComposite = false;
+        for (var aliasExpr: aliasGraph.getNodes()) {
+            if (hasConstraint(aliasExpr) && getConstraint(aliasExpr).isInterested()) {
+                isFieldPointToComposite = true;
+                break;
+            }
+        }
+
+        if (isFieldPointToComposite) {
+            Logging.debug("Context", String.format("FieldAccessExpr %s may points to composite data type", expr));
+            parseMemAccessExpr(expr, null, 0);
+        }
+    }
+
+    /**
      * Parse the Argument Access SymbolExpr and build the constraints for it.
      * @param expr the Expression to parse
      */
@@ -473,24 +495,7 @@ public class Context {
             Logging.info("Context", String.format("There may exist a nested constraint in %s: offset 0x%x", expr, offsetValue));
             updateNestedConstraint(expr, constraint, offsetValue, getConstraint(expr));
         }
-        // If the Callsite Arguments is just like foo(a, b), we can just think it has a field Access of
-        // a+0x0 and b+0x0
-        else if (expr.hasAttribute(SymbolExpr.Attribute.ARGUMENT) && offset == null) {
-            var constraint = getConstraint(expr);
-            updateFieldAccess(constraint, 0, APs.getCallAccessPoints(expr));
-        }
-
-        // If the CallSite Arguments and Return Values are dereference expressions, For example:
-        // foo(*(a+0x10), *(b+0x10)), it's source code may be: foo(a->field, b->field)
-        // which mean a->field and b->field is a reference to other DataType
-        // (Expressions not reference to other dataType in CallAccess has been filtered out by removeRedundantCallAPs)
-        // So now we need to parse the Memory Access Expression.
-        if (expr.isDereference()) {
-            Logging.info("Context", String.format("Parsing CallAccessExpr %s as MemAccessExpr", expr));
-            parseMemAccessExpr(expr, null, 0);
-        }
     }
-
 
     private void updateMemAccessConstraint(SymbolExpr expr, TypeConstraint parentTypeConstraint, long offsetValue, TypeConstraint constraint) {
         if (parentTypeConstraint == null) {

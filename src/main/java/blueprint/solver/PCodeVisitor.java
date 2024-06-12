@@ -241,7 +241,6 @@ public class PCodeVisitor {
                         }
                     }
                 }
-                symExpr.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
             }
         }
         else {
@@ -448,9 +447,7 @@ public class PCodeVisitor {
                 Logging.debug("PCodeVisitor", "Loaded varnode has already held symbolExpr, set type alias ...");
                 for (var leftValueExpr : leftValueExprs) {
                     ctx.addTypeAliasRelation(loadedValueExpr, leftValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
-                    if (checkIfHoldsCompositeType(leftValueExpr)) {
-                        ctx.addMemExprToParse(loadedValueExpr);
-                    }
+                    ctx.addFieldExprToParse(loadedValueExpr);
                 }
             }
 
@@ -484,9 +481,7 @@ public class PCodeVisitor {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
                     ctx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
-                    if (checkIfHoldsCompositeType(rightValueExpr)) {
-                        ctx.addMemExprToParse(storedValueExpr);
-                    }
+                    ctx.addFieldExprToParse(storedValueExpr);
                 }
             }
         }
