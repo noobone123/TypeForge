@@ -2,6 +2,7 @@ package blueprint.solver;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.KSet;
+import blueprint.base.dataflow.constraints.ConstraintCollector;
 import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
@@ -17,7 +18,6 @@ import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
-import java.io.IOException;
 import java.util.*;
 
 
@@ -69,13 +69,13 @@ public class Context {
     public Set<FunctionNode> solvedFunc;
 
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
-    public AccessPoints APs;
-    public HashMap<SymbolExpr, TypeConstraint> symExprToConstraints;
 
+    public AccessPoints APs;
     public TypeAliasManager<SymbolExpr> typeAliasManager;
     public Set<SymbolExpr> memAccessExprParseCandidates;
     public Set<SymbolExpr> callAccessExprParseCandidates;
     public Set<SymbolExpr> fieldExprParseCandidates;
+    public ConstraintCollector collector;
 
     public Context(CallGraph cg) {
         this.callGraph = cg;
@@ -83,11 +83,11 @@ public class Context {
         this.solvedFunc = new HashSet<>();
         this.intraCtxMap = new HashMap<>();
         this.APs = new AccessPoints();
-        this.symExprToConstraints = new HashMap<>();
         this.typeAliasManager = new TypeAliasManager<>();
         this.memAccessExprParseCandidates = new HashSet<>();
         this.callAccessExprParseCandidates = new HashSet<>();
         this.fieldExprParseCandidates = new HashSet<>();
+        this.collector = new ConstraintCollector();
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -194,10 +194,10 @@ public class Context {
             if (symbol.isGlobal()) {
                 expr = new SymbolExpr.Builder().global(symbol.getSymbol().getAddress(), symbol).build();
                 expr.addAttribute(SymbolExpr.Attribute.GLOBAL);
-                constraint = getConstraint(expr);
+                constraint = collector.getConstraint(expr);
             } else {
                 expr = new SymbolExpr.Builder().rootSymbol(symbol).build();
-                constraint = getConstraint(expr);
+                constraint = collector.getConstraint(expr);
             }
 
             if (dataType instanceof Pointer ptr) {
@@ -306,26 +306,29 @@ public class Context {
     }
 
 
-    // TODO: identify the TypeAgnoistic Arguments.
     private void mergeByTypeAliasGraph() {
-        typeAliasManager.removeRedundantGraphs(symExprToConstraints.keySet());
+        typeAliasManager.removeRedundantGraphs(collector.getAllExprs());
 
         for (var graph: typeAliasManager.getGraphs()) {
             if (graph.getNumNodes() > 1) {
-                // TODO: handling TypeAgnoistic Arguments
-                var mergedConstraint = new TypeConstraint();
-                Logging.info("Context", String.format("Created new merged constraint: Constraint_%s", mergedConstraint.getName()));
-                for (var expr: graph.getNodes()) {
-                    var constraint = symExprToConstraints.get(expr);
-                    if (constraint != null) {
-                        Logging.debug("Context", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", expr, mergedConstraint.getName(), constraint.getName()));
-                        mergedConstraint.merge(constraint);
-                    }
-
-                    symExprToConstraints.put(expr, mergedConstraint);
-                    mergedConstraint.addAssociatedExpr(expr);
-                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", expr, mergedConstraint.getName()));
+                var mayTypeAgnosticParams = graph.findMayTypeAgnosticParams();
+                if (!mayTypeAgnosticParams.isEmpty()) {
+                    graph.checkTypeAgnosticParams(mayTypeAgnosticParams, new HashMap<>(collector.getAllEntries()));
                 }
+
+//                var mergedConstraint = new TypeConstraint();
+//                Logging.info("Context", String.format("Created new merged constraint: Constraint_%s", mergedConstraint.getName()));
+//                for (var expr: graph.getNodes()) {
+//                    var constraint = collector.getConstraint(expr);
+//                    if (constraint != null) {
+//                        Logging.debug("Context", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", expr, mergedConstraint.getName(), constraint.getName()));
+//                        mergedConstraint.merge(constraint);
+//                    }
+//
+//                    collector.updateConstraint(expr, mergedConstraint);
+//                    mergedConstraint.addAssociatedExpr(expr);
+//                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", expr, mergedConstraint.getName()));
+//                }
             }
         }
     }
@@ -340,7 +343,7 @@ public class Context {
      */
     private void mergeConstraints() {
         var workList = new LinkedList<TypeConstraint>();
-        var allConstraints = new HashSet<>(symExprToConstraints.values());
+        var allConstraints = collector.getAllConstraints();
         for (var constraint : allConstraints) {
             if (hasMultiReferenceField(constraint)) {
                 workList.add(constraint);
@@ -363,18 +366,19 @@ public class Context {
      */
     private void removeRedundantConstraints() {
         var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
-        for (var symExpr : symExprToConstraints.keySet()) {
-            var constraint = symExprToConstraints.get(symExpr);
+        for (var entry : collector.getAllEntries().entrySet()) {
+            var expr = entry.getKey();
+            var constraint = entry.getValue();
             if (constraint.isInterested()) {
-                finalResult.put(symExpr, constraint);
+                finalResult.put(expr, constraint);
             } else {
                 TypeConstraint.remove(constraint);
                 Logging.warn("Context", String.format("Remove not interested %s -> Constraint_%s",
-                        symExpr.toString(), constraint.getName()));
+                        expr.toString(), constraint.getName()));
             }
         }
 
-        symExprToConstraints = finalResult;
+        collector.updateAllEntries(finalResult);
     }
 
 
@@ -398,7 +402,7 @@ public class Context {
 
         // case: a or *(expr)
         if (expr.isRootSymExpr() || expr.isDereference()) {
-            var constraint = getConstraint(expr);
+            var constraint = collector.getConstraint(expr);
 
             updateMemAccessConstraint(expr, parentTypeConstraint, offsetValue, constraint);
 
@@ -408,7 +412,7 @@ public class Context {
         }
 
         else if (base != null) {
-            var constraint = getConstraint(base);
+            var constraint = collector.getConstraint(base);
 
             if (expr.hasOffset() && offset.isConst()) {
                 offsetValue = offset.getConstant();
@@ -456,7 +460,7 @@ public class Context {
 
         boolean isFieldPointToComposite = false;
         for (var aliasExpr: aliasGraph.getNodes()) {
-            if (hasConstraint(aliasExpr) && getConstraint(aliasExpr).isInterested()) {
+            if (collector.hasConstraint(aliasExpr) && collector.getConstraint(aliasExpr).isInterested()) {
                 isFieldPointToComposite = true;
                 break;
             }
@@ -483,11 +487,11 @@ public class Context {
         // foo(&a.field, &(a->field1).field2) or foo(&a->field, ...)
         // which means there may exist a nested constraint.
         if (base != null && offset != null && expr.hasAttribute(SymbolExpr.Attribute.ARGUMENT) &&
-                offset.isConst() && hasConstraint(base)) {
-            var constraint = getConstraint(base);
+                offset.isConst() && collector.hasConstraint(base)) {
+            var constraint = collector.getConstraint(base);
             long offsetValue = offset.getConstant();
             Logging.info("Context", String.format("There may exist a nested constraint in %s: offset 0x%x", expr, offsetValue));
-            updateNestedConstraint(expr, constraint, offsetValue, getConstraint(expr));
+            updateNestedConstraint(expr, constraint, offsetValue, collector.getConstraint(expr));
         }
     }
 
@@ -555,28 +559,12 @@ public class Context {
 
                 // add the new merged constraint in the symExprToConstraints
                 for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
-                    symExprToConstraints.put(symExpr, newMergedConstraint);
+                    collector.updateConstraint(symExpr, newMergedConstraint);
                     Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
                 }
             }
         }
     }
-
-
-    public TypeConstraint getConstraint(SymbolExpr symExpr) {
-        TypeConstraint constraint;
-        if (symExprToConstraints.containsKey(symExpr)) {
-            constraint = symExprToConstraints.get(symExpr);
-        } else {
-            constraint = new TypeConstraint();
-            symExprToConstraints.put(symExpr, constraint);
-            Logging.debug("Context", String.format("Create Constraint_%s for %s", constraint.shortUUID, symExpr));
-        }
-        constraint.addAssociatedExpr(symExpr);
-        Logging.debug("Context", String.format("Get Constraint_%s for %s", constraint.shortUUID, symExpr));
-        return constraint;
-    }
-
 
     private boolean checkOffsetSize(TypeConstraint constraint, long offset, int wantedSize) {
         boolean result = true;
@@ -591,13 +579,8 @@ public class Context {
         return result;
     }
 
-
     public AccessPoints getAccessPoints() {
         return APs;
-    }
-
-    public boolean hasConstraint(SymbolExpr symExpr) {
-        return symExprToConstraints.containsKey(symExpr);
     }
 
     public boolean isFunctionSolved(FunctionNode funcNode) {

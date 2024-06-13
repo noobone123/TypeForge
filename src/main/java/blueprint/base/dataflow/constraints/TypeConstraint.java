@@ -210,6 +210,10 @@ public class TypeConstraint implements TypeDescriptor {
     }
 
     public void merge(TypeConstraint other) {
+        if (other == null) {
+            return;
+        }
+
         // merging fieldAccess
         other.fieldAccess.forEach((offset, aps) -> {
             this.fieldAccess.putIfAbsent(offset, new HashSet<>());
@@ -368,6 +372,45 @@ public class TypeConstraint implements TypeDescriptor {
         constraint.nestedBy.forEach((nester, offsets) -> {
             offsets.forEach(offset -> nester.removeNestTo(offset, constraint));
         });
+    }
+
+    /**
+     * Check whether the current TypeConstraint overlaps with another TypeConstraint.
+     * Overlap means any field's start and end offsets intersect.
+     *
+     * @param other The TypeConstraint to check against.
+     * @return true if there is an overlap, false otherwise.
+     */
+    public boolean checkOverlap(TypeConstraint other) {
+        for (var entry1: this.fieldAccess.entrySet()) {
+            long offset1 = entry1.getKey();
+            long endOffset1 = calcFieldEndOffset(offset1);
+            if (endOffset1 == offset1) continue;    // no field
+            for (var entry2: other.fieldAccess.entrySet()) {
+                long offset2 = entry2.getKey();
+                long endOffset2 = other.calcFieldEndOffset(offset2);
+                if (endOffset2 == offset2) continue;    // no field
+                if (offset1 < endOffset2 && offset2 < endOffset1) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public Long calcFieldEndOffset(Long offset) {
+        Long endOffset = offset;
+        var fields = fieldAccess.get(offset);
+        if (fields == null) {
+            return endOffset;
+        }
+
+        for (var ap : fields) {
+            if (ap.dataType != null) {
+                endOffset = Math.max(endOffset, offset + ((PrimitiveTypeDescriptor)ap.dataType).getDataTypeSize());
+            }
+        }
+        return endOffset;
     }
 
 

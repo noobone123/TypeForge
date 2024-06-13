@@ -597,7 +597,7 @@ public class PCodeVisitor {
                     var ptrExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
                     for (var ptrExpr : ptrExprs) {
                         ptrExpr.setVariableSize(lengthArg.getOffset());
-                        ctx.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
+                        ctx.collector.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
                         Logging.info("PCodeVisitor", "memset: " + ptrExpr + " size: " + lengthArg.getOffset());
                     }
                 }
@@ -617,8 +617,8 @@ public class PCodeVisitor {
                         ctx.addTypeAliasRelation(srcExpr, dstExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                         Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
-                            ctx.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
-                            ctx.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
+                            ctx.collector.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
+                            ctx.collector.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
                             dstExpr.setVariableSize(lengthVn.getOffset());
                             dstExpr.setVariableSize(lengthVn.getOffset());
                             Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());

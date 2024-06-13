@@ -44,7 +44,7 @@ public class Generator {
 
     public Generator(Context solverCtx) {
         this.solverCtx = solverCtx;
-        this.allConstraints = new HashMap<>(solverCtx.symExprToConstraints);
+        this.allConstraints = new HashMap<>(solverCtx.collector.getAllEntries());
         buildConstraintMap();
 
         for (var entry: allConstraints.entrySet()) {

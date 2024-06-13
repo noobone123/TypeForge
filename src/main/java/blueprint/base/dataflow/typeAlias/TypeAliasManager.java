@@ -35,69 +35,15 @@ public class TypeAliasManager<T> {
             fromGraph.addEdge(from, to, type);
             exprToGraph.put(to, fromGraph);
         } else if (fromGraph != toGraph) {
-            mergeGraphs(fromGraph, toGraph);
+            for (var node: toGraph.getNodes()) {
+                exprToGraph.put(node, fromGraph);
+            }
+            fromGraph.mergeGraph(toGraph);
+            graphs.remove(toGraph);
             fromGraph.addEdge(from, to, type); // `mergeGraphs` should be called before `addEdge`
         } else {
             // fromGraph == toGraph
             fromGraph.addEdge(from, to, type);
-        }
-    }
-
-    /**
-     * Merge graph2 into graph1 and remove graph2 from the manager
-     * @param graph1 the graph to merge into
-     * @param graph2 the graph to merge
-     */
-    public void mergeGraphs(TypeAliasGraph<T> graph1, TypeAliasGraph<T> graph2) {
-        for (var node: graph2.getNodes()) {
-            exprToGraph.put(node, graph1);
-        }
-
-        // merge nodes
-        graph1.getNodes().addAll(graph2.getNodes());
-
-        // merge edges
-        for (var entry: graph2.getAdjMap().entrySet()) {
-            T src = entry.getKey();
-            Map<T, TypeAliasGraph.EdgeType> existingEdges = graph1.getAdjMap().computeIfAbsent(src, k -> new HashMap<>());
-            for (var edge: entry.getValue().entrySet()) {
-                T dst = edge.getKey();
-                var edgeType = edge.getValue();
-                if (existingEdges.containsKey(dst) && existingEdges.get(dst) != edgeType) {
-                    var oldEdgeType = existingEdges.get(dst);
-                    Logging.warn("TypeAliasManager", String.format("Conflict edge type: %s --%s---> %s, %s --%s---> %s", src, oldEdgeType, dst, src, edgeType, dst));
-                } else {
-                    existingEdges.put(dst, edgeType);
-                }
-            }
-        }
-
-        graphs.remove(graph2);
-        Logging.info("TypeAliasManager", String.format("Merge TypeAliasGraph: %s <-- %s", graph1, graph2));
-    }
-
-
-    public void removeNode(T node) {
-        var graph = exprToGraph.get(node);
-        if (graph != null) {
-            graph.removeNode(node);
-            if (graph.getConnectedComponents().size() > 1) {
-                Logging.debug("TypeAliasManager", String.format("Split graph %s", graph));
-                splitGraph(graph);
-            }
-        }
-    }
-
-    private void splitGraph(TypeAliasGraph<T> graph) {
-        Set<TypeAliasGraph<T>> components = graph.getConnectedComponents();
-        if (components.size() > 1) {
-            graphs.remove(graph);
-            for (var component: components) {
-                graphs.add(component);
-                for (var node: component.getNodes()) {
-                    exprToGraph.put(node, component);
-                }
-            }
         }
     }
 
