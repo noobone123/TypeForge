@@ -12,6 +12,7 @@ import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
+import ghidra.program.model.symbol.Symbol;
 
 import java.util.*;
 
@@ -257,6 +258,7 @@ public class PCodeVisitor {
     private void handlePtrSub(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
         var base = inputs[0];
+        SymbolExpr outputExpr = null;
 
         if (base.isRegister()) {
             var reg = Global.currentProgram.getRegister(base);
@@ -267,47 +269,37 @@ public class PCodeVisitor {
             // 133_(unique, 0x3200, 8) and 114_(unique, 0x3200, 8) are actually the same symbol, but ghidra internal can not resolve it, so we manually recover it
             // 114_(unique, 0x3200, 8)[noHighSym] has no initial Facts but 133_(unique, 0x3200, 8)[local_28] has initial Facts
             if (reg.getName().equals("RSP")) {
-                var sym = inputs[1].getHigh().getSymbol();
-                if (sym != null) {
-                    var expr = new SymbolExpr.Builder().rootSymbol(sym).build();
-                    if (!checkIfHoldsCompositeType(expr)) {
-                        expr = SymbolExpr.reference(ctx, expr);
-                    }
-                    var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
-
-                    if (outputFacts != null) {
-                        for (var fact : outputFacts) {
-                            ctx.addTypeAliasRelation(expr, fact, TypeAliasGraph.EdgeType.DATAFLOW);
-                        }
-                    }
-                    ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), expr);
+                // local symbol
+                if (inputs[1].getHigh().getSymbol() != null) {
+                    var sym = inputs[1].getHigh().getSymbol();
+                    outputExpr = new SymbolExpr.Builder().rootSymbol(sym).build();
+                    outputExpr = SymbolExpr.reference(ctx, outputExpr);
+                } else {
+                    Logging.warn("PCodeVisitor", String.format("PtrSub handler found an unresolved variable %s", pcodeOp));
+                    return;
                 }
             }
         }
-
-        else if (base.isConstant()) {
-            // In this case, Maybe an Address of a global variable
-            if (base.getOffset() == 0 && inputs[1].isConstant()) {
-                var globalSym = inputs[1].getHigh().getSymbol();
-                if (globalSym != null && globalSym.isGlobal()) {
-                    var globalSymExpr = new SymbolExpr.Builder().global(globalSym.getSymbol().getAddress(), globalSym).build();
-                    if (!checkIfHoldsCompositeType(globalSymExpr)) {
-                        globalSymExpr = SymbolExpr.reference(ctx, globalSymExpr);
-                    }
-                    var outputFacts = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
-
-                    if (outputFacts != null) {
-                        for (var fact : outputFacts) {
-                            ctx.addTypeAliasRelation(globalSymExpr, fact, TypeAliasGraph.EdgeType.DATAFLOW);
-                        }
-                    }
-                    ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), globalSymExpr);
-                }
-            }
+        else if (base.isConstant() && base.getOffset() == 0 && inputs[1].isConstant()) {
+            // Global symbol
+            var sym = inputs[1].getHigh().getSymbol();
+            outputExpr = new SymbolExpr.Builder().global(sym.getSymbol().getAddress(), sym).build();
+            outputExpr = SymbolExpr.reference(ctx, outputExpr);
+        } else {
+            Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve %s", base));
+            return;
         }
 
-        else {
-            Logging.warn("PCodeVisitor", String.format("%s is not a constant or register", base));
+        if (outputExpr != null) {
+            var leftExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
+            if (leftExprs != null) {
+                for (var leftExpr : leftExprs) {
+                    ctx.addTypeAliasRelation(outputExpr, leftExpr, TypeAliasGraph.EdgeType.DATAFLOW);
+                }
+            }
+            ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), outputExpr);
+        } else {
+            Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve %s", pcodeOp));
         }
     }
 
@@ -638,11 +630,9 @@ public class PCodeVisitor {
         }
     }
 
-
     private SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
         return SymbolExpr.add(ctx, a, b);
     }
-
 
     private SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
         return SymbolExpr.multiply(ctx, a, b);
