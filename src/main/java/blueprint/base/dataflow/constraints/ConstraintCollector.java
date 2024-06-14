@@ -2,6 +2,7 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
+import com.sun.msv.verifier.jarv.Const;
 import ghidra.program.model.symbol.Symbol;
 
 import java.util.HashMap;
@@ -32,10 +33,12 @@ public class ConstraintCollector {
 
     public void updateConstraint(SymbolExpr expr, TypeConstraint constraint) {
         exprToConstraint.put(expr, constraint);
+        constraint.addAssociatedExpr(expr);
+        Logging.debug("ConstraintCollector", String.format("Update Constraint_%s for %s", constraint.shortUUID, expr));
     }
 
     public Set<SymbolExpr> getAllExprs() {
-        return exprToConstraint.keySet();
+        return new HashSet<>(exprToConstraint.keySet());
     }
 
     public Set<TypeConstraint> getAllConstraints() {
@@ -43,7 +46,13 @@ public class ConstraintCollector {
     }
 
     public Map<SymbolExpr, TypeConstraint> getAllEntries() {
-        return exprToConstraint;
+        return new HashMap<>(exprToConstraint);
+    }
+
+    public ConstraintCollector copy() {
+        ConstraintCollector newCollector = new ConstraintCollector();
+        newCollector.exprToConstraint.putAll(exprToConstraint);
+        return newCollector;
     }
 
     public void updateAllEntries(Map<SymbolExpr, TypeConstraint> entries) {

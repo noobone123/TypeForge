@@ -314,16 +314,16 @@ public class Context {
             if (graph.getNumNodes() > 1) {
                 var mayTypeAgnosticParams = graph.findMayTypeAgnosticParams();
                 if (!mayTypeAgnosticParams.isEmpty()) {
-                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, new HashMap<>(collector.getAllEntries()));
+                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, collector.copy());
                     if (!confirmedTypeAgnositicParams.isEmpty()) {
                         Logging.info("Context", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
-                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, collector.getAllEntries());
+                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, collector);
                     } else {
                         Logging.info("Context", "No confirmed type agnostic params found.");
-                        graph.mergeNodesConstraints(graph.getNodes(), collector.getAllEntries());
+                        graph.mergeNodesConstraints(graph.getNodes(), collector);
                     }
                 } else {
-                    graph.mergeNodesConstraints(graph.getNodes(), collector.getAllEntries());
+                    graph.mergeNodesConstraints(graph.getNodes(), collector);
                 }
             }
         }
