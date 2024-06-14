@@ -155,8 +155,8 @@ public class TypeAliasGraph<T> {
                 TypeConstraint constraint = nodeToConstraint.get(node);
                 if (constraint != null) {
                     mergedConstraint.merge(constraint);
-                    nodeToConstraint.put(node, mergedConstraint);
                 }
+                nodeToConstraint.put(node, mergedConstraint);
             }
         }
 
@@ -171,10 +171,9 @@ public class TypeAliasGraph<T> {
             outerLoop:
             for (int i = 0; i < srcList.size(); i++) {
                 var constraintI = nodeToConstraint.get(srcList.get(i));
-                if (constraintI == null) continue;
                 for (int j = i + 1; j < srcList.size(); j++) {
                     var constraintJ = nodeToConstraint.get(srcList.get(j));
-                    if (constraintJ == null) continue;
+                    Logging.debug("TypeAliasGraph", String.format("Checking overlap between %s -> %s and %s -> %s", srcList.get(i), constraintI, srcList.get(j), constraintJ));
                     if (constraintI.checkOverlap(constraintJ)) {
                         hasOverlap = true;
                         break outerLoop;
@@ -208,8 +207,8 @@ public class TypeAliasGraph<T> {
         for (TypeAliasEdge edge : graph.edgeSet()) {
             T src = graph.getEdgeSource(edge);
             T dst = graph.getEdgeTarget(edge);
-            builder.append("  ").append(src).append(" -> ").append(dst)
-                    .append(" [label=\"").append(edge.getType()).append("\"];\n");
+            builder.append("  \"").append(src).append("\" -> \"").append(dst)
+                    .append("\" [label=\"").append(edge.getType()).append("\"];\n");
         }
         builder.append("}");
         return builder.toString();

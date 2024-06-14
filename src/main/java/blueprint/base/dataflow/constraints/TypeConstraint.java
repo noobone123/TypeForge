@@ -8,6 +8,7 @@ import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.joda.time.Interval;
 
 public class TypeConstraint implements TypeDescriptor {
 
@@ -376,25 +377,62 @@ public class TypeConstraint implements TypeDescriptor {
 
     /**
      * Check whether the current TypeConstraint overlaps with another TypeConstraint.
-     * Overlap means any field's start and end offsets intersect.
+     * Overlap means this fields' layout is not compatible with the other fields' layout.
      *
      * @param other The TypeConstraint to check against.
      * @return true if there is an overlap, false otherwise.
      */
     public boolean checkOverlap(TypeConstraint other) {
-        for (var entry1: this.fieldAccess.entrySet()) {
-            long offset1 = entry1.getKey();
-            long endOffset1 = calcFieldEndOffset(offset1);
-            if (endOffset1 == offset1) continue;    // no field
-            for (var entry2: other.fieldAccess.entrySet()) {
-                long offset2 = entry2.getKey();
-                long endOffset2 = other.calcFieldEndOffset(offset2);
-                if (endOffset2 == offset2) continue;    // no field
-                if (offset1 < endOffset2 && offset2 < endOffset1) {
-                    return true;
-                }
+
+        class Interval {
+            final long start;
+            final long end;
+
+            Interval(long start, long end) {
+                this.start = start;
+                this.end = end;
             }
         }
+
+        if (this == other) {
+            return false;
+        }
+
+        List<Interval> intervals = new ArrayList<>();
+        for (var offset : this.fieldAccess.keySet()) {
+            long endOffset = this.calcFieldEndOffset(offset);
+            if (endOffset == offset) {
+                continue;
+            } else {
+                intervals.add(new Interval(offset, endOffset));
+            }
+        }
+        for (var offset : other.fieldAccess.keySet()) {
+            long endOffset = other.calcFieldEndOffset(offset);
+            if (endOffset == offset) {
+                continue;
+            } else {
+                intervals.add(new Interval(offset, endOffset));
+            }
+        }
+
+        intervals.sort(Comparator.comparingLong(interval -> interval.start));
+        PriorityQueue<Long> pq = new PriorityQueue<>();
+        for (var interval: intervals) {
+            // Remove all intervals from the priority queue that end before the current interval starts
+            while (!pq.isEmpty() && pq.peek() <= interval.start) {
+                pq.poll();
+            }
+
+            // Check if there is an overlap with the current interval
+            if (!pq.isEmpty() && pq.peek() > interval.start) {
+                return true;
+            }
+
+            // Add the end time of the current interval to the priority queue
+            pq.add(interval.end);
+        }
+
         return false;
     }
 
