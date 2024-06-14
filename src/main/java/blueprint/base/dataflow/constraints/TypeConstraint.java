@@ -459,7 +459,7 @@ public class TypeConstraint implements TypeDescriptor {
 
     @Override
     public String toString() {
-        return getName();
+        return "Constraint_" + getName();
     }
 
     @Override

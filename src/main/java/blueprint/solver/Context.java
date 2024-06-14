@@ -313,22 +313,17 @@ public class Context {
             if (graph.getNumNodes() > 1) {
                 var mayTypeAgnosticParams = graph.findMayTypeAgnosticParams();
                 if (!mayTypeAgnosticParams.isEmpty()) {
-                    graph.checkTypeAgnosticParams(mayTypeAgnosticParams, new HashMap<>(collector.getAllEntries()));
+                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, new HashMap<>(collector.getAllEntries()));
+                    if (!confirmedTypeAgnositicParams.isEmpty()) {
+                        Logging.info("Context", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
+                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, collector.getAllEntries());
+                    } else {
+                        Logging.info("Context", "No confirmed type agnostic params found.");
+                        graph.mergeNodesConstraints(graph.getNodes(), collector.getAllEntries());
+                    }
+                } else {
+                    graph.mergeNodesConstraints(graph.getNodes(), collector.getAllEntries());
                 }
-
-//                var mergedConstraint = new TypeConstraint();
-//                Logging.info("Context", String.format("Created new merged constraint: Constraint_%s", mergedConstraint.getName()));
-//                for (var expr: graph.getNodes()) {
-//                    var constraint = collector.getConstraint(expr);
-//                    if (constraint != null) {
-//                        Logging.debug("Context", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", expr, mergedConstraint.getName(), constraint.getName()));
-//                        mergedConstraint.merge(constraint);
-//                    }
-//
-//                    collector.updateConstraint(expr, mergedConstraint);
-//                    mergedConstraint.addAssociatedExpr(expr);
-//                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", expr, mergedConstraint.getName()));
-//                }
             }
         }
     }

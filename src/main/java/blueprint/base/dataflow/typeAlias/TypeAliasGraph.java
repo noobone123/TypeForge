@@ -1,6 +1,5 @@
 package blueprint.base.dataflow.typeAlias;
 
-import com.contrastsecurity.sarif.Edge;
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
 import org.jgrapht.graph.DefaultDirectedGraph;
@@ -128,41 +127,24 @@ public class TypeAliasGraph<T> {
         return mayTypeAgnosticParams;
     }
 
-    // TODO: result is wrong, check correctness of getComponents and checkOverlap
+
     public Set<T> checkTypeAgnosticParams(Set<T> candidates, Map<T, TypeConstraint> nodeToConstraint) {
-        // step1: make a copy of current graph
         TypeAliasGraph<T> copyGraph = createCopy();
+        copyGraph.removeTypeAgnosticCallEdgesAndMerge(candidates, nodeToConstraint);
 
-        // step2: remove all CALL edges to T in candidates
-        var candidateToSrc = new HashMap<T, Set<T>>();
+        var checkOverlapSrcNodes = new HashMap<T, Set<T>>();
         for (T dst: candidates) {
-            for (T src: new HashSet<>(copyGraph.graph.vertexSet())) {
-                TypeAliasEdge edge = copyGraph.graph.getEdge(src, dst);
-                if (edge != null && edge.getType() == EdgeType.CALL) {
-                    copyGraph.removeEdge(src, dst);
-                    candidateToSrc.computeIfAbsent(dst, k -> new HashSet<>()).add(src);
+            var incomingEdges = new HashSet<>(graph.incomingEdgesOf(dst));
+            for (var edge: incomingEdges) {
+                if (edge.getType() == EdgeType.CALL) {
+                    T src = graph.getEdgeSource(edge);
+                    checkOverlapSrcNodes.computeIfAbsent(dst, k -> new HashSet<>()).add(src);
                 }
             }
         }
 
-        // step3: generate subGraphs from the copyGraph
-        var subGraphs = copyGraph.getConnectedComponents();
-
-        // step4: merge constraints for each subGraph
-        for (var graph: subGraphs) {
-            var mergedConstraint = new TypeConstraint();
-            for (T node: graph) {
-                TypeConstraint constraint = nodeToConstraint.get(node);
-                if (constraint != null) {
-                    mergedConstraint.merge(constraint);
-                }
-                nodeToConstraint.put(node, mergedConstraint);
-            }
-        }
-
-        // step5: check for overlap
         Set<T> typeAgnosticParams = new HashSet<>();
-        for (var entry: candidateToSrc.entrySet()) {
+        for (var entry: checkOverlapSrcNodes.entrySet()) {
             var dst = entry.getKey();
             var srcs = entry.getValue();
             boolean hasOverlap = false;
@@ -189,6 +171,38 @@ public class TypeAliasGraph<T> {
 
         return typeAgnosticParams;
     }
+
+    public void removeTypeAgnosticCallEdgesAndMerge(Set<T> candidates, Map<T, TypeConstraint> nodeToConstraint) {
+        for (var dst: candidates) {
+            var incomingEdges = new HashSet<>(graph.incomingEdgesOf(dst));
+            for (var edge: incomingEdges) {
+                if (edge.getType() == EdgeType.CALL) {
+                    T src = graph.getEdgeSource(edge);
+                    removeEdge(src, dst);
+                }
+            }
+        }
+
+        var subGraphs = getConnectedComponents();
+
+        for (var graph: subGraphs) {
+            mergeNodesConstraints(graph, nodeToConstraint);
+        }
+    }
+
+    public void mergeNodesConstraints(Set<T> mergedNodes, Map<T, TypeConstraint> nodeToConstraint) {
+        var mergedConstraint = new TypeConstraint();
+        for (T node: mergedNodes) {
+            TypeConstraint constraint = nodeToConstraint.get(node);
+            if (constraint != null) {
+                Logging.debug("TypeAliasGraph", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", node, mergedConstraint.getName(), constraint.getName()));
+                mergedConstraint.merge(constraint);
+            }
+            nodeToConstraint.put(node, mergedConstraint);
+            Logging.debug("TypeAliasGraph", String.format("Set %s -> %s", node, mergedConstraint));
+        }
+    }
+
 
     public List<Set<T>> getConnectedComponents() {
         ConnectivityInspector<T, TypeAliasEdge> inspector = new ConnectivityInspector<>(graph);
@@ -220,7 +234,6 @@ public class TypeAliasGraph<T> {
         Graphs.addGraph(copy.graph, this.graph);
         return copy;
     }
-
 
     @Override
     public String toString() {
