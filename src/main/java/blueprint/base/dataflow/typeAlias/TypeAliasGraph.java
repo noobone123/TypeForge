@@ -1,5 +1,12 @@
 package blueprint.base.dataflow.typeAlias;
 
+import com.contrastsecurity.sarif.Edge;
+import org.jgrapht.Graph;
+import org.jgrapht.alg.connectivity.ConnectivityInspector;
+import org.jgrapht.graph.DefaultDirectedGraph;
+import org.jgrapht.graph.DefaultEdge;
+import org.jgrapht.Graphs;
+
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.utils.Logging;
 
@@ -14,16 +21,29 @@ public class TypeAliasGraph<T> {
         INDIRECT
     }
 
-    private final Set<T> nodes;
-    private final Map<T, Map<T, EdgeType>> forwardAdjMap;
-    private final Map<T, Map<T, EdgeType>> backwardAdjMap;
+    public static class TypeAliasEdge extends DefaultEdge {
+        private final EdgeType type;
+
+        public TypeAliasEdge(EdgeType type) {
+            this.type = type;
+        }
+
+        public EdgeType getType() {
+            return type;
+        }
+
+        @Override
+        public String toString() {
+            return type.toString();
+        }
+    }
+
+    private final Graph<T, TypeAliasEdge> graph;
     private final UUID uuid;
     private final String shortUUID;
 
     public TypeAliasGraph() {
-        nodes = new HashSet<>();
-        forwardAdjMap = new HashMap<>();
-        backwardAdjMap = new HashMap<>();
+        graph = new DefaultDirectedGraph<>(TypeAliasEdge.class);
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
         Logging.debug("TypeAliasGraph", String.format("Create TypeAliasGraph_%s", shortUUID));
@@ -34,107 +54,56 @@ public class TypeAliasGraph<T> {
     }
 
     public void addEdge(T src, T dst, EdgeType edgeType) {
-        forwardAdjMap.computeIfAbsent(src, k -> new HashMap<>()).put(dst, edgeType);
-        backwardAdjMap.computeIfAbsent(dst, k -> new HashMap<>()).put(src, edgeType);
-        nodes.add(src);
-        nodes.add(dst);
+        graph.addVertex(src);
+        graph.addVertex(dst);
+        graph.addEdge(src, dst, new TypeAliasEdge(edgeType));
         Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
     }
 
     public void removeEdge(T src, T dst) {
-        var forwardEdges = forwardAdjMap.get(src);
-        if (forwardEdges != null) {
-            forwardEdges.remove(dst);
-            Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Remove forward edge: %s ---> %s", shortUUID, src, dst));
-            if (forwardEdges.isEmpty()) {
-                forwardAdjMap.remove(src);
-            }
-        }
-
-        var backwardEdges = backwardAdjMap.get(dst);
-        if (backwardEdges != null) {
-            backwardEdges.remove(src);
-            Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Remove backward edge: %s <--- %s", shortUUID, dst, src));
-            if (backwardEdges.isEmpty()) {
-                backwardAdjMap.remove(dst);
-            }
-        }
-
-        // TODO: ifIsolatedNode, remove node?
+        graph.removeEdge(src, dst);
+        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
     }
 
     public void removeNode(T node) {
-        nodes.remove(node);
-        forwardAdjMap.remove(node);
-        backwardAdjMap.remove(node);
-        for (var edges: forwardAdjMap.values()) {
-            edges.remove(node);
-        }
-        for (var edges: backwardAdjMap.values()) {
-            edges.remove(node);
-        }
+        graph.removeVertex(node);
+        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Remove node: %s", shortUUID, node));
     }
 
     public int getNumNodes() {
-        return nodes.size();
+        return graph.vertexSet().size();
     }
 
     public Set<T> getNodes() {
-        return nodes;
+        return graph.vertexSet();
     }
 
-    public Map<T, Map<T, EdgeType>> getForwardAdjMap() {
-        return forwardAdjMap;
+    public Graph<T, TypeAliasEdge> getGraph() {
+        return graph;
     }
 
-    public Map<T, Map<T, EdgeType>> getBackwardAdjMap() {
-        return backwardAdjMap;
-    }
+    public void mergeGraph(TypeAliasGraph<T> other) {
+        for (T vertex: other.getNodes()) {
+            graph.addVertex(vertex);
+        }
 
-    private boolean isIsolatedNode(T node) {
-        return !forwardAdjMap.containsKey(node) && !backwardAdjMap.containsKey(node);
-    }
+        Set<TypeAliasEdge> edges = other.getGraph().edgeSet();
+        for (TypeAliasEdge edge: edges) {
+            T src = other.getGraph().getEdgeSource(edge);
+            T dst = other.getGraph().getEdgeTarget(edge);
+            var EdgeType = edge.getType();
 
-    public Set<TypeAliasGraph<T>> getConnectedComponents() {
-        Set<TypeAliasGraph<T>> components = new HashSet<>();
-        Set<T> visited = new HashSet<>();
-
-        for (var node: nodes) {
-            if (!visited.contains(node)) {
-                TypeAliasGraph<T> component = new TypeAliasGraph<>();
-                dfs(node, visited, component);
-                components.add(component);
+            TypeAliasEdge existingEdge = graph.getEdge(src, dst);
+            if (existingEdge == null) {
+                graph.addEdge(src, dst, new TypeAliasEdge(EdgeType));
+            } else if (existingEdge.getType() != EdgeType) {
+                Logging.warn("TypeAliasGraph", String.format("%s Merge conflict: %s ---> %s", other, src, dst));
+            } else {
+                continue;
             }
         }
 
-        for (var component: components) {
-            Logging.debug("TypeAliasGraph", String.format("Component %s: %s", component, component.getNodes()));
-        }
-
-        return components;
-    }
-
-    private void dfs(T node, Set<T> visited, TypeAliasGraph<T> component) {
-        Stack<T> stack = new Stack<>();
-        stack.push(node);
-
-        while (!stack.isEmpty()) {
-            T curNode = stack.pop();
-            if (!visited.contains(curNode)) {
-                visited.add(curNode);
-                component.nodes.add(curNode);
-                Logging.debug("TypeAliasGraph", String.format("Added node to component: %s", curNode));
-
-                for (var neighbor : forwardAdjMap.getOrDefault(curNode, Collections.emptyMap()).entrySet()) {
-                    component.addEdge(curNode, neighbor.getKey(), neighbor.getValue());
-                    stack.push(neighbor.getKey());
-                }
-                for (var neighbor : backwardAdjMap.getOrDefault(curNode, Collections.emptyMap()).entrySet()) {
-                    component.addEdge(neighbor.getKey(), curNode, neighbor.getValue());
-                    stack.push(neighbor.getKey());
-                }
-            }
-        }
+        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Merge with %s", shortUUID, other));
     }
 
     public Set<T> findMayTypeAgnosticParams() {
@@ -142,11 +111,10 @@ public class TypeAliasGraph<T> {
         int threshold = 3;
         Map<T, Integer> calledCountMap = new HashMap<>();
 
-        for (Map<T, EdgeType> edges : forwardAdjMap.values()) {
-            for (Map.Entry<T, EdgeType> entry : edges.entrySet()) {
-                if (entry.getValue() == EdgeType.CALL) {
-                    calledCountMap.put(entry.getKey(), calledCountMap.getOrDefault(entry.getKey(), 0) + 1);
-                }
+        for (var edge: graph.edgeSet()) {
+            if (edge.getType() == EdgeType.CALL) {
+                T dst = graph.getEdgeTarget(edge);
+                calledCountMap.put(dst, calledCountMap.getOrDefault(dst, 0) + 1);
             }
         }
 
@@ -167,9 +135,10 @@ public class TypeAliasGraph<T> {
 
         // step2: remove all CALL edges to T in candidates
         var candidateToSrc = new HashMap<T, Set<T>>();
-        for (var dst: candidates) {
-            for (var src: new HashSet<>(copyGraph.forwardAdjMap.keySet())) {
-                if (copyGraph.forwardAdjMap.get(src).get(dst) == EdgeType.CALL) {
+        for (T dst: candidates) {
+            for (T src: new HashSet<>(copyGraph.graph.vertexSet())) {
+                TypeAliasEdge edge = copyGraph.graph.getEdge(src, dst);
+                if (edge != null && edge.getType() == EdgeType.CALL) {
                     copyGraph.removeEdge(src, dst);
                     candidateToSrc.computeIfAbsent(dst, k -> new HashSet<>()).add(src);
                 }
@@ -182,9 +151,12 @@ public class TypeAliasGraph<T> {
         // step4: merge constraints for each subGraph
         for (var graph: subGraphs) {
             var mergedConstraint = new TypeConstraint();
-            for (T node: graph.getNodes()) {
-                mergedConstraint.merge(nodeToConstraint.get(node));
-                nodeToConstraint.put(node, mergedConstraint);
+            for (T node: graph) {
+                TypeConstraint constraint = nodeToConstraint.get(node);
+                if (constraint != null) {
+                    mergedConstraint.merge(constraint);
+                    nodeToConstraint.put(node, mergedConstraint);
+                }
             }
         }
 
@@ -219,75 +191,35 @@ public class TypeAliasGraph<T> {
         return typeAgnosticParams;
     }
 
+    public List<Set<T>> getConnectedComponents() {
+        ConnectivityInspector<T, TypeAliasEdge> inspector = new ConnectivityInspector<>(graph);
+        var result = inspector.connectedSets();
+
+        for (var component: result) {
+            Logging.debug("TypeAliasGraph", "Connected component: " + component);
+        }
+
+        return result;
+    }
 
     public String toGraphviz() {
         StringBuilder builder = new StringBuilder();
         builder.append("digraph TypeAliasGraph_").append(shortUUID).append(" {\n");
-        for (var entry : forwardAdjMap.entrySet()) {
-            for (var edge : entry.getValue().entrySet()) {
-                builder.append("  \"").append(entry.getKey()).append("\" -> \"")
-                        .append(edge.getKey()).append("\" [label=\"").append(edge.getValue()).append("\"];\n");
-            }
+        for (TypeAliasEdge edge : graph.edgeSet()) {
+            T src = graph.getEdgeSource(edge);
+            T dst = graph.getEdgeTarget(edge);
+            builder.append("  ").append(src).append(" -> ").append(dst)
+                    .append(" [label=\"").append(edge.getType()).append("\"];\n");
         }
-        builder.append("}\n");
+        builder.append("}");
         return builder.toString();
     }
-
 
     public TypeAliasGraph<T> createCopy() {
         Logging.debug("TypeAliasGraph", "Create copy of " + this);
         TypeAliasGraph<T> copy = new TypeAliasGraph<>();
-        copy.nodes.addAll(nodes);
-        // deep copy adjMap
-        for (var entry : forwardAdjMap.entrySet()) {
-            for (var edge : entry.getValue().entrySet()) {
-                copy.addEdge(entry.getKey(), edge.getKey(), edge.getValue());
-            }
-        }
+        Graphs.addGraph(copy.graph, this.graph);
         return copy;
-    }
-
-    /**
-     * Merge other graph into this graph
-     * @param other the graph to merge
-     */
-    public void mergeGraph(TypeAliasGraph<T> other) {
-        // merge nodes
-        nodes.addAll(other.nodes);
-
-        // Merge forward edges
-        for (var entry: other.forwardAdjMap.entrySet()) {
-            T src = entry.getKey();
-            Map<T, EdgeType> existingEdges = forwardAdjMap.computeIfAbsent(src, k -> new HashMap<>());
-            for (var edge: entry.getValue().entrySet()) {
-                T dst = edge.getKey();
-                var edgeType = edge.getValue();
-                if (existingEdges.containsKey(dst) && existingEdges.get(dst) != edgeType) {
-                    var oldEdgeType = existingEdges.get(dst);
-                    Logging.warn("TypeAliasGraph", String.format("Conflict edge type: %s --%s---> %s, %s --%s---> %s", src, oldEdgeType, dst, src, edgeType, dst));
-                } else {
-                    existingEdges.put(dst, edgeType);
-                }
-            }
-        }
-
-        // Merge backward edges
-        for (var entry : other.backwardAdjMap.entrySet()) {
-            T dst = entry.getKey();
-            Map<T, EdgeType> existingEdges = backwardAdjMap.computeIfAbsent(dst, k -> new HashMap<>());
-            for (var edge : entry.getValue().entrySet()) {
-                T src = edge.getKey();
-                EdgeType edgeType = edge.getValue();
-                if (existingEdges.containsKey(src) && existingEdges.get(src) != edgeType) {
-                    EdgeType oldEdgeType = existingEdges.get(src);
-                    Logging.warn("TypeAliasGraph", String.format("Conflict edge type: %s <--%s-- %s, %s <--%s-- %s", dst, oldEdgeType, src, dst, edgeType, src));
-                } else {
-                    existingEdges.put(src, edgeType);
-                }
-            }
-        }
-
-        Logging.info("TypeAliasGraph", String.format("Merge TypeAliasGraph: %s <-- %s", this, other));
     }
 
 
