@@ -10,6 +10,7 @@ import blueprint.base.dataflow.typeAlias.TypeAliasManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Global;
+import blueprint.utils.HighSymbolHelper;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
 
@@ -192,7 +193,7 @@ public class Context {
             TypeConstraint constraint;
             var dataType = symbol.getDataType();
             if (symbol.isGlobal()) {
-                expr = new SymbolExpr.Builder().global(symbol.getSymbol().getAddress(), symbol).build();
+                expr = new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
                 expr.addAttribute(SymbolExpr.Attribute.GLOBAL);
                 constraint = collector.getConstraint(expr);
             } else {

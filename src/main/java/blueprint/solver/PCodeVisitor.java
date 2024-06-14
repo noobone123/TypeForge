@@ -9,6 +9,7 @@ import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
+import blueprint.utils.HighSymbolHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
@@ -283,7 +284,7 @@ public class PCodeVisitor {
         else if (base.isConstant() && base.getOffset() == 0 && inputs[1].isConstant()) {
             // Global symbol
             var sym = inputs[1].getHigh().getSymbol();
-            outputExpr = new SymbolExpr.Builder().global(sym.getSymbol().getAddress(), sym).build();
+            outputExpr = new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(sym), sym).build();
             outputExpr = SymbolExpr.reference(ctx, outputExpr);
         } else {
             Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve %s", base));
@@ -313,7 +314,7 @@ public class PCodeVisitor {
             if (!highSym.isGlobal()) {
                 ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().rootSymbol(highSym).build());
             } else {
-                ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().global(highSym.getSymbol().getAddress(), highSym).build());
+                ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(highSym), highSym).build());
             }
         } else {
             for (var input : inputs) {
@@ -472,7 +473,7 @@ public class PCodeVisitor {
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
-                    ctx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
+                    // ctx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                     ctx.addFieldExprToParse(storedValueExpr);
                 }
             }
