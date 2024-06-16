@@ -13,4 +13,5 @@ public class Global {
     public static FlatProgramAPI flatAPI;
     public static GhidraScript ghidraScript;
     public static String outputDirectory;
+    public static long startAddress;
 }

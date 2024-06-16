@@ -80,6 +80,8 @@ public class BluePrint extends GhidraScript {
 
             if (key.equals("output")) {
                 Global.outputDirectory = value;
+            } else if (key.equals("start_addr")) {
+                Global.startAddress = Long.decode(value);
             } else {
                 Logging.error("GhidraScript", "Invalid argument: " + arg);
                 System.exit(1);
