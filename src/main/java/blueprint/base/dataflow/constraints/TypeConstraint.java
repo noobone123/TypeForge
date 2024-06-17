@@ -34,6 +34,7 @@ public class TypeConstraint implements TypeDescriptor {
     public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
     public final HashSet<Attribute> globalAttrs;
     public final TreeMap<Long, Long> ptrLevel;
+    public boolean isConfirmedCompositeType = false;
 
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
@@ -493,6 +494,10 @@ public class TypeConstraint implements TypeDescriptor {
      * @return if the TypeConstraint is related to Composite DataType
      */
     public boolean isInterested() {
+        if (isConfirmedCompositeType) {
+            return true;
+        }
+
         for (var aps : fieldAccess.values()) {
             for (AccessPoints.AP ap : aps) {
                 if (ap.dataType != null) {

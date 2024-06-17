@@ -109,7 +109,7 @@ public class TypeAliasGraph<T> {
 
     public Set<T> findMayTypeAgnosticParams() {
         Set<T> mayTypeAgnosticParams = new HashSet<>();
-        int threshold = 3;
+        int threshold = 5;
         Map<T, Integer> calledCountMap = new HashMap<>();
 
         for (var edge: graph.edgeSet()) {
@@ -134,13 +134,13 @@ public class TypeAliasGraph<T> {
         TypeAliasGraph<T> copyGraph = createCopy();
         copyGraph.removeTypeAgnosticCallEdgesAndMerge(candidates, collector);
 
-        var checkOverlapSrcNodes = new HashMap<T, Set<T>>();
+        var mayTypeAgnosticParamToArgMap = new HashMap<T, Set<T>>();
         for (T dst: candidates) {
             var incomingEdges = new HashSet<>(graph.incomingEdgesOf(dst));
             for (var edge: incomingEdges) {
                 if (edge.getType() == EdgeType.CALL) {
                     T src = graph.getEdgeSource(edge);
-                    checkOverlapSrcNodes.computeIfAbsent(dst, k -> new HashSet<>()).add(src);
+                    mayTypeAgnosticParamToArgMap.computeIfAbsent(dst, k -> new HashSet<>()).add(src);
                 }
             }
         }
@@ -148,19 +148,25 @@ public class TypeAliasGraph<T> {
         Map<TypeConstraint, Map<TypeConstraint, Boolean>> overlapCache = new HashMap<>();
 
         Set<T> typeAgnosticParams = new HashSet<>();
-        for (var entry: checkOverlapSrcNodes.entrySet()) {
+        for (var entry: mayTypeAgnosticParamToArgMap.entrySet()) {
             var dst = entry.getKey();
-            var srcs = entry.getValue();
+            var args = entry.getValue();
             boolean hasOverlap = false;
+            int argNoInterestCount = 0;
 
-            List<T> srcList = new ArrayList<>(srcs);
+            List<T> srcList = new ArrayList<>(args);
 
+            Logging.info("TypeAliasGraph", "Checking type agnostic param: " + dst);
             for (int i = 0; i < srcList.size(); i++) {
                 var constraintI = collector.getConstraint((SymbolExpr)srcList.get(i));
                 for (int j = i + 1; j < srcList.size(); j++) {
                     var constraintJ = collector.getConstraint((SymbolExpr)srcList.get(j));
                     Logging.info("TypeAliasGraph", String.format("Checking overlap between %s -> %s and %s -> %s", srcList.get(i), constraintI, srcList.get(j), constraintJ));
-                    if (constraintI == constraintJ) {
+                    if (!constraintI.isInterested()) {
+                        argNoInterestCount++;
+                        Logging.debug("TypeAliasGraph", "Skip non-interested constraint: " + constraintI);
+                        break;
+                    } else if (constraintI == constraintJ) {
                         Logging.debug("TypeAliasGraph", "Skip same constraint");
                         continue;
                     } else if (overlapCache.containsKey(constraintI) && overlapCache.get(constraintI).containsKey(constraintJ)) {
@@ -191,8 +197,12 @@ public class TypeAliasGraph<T> {
             }
 
             if (hasOverlap) {
-                Logging.warn("TypeAliasGraph", "Confirmed type agnostic param: " + dst);
+                Logging.info("TypeAliasGraph", "Confirmed type agnostic param: " + dst);
                 typeAgnosticParams.add(dst);
+            } else {
+                // TODO: if arg's no insterest count is larger than a threshold, we can consider it as type agnostic param
+                Logging.info("TypeAliasGraph", "Arg no interest count: " + argNoInterestCount);
+                Logging.info("TypeAliasGraph", "Src list size: " + srcList.size());
             }
         }
 
