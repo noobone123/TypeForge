@@ -145,6 +145,8 @@ public class TypeAliasGraph<T> {
             }
         }
 
+        Map<TypeConstraint, Map<TypeConstraint, Boolean>> overlapCache = new HashMap<>();
+
         Set<T> typeAgnosticParams = new HashSet<>();
         for (var entry: checkOverlapSrcNodes.entrySet()) {
             var dst = entry.getKey();
@@ -152,20 +154,39 @@ public class TypeAliasGraph<T> {
             boolean hasOverlap = false;
 
             List<T> srcList = new ArrayList<>(srcs);
-            outerLoop:
+
             for (int i = 0; i < srcList.size(); i++) {
                 var constraintI = collector.getConstraint((SymbolExpr)srcList.get(i));
                 for (int j = i + 1; j < srcList.size(); j++) {
                     var constraintJ = collector.getConstraint((SymbolExpr)srcList.get(j));
+                    Logging.info("TypeAliasGraph", String.format("Checking overlap between %s -> %s and %s -> %s", srcList.get(i), constraintI, srcList.get(j), constraintJ));
                     if (constraintI == constraintJ) {
+                        Logging.debug("TypeAliasGraph", "Skip same constraint");
                         continue;
+                    } else if (overlapCache.containsKey(constraintI) && overlapCache.get(constraintI).containsKey(constraintJ)) {
+                        hasOverlap = overlapCache.get(constraintI).get(constraintJ);
+                        Logging.debug("TypeAliasGraph", String.format("Overlap cache hit: %s <-> %s : %s", constraintI, constraintJ, hasOverlap));
+                        break;
+                    } else if (overlapCache.containsKey(constraintJ) && overlapCache.get(constraintJ).containsKey(constraintI)) {
+                        hasOverlap = overlapCache.get(constraintJ).get(constraintI);
+                        Logging.debug("TypeAliasGraph", String.format("Overlap cache hit: %s <-> %s : %s", constraintJ, constraintI, hasOverlap));
+                        break;
                     } else {
-                        Logging.debug("TypeAliasGraph", String.format("Checking overlap between %s -> %s and %s -> %s", srcList.get(i), constraintI, srcList.get(j), constraintJ));
-                        if (constraintI.checkOverlap(constraintJ)) {
-                            hasOverlap = true;
-                            break outerLoop;
+                        hasOverlap = constraintI.checkFieldConflict(constraintJ);
+                        if (hasOverlap) {
+                            overlapCache.computeIfAbsent(constraintI, k -> new HashMap<>()).put(constraintJ, true);
+                            overlapCache.computeIfAbsent(constraintJ, k -> new HashMap<>()).put(constraintI, true);
+                        } else {
+                            overlapCache.computeIfAbsent(constraintI, k -> new HashMap<>()).put(constraintJ, false);
+                            overlapCache.computeIfAbsent(constraintJ, k -> new HashMap<>()).put(constraintI, false);
                         }
+                        Logging.debug("TypeAliasGraph", String.format("Overlap between %s -> %s and %s -> %s : %s", srcList.get(i), constraintI, srcList.get(j), constraintJ, hasOverlap));
+                        break;
                     }
+                }
+
+                if (hasOverlap) {
+                    break;
                 }
             }
 

@@ -8,7 +8,6 @@ import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.joda.time.Interval;
 
 public class TypeConstraint implements TypeDescriptor {
 
@@ -382,7 +381,7 @@ public class TypeConstraint implements TypeDescriptor {
      * @param other The TypeConstraint to check against.
      * @return true if there is an overlap, false otherwise.
      */
-    public boolean checkOverlap(TypeConstraint other) {
+    public boolean checkFieldConflict(TypeConstraint other) {
 
         class Interval {
             final long start;
@@ -392,45 +391,56 @@ public class TypeConstraint implements TypeDescriptor {
                 this.start = start;
                 this.end = end;
             }
+
+            @Override
+            public boolean equals(Object obj) {
+                if (obj instanceof Interval) {
+                    return this.start == ((Interval) obj).start && this.end == ((Interval) obj).end;
+                }
+                return false;
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(start, end);
+            }
         }
 
         if (this == other) {
             return false;
         }
 
-        List<Interval> intervals = new ArrayList<>();
+        Set<Interval> thisIntervals = new HashSet<>();
         for (var offset : this.fieldAccess.keySet()) {
             long endOffset = this.calcFieldEndOffset(offset);
-            if (endOffset == offset) {
-                continue;
-            } else {
-                intervals.add(new Interval(offset, endOffset));
-            }
+            thisIntervals.add(new Interval(offset, endOffset));
         }
+
+        Set<Interval> otherIntervals = new HashSet<>();
         for (var offset : other.fieldAccess.keySet()) {
             long endOffset = other.calcFieldEndOffset(offset);
-            if (endOffset == offset) {
-                continue;
-            } else {
-                intervals.add(new Interval(offset, endOffset));
-            }
+            otherIntervals.add(new Interval(offset, endOffset));
         }
 
-        intervals.sort(Comparator.comparingLong(interval -> interval.start));
-        PriorityQueue<Long> pq = new PriorityQueue<>();
-        for (var interval: intervals) {
-            // Remove all intervals from the priority queue that end before the current interval starts
-            while (!pq.isEmpty() && pq.peek() <= interval.start) {
-                pq.poll();
-            }
+        Set<Interval> commonIntervals = new HashSet<>(thisIntervals);
+        commonIntervals.retainAll(otherIntervals);
 
-            // Check if there is an overlap with the current interval
-            if (!pq.isEmpty() && pq.peek() > interval.start) {
+        thisIntervals.removeAll(commonIntervals);
+        otherIntervals.removeAll(commonIntervals);
+
+        if (thisIntervals.isEmpty() || otherIntervals.isEmpty()) {
+            return false;
+        }
+
+        List<Interval> mergedIntervals = new ArrayList<>(thisIntervals);
+        mergedIntervals.addAll(otherIntervals);
+        mergedIntervals.sort(Comparator.comparingLong(interval -> interval.start));
+        for (int i = 0; i < mergedIntervals.size() - 1; i++) {
+            Interval current = mergedIntervals.get(i);
+            Interval next = mergedIntervals.get(i + 1);
+            if (current.end > next.start) {
                 return true;
             }
-
-            // Add the end time of the current interval to the priority queue
-            pq.add(interval.end);
         }
 
         return false;
