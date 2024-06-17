@@ -214,26 +214,19 @@ public class Context {
                 Logging.info("Context", "Found decompiler recovered Array " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.ARRAY);
                 expr.setVariableSize(array.getLength());
-                constraint.setTotalSize(array.getLength());
-                constraint.setElementSize(array.getElementLength());
+                constraint.updateTypeConstraintByArrayDataType(array);
             }
             else if (dataType instanceof Structure structure) {
                 Logging.info("Context", "Found decompiler recovered Structure " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.STRUCT);
                 expr.setVariableSize(structure.getLength());
-                constraint.setTotalSize(structure.getLength());
-                for (var field: structure.getComponents()) {
-                    constraint.addField(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
-                }
+                constraint.updateTypeConstraintByCompositeDataType(structure);
             }
             else if (dataType instanceof Union union) {
                 Logging.info("Context", "Found decompiler recovered Union " + dataType.getName());
                 expr.addAttribute(SymbolExpr.Attribute.UNION);
                 expr.setVariableSize(union.getLength());
-                constraint.setTotalSize(union.getLength());
-                for (var field: union.getComponents()) {
-                    constraint.addField(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
-                }
+                constraint.updateTypeConstraintByCompositeDataType(union);
             }
 
             // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:

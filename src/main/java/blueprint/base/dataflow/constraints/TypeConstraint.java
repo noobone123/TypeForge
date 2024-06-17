@@ -8,6 +8,9 @@ import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ghidra.program.model.data.Array;
+import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.Structure;
 
 public class TypeConstraint implements TypeDescriptor {
 
@@ -30,19 +33,23 @@ public class TypeConstraint implements TypeDescriptor {
      */
     public final TreeMap<Long, HashSet<AccessPoints.AP>> fieldAccess;
     /** The fieldMap should be built by the fieldAccess after merging */
-    public final TreeMap<Long, HashMap<TypeDescriptor, Integer>> fieldMap;
+    public final TreeMap<Long, TypeDescriptor> fieldMap;
     public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
     public final HashSet<Attribute> globalAttrs;
-    public final TreeMap<Long, Long> ptrLevel;
-    public boolean isConfirmedCompositeType = false;
-
+    public final TreeMap<Long, Long> fieldPtrLevel;
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
+
+    /** decompiler inference info */
+    public boolean isDecompilerCompositeType = false;
+    public DataType decompilerDataType;
+    public String decompilerDataTypeName;
 
     /** This is important, which is used to record the symbol expression which associated with this TypeConstraint */
     public Set<SymbolExpr> associatedExpr;
     public Set<Long> totalSize;
     public Set<Long> elementSize;
+    public TypeDescriptor elementType;
 
     /** The referenceTo is a map from current TypeConstraint's offset to the referenced TypeConstraint */
     public HashMap<Long, HashSet<TypeConstraint>> referenceTo;
@@ -60,7 +67,7 @@ public class TypeConstraint implements TypeDescriptor {
         fieldMap = new TreeMap<>();
         fieldAttrs = new TreeMap<>();
         globalAttrs = new HashSet<>();
-        ptrLevel = new TreeMap<>();
+        fieldPtrLevel = new TreeMap<>();
 
         accessOffsets = new HashMap<>();
         uuid = UUID.randomUUID();
@@ -88,19 +95,18 @@ public class TypeConstraint implements TypeDescriptor {
     }
 
     public void addField(long offset, TypeDescriptor type) {
-        fieldMap.putIfAbsent(offset, new HashMap<>());
-        fieldMap.get(offset).put(type, fieldMap.get(offset).getOrDefault(type, 0) + 1);
+        fieldMap.put(offset, type);
         Logging.info("TypeConstraint", String.format("Constraint_%s adding field: 0x%x -> %s", shortUUID, offset, type.getName()));
     }
 
     public void setPtrLevel(long offset, long newLevel) {
-        if (ptrLevel.containsKey(offset)) {
-            if (ptrLevel.get(offset) < newLevel) {
-                ptrLevel.put(offset, newLevel);
+        if (fieldPtrLevel.containsKey(offset)) {
+            if (fieldPtrLevel.get(offset) < newLevel) {
+                fieldPtrLevel.put(offset, newLevel);
                 Logging.info("TypeConstraint", String.format("Constraint_%s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
             }
         } else {
-            ptrLevel.put(offset, newLevel);
+            fieldPtrLevel.put(offset, newLevel);
             Logging.info("TypeConstraint", String.format("Constraint_%s setting new ptrLevel for 0x%x: %d", shortUUID, offset, newLevel));
         }
     }
@@ -198,6 +204,11 @@ public class TypeConstraint implements TypeDescriptor {
     public void setElementSize(long size) {
         this.elementSize.add(size);
         Logging.info("TypeConstraint", String.format("Constraint_%s setting element size: %d", shortUUID, size));
+    }
+
+    public void setElementType(TypeConstraint type) {
+        this.elementType = type;
+        Logging.info("TypeConstraint", String.format("Constraint_%s setting element type: %s", shortUUID, type.shortUUID));
     }
 
     public void addAssociatedExpr(SymbolExpr expr) {
@@ -494,7 +505,7 @@ public class TypeConstraint implements TypeDescriptor {
      * @return if the TypeConstraint is related to Composite DataType
      */
     public boolean isInterested() {
-        if (isConfirmedCompositeType) {
+        if (isDecompilerCompositeType) {
             return true;
         }
 
@@ -554,12 +565,42 @@ public class TypeConstraint implements TypeDescriptor {
             var NestToArray = offsetNode.putArray("nestTo");
             nestTo.getOrDefault(offset, new HashSet<>()).forEach(ref -> NestToArray.add("Constraint_" + ref.shortUUID));
 
-            offsetNode.put("PtrLevel", ptrLevel.getOrDefault(offset, 0L));
+            offsetNode.put("PtrLevel", fieldPtrLevel.getOrDefault(offset, 0L));
 
             var tagsArray = offsetNode.putArray("Attrs");
             fieldAttrs.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
         });
 
         return rootNode;
+    }
+
+    /**
+     * update a TypeConstraint by the given Structure's DataType
+     */
+    public void updateTypeConstraintByCompositeDataType(DataType DT) {
+        if (DT instanceof Structure structDT) {
+            decompilerDataTypeName = structDT.getName();
+            decompilerDataType = structDT;
+            isDecompilerCompositeType = true;
+            setTotalSize(structDT.getLength());
+            for (var field: structDT.getComponents()) {
+                addField(field.getOffset(), new PrimitiveTypeDescriptor(field.getDataType()));
+            }
+        }
+    }
+
+
+    public void updateTypeConstraintByArrayDataType(DataType DT) {
+        if (DT instanceof Array arrayDT) {
+            setTotalSize(arrayDT.getLength());
+            setElementSize(arrayDT.getElementLength());
+            var elementDT = arrayDT.getDataType();
+            if (elementDT instanceof Structure structDT) {
+                elementType = new TypeConstraint();
+                ((TypeConstraint) elementType).updateTypeConstraintByCompositeDataType(structDT);
+            } else {
+                elementType = new PrimitiveTypeDescriptor(elementDT);
+            }
+        }
     }
 }

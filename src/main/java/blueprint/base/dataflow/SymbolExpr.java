@@ -308,7 +308,8 @@ public class SymbolExpr {
             sb.append(")");
         }
 
-        if (hasAttribute(Attribute.ARRAY) || hasAttribute(Attribute.STRUCT) || hasAttribute(Attribute.UNION)) {
+        if ((hasAttribute(Attribute.ARRAY) || hasAttribute(Attribute.STRUCT) || hasAttribute(Attribute.UNION)) &&
+              !hasAttribute(Attribute.POINTER_TO_COMPOSITE)) {
             sb.append("[Composite]");
         }
 
