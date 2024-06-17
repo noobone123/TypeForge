@@ -157,10 +157,14 @@ public class TypeAliasGraph<T> {
                 var constraintI = collector.getConstraint((SymbolExpr)srcList.get(i));
                 for (int j = i + 1; j < srcList.size(); j++) {
                     var constraintJ = collector.getConstraint((SymbolExpr)srcList.get(j));
-                    Logging.debug("TypeAliasGraph", String.format("Checking overlap between %s -> %s and %s -> %s", srcList.get(i), constraintI, srcList.get(j), constraintJ));
-                    if (constraintI.checkOverlap(constraintJ)) {
-                        hasOverlap = true;
-                        break outerLoop;
+                    if (constraintI == constraintJ) {
+                        continue;
+                    } else {
+                        Logging.debug("TypeAliasGraph", String.format("Checking overlap between %s -> %s and %s -> %s", srcList.get(i), constraintI, srcList.get(j), constraintJ));
+                        if (constraintI.checkOverlap(constraintJ)) {
+                            hasOverlap = true;
+                            break outerLoop;
+                        }
                     }
                 }
             }
