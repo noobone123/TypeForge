@@ -1,4 +1,4 @@
-package blueprint.base.dataflow.constraints;
+package blueprint.base.dataflow.types;
 
 public class DummyType implements TypeDescriptor {
 

@@ -3,8 +3,10 @@ package blueprint.solver;
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr;
-import blueprint.base.dataflow.constraints.DummyType;
-import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
+import blueprint.base.dataflow.context.InterContext;
+import blueprint.base.dataflow.context.IntraContext;
+import blueprint.base.dataflow.types.DummyType;
+import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
@@ -13,7 +15,6 @@ import blueprint.utils.HighSymbolHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
-import ghidra.program.model.symbol.Symbol;
 
 import java.util.*;
 
@@ -21,15 +22,17 @@ import static blueprint.utils.DecompilerHelper.getSigned;
 
 public class PCodeVisitor {
 
-    public Context ctx;
+    public InterContext interCtx;
+    public IntraContext intraCtx;
     public FunctionNode funcNode;
 
     /** The workList queue of current function */
     public LinkedList<PcodeOpAST> workList = new LinkedList<>();
 
-    public PCodeVisitor(FunctionNode funcNode, Context ctx) {
+    public PCodeVisitor(FunctionNode funcNode, InterContext interCtx, IntraContext intraCtx) {
         this.funcNode = funcNode;
-        this.ctx = ctx;
+        this.interCtx = interCtx;
+        this.intraCtx = intraCtx;
     }
 
     /**
@@ -129,12 +132,12 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
 
-        if (!ctx.isTracedVn(funcNode, inputs[0])) {
+        if (!intraCtx.isTracedVn(inputs[0])) {
             Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
-        var inputFact_0 = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
+        var inputFact_0 = intraCtx.getDataFlowFacts(inputs[0]);
         assert inputFact_0 != null;
 
         if (inputs[1].isConstant()) {
@@ -142,23 +145,23 @@ public class PCodeVisitor {
                 var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = add(ctx, symExpr, deltaSym);
+                    var newExpr = add(interCtx, symExpr, deltaSym);
                     if (newExpr != null) {
-                        ctx.addNewExprIntoDataFlowFacts(funcNode, output, newExpr);
+                        intraCtx.updateDataFlowFacts(output, newExpr);
                     }
                 }
             }
         } else {
-            if (!ctx.isTracedVn(funcNode, inputs[1])) {
+            if (!intraCtx.isTracedVn(inputs[1])) {
                 Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
-            var inputFact_1 = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
+            var inputFact_1 = intraCtx.getDataFlowFacts(inputs[1]);
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
-                    var newExpr = add(ctx, symExpr, symExpr_1);
+                    var newExpr = add(interCtx, symExpr, symExpr_1);
                     if (newExpr != null) {
-                        ctx.addNewExprIntoDataFlowFacts(funcNode, output, newExpr);
+                        intraCtx.updateDataFlowFacts(output, newExpr);
                     }
                 }
             }
@@ -170,23 +173,21 @@ public class PCodeVisitor {
         var inputVn = pcodeOp.getInput(0);
         var outputVn = pcodeOp.getOutput();
 
-        if (!ctx.isTracedVn(funcNode, inputVn)) {
+        if (!intraCtx.isTracedVn(inputVn)) {
             return;
         }
 
-        var inputFact = ctx.getIntraDataFlowFacts(funcNode, inputVn);
-        assert inputFact != null;
+        var inputFact = intraCtx.getDataFlowFacts(inputVn);
 
         // If output has already held symbolExpr, we can update the symbol alias map
-        var outputFacts = ctx.getIntraDataFlowFacts(funcNode, outputVn);
-
+        var outputFacts = intraCtx.getDataFlowFacts(outputVn);
         for (var inputSymExpr: inputFact) {
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    ctx.addTypeAliasRelation(inputSymExpr, outputSymExpr, TypeAliasGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeAliasRelation(inputSymExpr, outputSymExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                 }
             }
-            ctx.addNewExprIntoDataFlowFacts(funcNode, outputVn, inputSymExpr);
+            intraCtx.updateDataFlowFacts(outputVn, inputSymExpr);
         }
     }
 
@@ -200,29 +201,28 @@ public class PCodeVisitor {
     private void handlePtrAdd(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
 
-        if (!ctx.isTracedVn(funcNode, inputs[0])) {
+        if (!intraCtx.isTracedVn(inputs[0])) {
             Logging.debug("PCOdeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
-        var input0Fact = ctx.getIntraDataFlowFacts(funcNode, inputs[0]);
-        assert input0Fact != null;
+        var input0Fact = intraCtx.getDataFlowFacts(inputs[0]);
 
         if (inputs[1].isConstant() && inputs[2].isConstant()) {
             for (var symExpr: input0Fact) {
                 var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new SymbolExpr.Builder().constant(delta).build();
-                    var newExpr = add(ctx, symExpr, deltaSym);
+                    var newExpr = add(interCtx, symExpr, deltaSym);
                     if (newExpr != null) {
-                        ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), newExpr);
+                        intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), newExpr);
                     }
                 }
             }
         }
         // inputs[1] is index and inputs[2] is element size
         else if (!inputs[1].isConstant() && inputs[2].isConstant()) {
-            if (!ctx.isTracedVn(funcNode, inputs[1])) {
+            if (!intraCtx.isTracedVn(inputs[1])) {
                 Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
@@ -233,13 +233,13 @@ public class PCodeVisitor {
             }
             var scaleExpr = new SymbolExpr.Builder().constant(scaleValue).build();
             for (var symExpr: input0Fact) {
-                var indexFacts = ctx.getIntraDataFlowFacts(funcNode, inputs[1]);
+                var indexFacts = intraCtx.getDataFlowFacts(inputs[1]);
                 for (var indexExpr: indexFacts) {
-                    var newIndexScale = multiply(ctx, indexExpr, scaleExpr);
+                    var newIndexScale = multiply(interCtx, indexExpr, scaleExpr);
                     if (newIndexScale != null) {
-                        var newExpr = add(ctx, symExpr, newIndexScale);
+                        var newExpr = add(interCtx, symExpr, newIndexScale);
                         if (newExpr != null) {
-                            ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), newExpr);
+                            intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), newExpr);
                         }
                     }
                 }
@@ -274,7 +274,7 @@ public class PCodeVisitor {
                 if (inputs[1].getHigh().getSymbol() != null) {
                     var sym = inputs[1].getHigh().getSymbol();
                     outputExpr = new SymbolExpr.Builder().rootSymbol(sym).build();
-                    outputExpr = SymbolExpr.reference(ctx, outputExpr);
+                    outputExpr = SymbolExpr.reference(interCtx, outputExpr);
                 } else {
                     Logging.warn("PCodeVisitor", String.format("PtrSub handler found an unresolved variable %s", pcodeOp));
                     return;
@@ -285,20 +285,20 @@ public class PCodeVisitor {
             // Global symbol
             var sym = inputs[1].getHigh().getSymbol();
             outputExpr = new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(sym), sym).build();
-            outputExpr = SymbolExpr.reference(ctx, outputExpr);
+            outputExpr = SymbolExpr.reference(interCtx, outputExpr);
         } else {
             Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve %s", base));
             return;
         }
 
         if (outputExpr != null) {
-            var leftExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getOutput());
+            var leftExprs = intraCtx.getDataFlowFacts(pcodeOp.getOutput());
             if (leftExprs != null) {
                 for (var leftExpr : leftExprs) {
-                    ctx.addTypeAliasRelation(outputExpr, leftExpr, TypeAliasGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeAliasRelation(outputExpr, leftExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                 }
             }
-            ctx.addNewExprIntoDataFlowFacts(funcNode, pcodeOp.getOutput(), outputExpr);
+            intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), outputExpr);
         } else {
             Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve %s", pcodeOp));
         }
@@ -312,13 +312,13 @@ public class PCodeVisitor {
         if (output.getHigh() != null && output.getHigh().getSymbol() != null) {
             var highSym = output.getHigh().getSymbol();
             if (!highSym.isGlobal()) {
-                ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().rootSymbol(highSym).build());
+                intraCtx.updateDataFlowFacts(output, new SymbolExpr.Builder().rootSymbol(highSym).build());
             } else {
-                ctx.addNewExprIntoDataFlowFacts(funcNode, output, new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(highSym), highSym).build());
+                intraCtx.updateDataFlowFacts(output, new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(highSym), highSym).build());
             }
         } else {
             for (var input : inputs) {
-                ctx.mergeSymbolExpr(funcNode, input, output, false);
+                intraCtx.mergeDataFlowFacts(input, output, false);
             }
         }
 
@@ -329,15 +329,15 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
 
-        if (!ctx.isTracedVn(funcNode, input)) {
+        if (!intraCtx.isTracedVn(input)) {
             Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
-        var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
+        var inputFacts = intraCtx.getDataFlowFacts(input);
         for (var symExpr : inputFacts) {
             // TODO: IntZext need add constraint ?
-            ctx.addNewExprIntoDataFlowFacts(funcNode, output, symExpr);
+            intraCtx.updateDataFlowFacts(output, symExpr);
         }
     }
 
@@ -346,15 +346,15 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
 
-        if (!ctx.isTracedVn(funcNode, input)) {
+        if (!intraCtx.isTracedVn(input)) {
             Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
-        var inputFacts = ctx.getIntraDataFlowFacts(funcNode, input);
+        var inputFacts = intraCtx.getDataFlowFacts(input);
         for (var symExpr : inputFacts) {
             // TODO: IntSext need add constraint ?
-            ctx.addNewExprIntoDataFlowFacts(funcNode, output, symExpr);
+            intraCtx.updateDataFlowFacts(output, symExpr);
         }
     }
 
@@ -363,7 +363,7 @@ public class PCodeVisitor {
         var input0 = pcodeOp.getInput(0);
         var input1 = pcodeOp.getInput(1);
 
-        if (!ctx.isTracedVn(funcNode, input0) && !ctx.isTracedVn(funcNode, input1)) {
+        if (!intraCtx.isTracedVn(input0) && !intraCtx.isTracedVn(input1)) {
             Logging.debug("PCodeVisitor", String.format("both %s * %s is not traced", input0, input1));
             return;
         }
@@ -377,19 +377,19 @@ public class PCodeVisitor {
         KSet<SymbolExpr> inputFacts;
         long size = 0;
         if (input0.isConstant()) {
-            inputFacts = ctx.getIntraDataFlowFacts(funcNode, input1);
+            inputFacts = intraCtx.getDataFlowFacts(input1);
             size = getSigned(input0);
         } else {
-            inputFacts = ctx.getIntraDataFlowFacts(funcNode, input0);
+            inputFacts = intraCtx.getDataFlowFacts(input0);
             size = getSigned(input1);
         }
 
         if (OffsetSanityCheck(size)) {
             var sizeExpr = new SymbolExpr.Builder().constant(size).build();
             for (var symExpr : inputFacts) {
-                var newExpr = multiply(ctx, symExpr, sizeExpr);
+                var newExpr = multiply(interCtx, symExpr, sizeExpr);
                 if (newExpr != null) {
-                    ctx.addNewExprIntoDataFlowFacts(funcNode, output, newExpr);
+                    intraCtx.updateDataFlowFacts(output, newExpr);
                 }
             }
         }
@@ -417,34 +417,34 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(1);
         var output = pcodeOp.getOutput();
 
-        if (!ctx.isTracedVn(funcNode, input)) {
+        if (!intraCtx.isTracedVn(input)) {
             Logging.debug("PCodeVisitor", "[PCode] Load addr is not interested: " + input);
             return;
         }
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
-        var leftValueExprs = ctx.getIntraDataFlowFacts(funcNode, output);
+        var leftValueExprs = intraCtx.getDataFlowFacts(output);
         var primitiveType = new PrimitiveTypeDescriptor(outDT);
 
-        var loadAddrExprs = ctx.getIntraDataFlowFacts(funcNode, input);
+        var loadAddrExprs = intraCtx.getDataFlowFacts(input);
         for (var loadAddrExpr : loadAddrExprs) {
-            var loadedValueExpr = dereference(ctx, loadAddrExpr);
+            var loadedValueExpr = dereference(interCtx, loadAddrExpr);
 
-            ctx.getAccessPoints().addMemAccessPoint(loadAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.LOAD);
-            ctx.addMemExprToParse(loadAddrExpr);
+            interCtx.getAccessPoints().addMemAccessPoint(loadAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.LOAD);
+            interCtx.addMemExprToParse(loadAddrExpr);
 
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
             if (leftValueExprs != null) {
                 Logging.debug("PCodeVisitor", "Loaded varnode has already held symbolExpr, set type alias ...");
                 for (var leftValueExpr : leftValueExprs) {
-                    ctx.addTypeAliasRelation(loadedValueExpr, leftValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
-                    ctx.addFieldExprToParse(loadedValueExpr);
+                    interCtx.addTypeAliasRelation(loadedValueExpr, leftValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
+                    interCtx.addFieldExprToParse(loadedValueExpr);
                 }
             }
 
-            ctx.addNewExprIntoDataFlowFacts(funcNode, output, loadedValueExpr);
+            intraCtx.updateDataFlowFacts(output, loadedValueExpr);
         }
     }
 
@@ -457,24 +457,24 @@ public class PCodeVisitor {
         var storedAddrVn = pcodeOp.getInput(1);
         var rightValueVn = pcodeOp.getInput(2);
 
-        if (!ctx.isTracedVn(funcNode, storedAddrVn)) {
+        if (!intraCtx.isTracedVn(storedAddrVn)) {
             Logging.debug("PCodeVisitor", "Store address is not interested: " + storedAddrVn);
             return;
         }
 
-        var rightValueExprs = ctx.getIntraDataFlowFacts(funcNode, rightValueVn);
+        var rightValueExprs = intraCtx.getDataFlowFacts(rightValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
         var primitiveType = new PrimitiveTypeDescriptor(storedValueDT);
 
-        for (var storedAddrExpr : ctx.getIntraDataFlowFacts(funcNode, storedAddrVn)) {
-            var storedValueExpr = SymbolExpr.dereference(ctx, storedAddrExpr);
-            ctx.getAccessPoints().addMemAccessPoint(storedAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.STORE);
-            ctx.addMemExprToParse(storedAddrExpr);
+        for (var storedAddrExpr : intraCtx.getDataFlowFacts(storedAddrVn)) {
+            var storedValueExpr = SymbolExpr.dereference(interCtx, storedAddrExpr);
+            interCtx.getAccessPoints().addMemAccessPoint(storedAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.STORE);
+            interCtx.addMemExprToParse(storedAddrExpr);
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
                     // ctx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
-                    ctx.addFieldExprToParse(storedValueExpr);
+                    interCtx.addFieldExprToParse(storedValueExpr);
                 }
             }
         }
@@ -482,16 +482,16 @@ public class PCodeVisitor {
 
     private void handleINDCall(PcodeOp pcodeOp) {
         var indirectCallVn = pcodeOp.getInput(0);
-        if (!ctx.isTracedVn(funcNode, indirectCallVn)) {
+        if (!intraCtx.isTracedVn(indirectCallVn)) {
             Logging.debug("PCodeVisitor", "[PCode] Indirect Call is not interested: " + indirectCallVn);
             return;
         }
 
-        var indirectCallFacts = ctx.getIntraDataFlowFacts(funcNode, indirectCallVn);
+        var indirectCallFacts = intraCtx.getDataFlowFacts(indirectCallVn);
         for (var symExpr : indirectCallFacts) {
             if (symExpr.isDereference()) {
-                ctx.getAccessPoints().addMemAccessPoint(symExpr.getNestedExpr(), pcodeOp, new DummyType("CodePtr"), AccessPoints.AccessType.INDIRECT);
-                ctx.addMemExprToParse(symExpr.getNestedExpr());
+                interCtx.getAccessPoints().addMemAccessPoint(symExpr.getNestedExpr(), pcodeOp, new DummyType("CodePtr"), AccessPoints.AccessType.INDIRECT);
+                interCtx.addMemExprToParse(symExpr.getNestedExpr());
             }
         }
     }
@@ -499,16 +499,16 @@ public class PCodeVisitor {
 
     private void handleReturn(PcodeOp pcodeOp) {
         for (var retVn : pcodeOp.getInputs()) {
-            if (!ctx.isTracedVn(funcNode, retVn)) {
+            if (!intraCtx.isTracedVn(retVn)) {
                 Logging.debug("PCodeVisitor", "[PCode] Return value is not interested: " + retVn);
                 continue;
             }
 
-            var retFacts = ctx.getIntraDataFlowFacts(funcNode, retVn);
+            var retFacts = intraCtx.getDataFlowFacts(retVn);
             for (var retExpr : retFacts) {
-                ctx.intraCtxMap.get(funcNode).setReturnExpr(retExpr);
-                ctx.getAccessPoints().addCallAccessPoint(retExpr, pcodeOp, AccessPoints.AccessType.RETURN_VALUE);
-                ctx.addCallExprToParse(retExpr);
+                interCtx.intraCtxMap.get(funcNode).setReturnExpr(retExpr);
+                interCtx.getAccessPoints().addCallAccessPoint(retExpr, pcodeOp, AccessPoints.AccessType.RETURN_VALUE);
+                interCtx.addCallExprToParse(retExpr);
                 Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
@@ -516,10 +516,10 @@ public class PCodeVisitor {
 
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
-        var calleeNode = ctx.callGraph.getNodebyAddr(calleeAddr);
-        ctx.getIntraContext(funcNode).addCallSite(pcodeOp, calleeNode);
+        var calleeNode = interCtx.callGraph.getNodebyAddr(calleeAddr);
+        interCtx.getIntraContext(funcNode).addCallSite(pcodeOp, calleeNode);
 
-        if (!ctx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
+        if (!interCtx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
             Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
             return;
         } else if (calleeNode.isTypeAgnostic) {
@@ -534,21 +534,21 @@ public class PCodeVisitor {
         // TODO: how to handle cases when arguments and parameters are inconsistency?
         for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
             var argVn = pcodeOp.getInput(inputIdx);
-            if (!ctx.isTracedVn(funcNode, argVn)) {
+            if (!intraCtx.isTracedVn(argVn)) {
                 Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
                 continue;
             }
 
-            var argFacts = ctx.getIntraDataFlowFacts(funcNode, argVn);
+            var argFacts = intraCtx.getDataFlowFacts(argVn);
             for (var argExpr : argFacts) {
                 argExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
-                ctx.getAccessPoints().addCallAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
-                ctx.addCallExprToParse(argExpr);
+                interCtx.getAccessPoints().addCallAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
+                interCtx.addCallExprToParse(argExpr);
 
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(inputIdx - 1);
                     var paramExpr = new SymbolExpr.Builder().rootSymbol(param).build();
-                    ctx.addTypeAliasRelation(argExpr, paramExpr, TypeAliasGraph.EdgeType.CALL);
+                    interCtx.addTypeAliasRelation(argExpr, paramExpr, TypeAliasGraph.EdgeType.CALL);
                 }
             }
         }
@@ -561,23 +561,23 @@ public class PCodeVisitor {
         // handle ReturnValue's receiver
         var receiverVn = pcodeOp.getOutput();
         if (receiverVn != null) {
-            var retExprs = ctx.intraCtxMap.get(calleeNode).getReturnExpr();
+            var retExprs = interCtx.intraCtxMap.get(calleeNode).getReturnExpr();
             if (retExprs.isEmpty()) {
                 Logging.warn("PCodeVisitor", "Callee's Return Value is not set but Receiver exists.");
             } else {
                 Logging.info("PCodeVisitor", "setting callsite receiver ...");
-                var receiverFacts = ctx.getIntraDataFlowFacts(funcNode, receiverVn);
+                var receiverFacts = intraCtx.getDataFlowFacts(receiverVn);
                 if (receiverFacts != null) {
                     for (var receiverExpr : receiverFacts) {
                         for (var retValueExpr : retExprs) {
-                            ctx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeAliasGraph.EdgeType.RETURN);
+                            interCtx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeAliasGraph.EdgeType.RETURN);
                         }
                     }
                 }
                 // If receiverFacts has no corresponding symbolExpr
                 else {
                     for (var retValueExpr : retExprs) {
-                        ctx.addNewExprIntoDataFlowFacts(funcNode, receiverVn, retValueExpr);
+                        intraCtx.updateDataFlowFacts(receiverVn, retValueExpr);
                     }
                 }
             }
@@ -595,10 +595,9 @@ public class PCodeVisitor {
             case "memset" -> {
                 var lengthArg = pcodeOp.getInput(3);
                 if (lengthArg.isConstant()) {
-                    var ptrExprs = ctx.getIntraDataFlowFacts(funcNode, pcodeOp.getInput(1));
+                    var ptrExprs = intraCtx.getDataFlowFacts(pcodeOp.getInput(1));
                     for (var ptrExpr : ptrExprs) {
-                        ptrExpr.setVariableSize(lengthArg.getOffset());
-                        ctx.collector.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
+                        interCtx.collector.getConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
                         Logging.info("PCodeVisitor", "memset: " + ptrExpr + " size: " + lengthArg.getOffset());
                     }
                 }
@@ -608,18 +607,18 @@ public class PCodeVisitor {
                 var dstVn = pcodeOp.getInput(1);
                 var srcVn = pcodeOp.getInput(2);
                 var lengthVn = pcodeOp.getInput(3);
-                if (!ctx.isTracedVn(funcNode, dstVn) || !ctx.isTracedVn(funcNode, srcVn)) {
+                if (!intraCtx.isTracedVn(dstVn) || !intraCtx.isTracedVn(srcVn)) {
                     return;
                 }
-                var dstExprs = ctx.getIntraDataFlowFacts(funcNode, dstVn);
-                var srcExprs = ctx.getIntraDataFlowFacts(funcNode, srcVn);
+                var dstExprs = intraCtx.getDataFlowFacts(dstVn);
+                var srcExprs = intraCtx.getDataFlowFacts(srcVn);
                 for (var dstExpr : dstExprs) {
                     for (var srcExpr : srcExprs) {
-                        ctx.addTypeAliasRelation(srcExpr, dstExpr, TypeAliasGraph.EdgeType.DATAFLOW);
+                        interCtx.addTypeAliasRelation(srcExpr, dstExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                         Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
-                            ctx.collector.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
-                            ctx.collector.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
+                            interCtx.collector.getConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
+                            interCtx.collector.getConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
                             dstExpr.setVariableSize(lengthVn.getOffset());
                             dstExpr.setVariableSize(lengthVn.getOffset());
                             Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());
@@ -631,16 +630,16 @@ public class PCodeVisitor {
         }
     }
 
-    private SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
+    private SymbolExpr add(InterContext ctx, SymbolExpr a, SymbolExpr b) {
         return SymbolExpr.add(ctx, a, b);
     }
 
-    private SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
+    private SymbolExpr multiply(InterContext ctx, SymbolExpr a, SymbolExpr b) {
         return SymbolExpr.multiply(ctx, a, b);
     }
 
 
-    private SymbolExpr dereference(Context ctx, SymbolExpr a) {
+    private SymbolExpr dereference(InterContext ctx, SymbolExpr a) {
         return SymbolExpr.dereference(ctx, a);
     }
 

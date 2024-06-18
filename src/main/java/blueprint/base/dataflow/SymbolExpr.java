@@ -1,7 +1,7 @@
 package blueprint.base.dataflow;
 
 import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
-import blueprint.solver.Context;
+import blueprint.base.dataflow.context.InterContext;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
@@ -440,7 +440,7 @@ public class SymbolExpr {
 
 
 
-    public static SymbolExpr add(Context ctx, SymbolExpr a, SymbolExpr b) {
+    public static SymbolExpr add(InterContext ctx, SymbolExpr a, SymbolExpr b) {
         if (a.hasIndexScale() && b.hasIndexScale()) {
             Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
             return null;
@@ -497,7 +497,7 @@ public class SymbolExpr {
         return builder.build();
     }
 
-    public static SymbolExpr multiply(Context ctx, SymbolExpr a, SymbolExpr b) {
+    public static SymbolExpr multiply(InterContext ctx, SymbolExpr a, SymbolExpr b) {
         if (!a.isConst() && !b.isConst) {
             Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
             return null;
@@ -530,7 +530,7 @@ public class SymbolExpr {
     }
 
 
-    public static SymbolExpr dereference(Context ctx, SymbolExpr a) {
+    public static SymbolExpr dereference(InterContext ctx, SymbolExpr a) {
         if (a.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot dereference a constant value.");
         }
@@ -541,7 +541,7 @@ public class SymbolExpr {
         return newExpr;
     }
 
-    public static SymbolExpr reference(Context ctx, SymbolExpr a) {
+    public static SymbolExpr reference(InterContext ctx, SymbolExpr a) {
         if (a.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot reference a constant value.");
         }

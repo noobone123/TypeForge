@@ -1,6 +1,6 @@
 package blueprint.base.dataflow;
 
-import blueprint.base.dataflow.constraints.TypeDescriptor;
+import blueprint.base.dataflow.types.TypeDescriptor;
 import blueprint.utils.Logging;
 import ghidra.program.model.pcode.PcodeOp;
 

@@ -2,8 +2,6 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.SymbolExpr;
 import blueprint.utils.Logging;
-import com.sun.msv.verifier.jarv.Const;
-import ghidra.program.model.symbol.Symbol;
 
 import java.util.HashMap;
 import java.util.Map;

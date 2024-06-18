@@ -1,67 +1,24 @@
-package blueprint.solver;
+package blueprint.base.dataflow.context;
 
 import blueprint.base.dataflow.AccessPoints;
-import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.constraints.ConstraintCollector;
-import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
+import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.base.dataflow.typeAlias.TypeAliasManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Global;
-import blueprint.utils.HighSymbolHelper;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr;
 
-import ghidra.program.model.data.*;
-import ghidra.program.model.pcode.HighSymbol;
-import ghidra.program.model.pcode.PcodeOp;
-import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
-
 
 /**
  * The context used to store the relationship between HighSymbol and TypeBuilder.
  */
-public class Context {
-
-    public static class IntraContext {
-        /** The candidate HighSymbols that need to collect data-flow facts */
-        public final HashSet<HighSymbol> tracedSymbols;
-        public final HashSet<Varnode> tracedVarnodes;
-
-        /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
-        public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
-        public HashSet<SymbolExpr> returnExprs;
-        public int dataFlowFactKSize = 10;
-        public Map<PcodeOp, FunctionNode> callsites;
-
-        public IntraContext() {
-            this.tracedSymbols = new HashSet<>();
-            this.tracedVarnodes = new HashSet<>();
-            this.dataFlowFacts = new HashMap<>();
-            this.returnExprs = new HashSet<>();
-            this.callsites = new HashMap<>();
-        }
-
-        public void setReturnExpr(SymbolExpr expr) {
-            this.returnExprs.add(expr);
-        }
-
-        public Set<SymbolExpr> getReturnExpr() {
-            return this.returnExprs;
-        }
-
-        public void addCallSite(PcodeOp op, FunctionNode funcNode) {
-            callsites.put(op, funcNode);
-        }
-
-        public Map<PcodeOp, FunctionNode> getCallSites() {
-            return callsites;
-        }
-    }
+public class InterContext {
 
     public CallGraph callGraph;
     /** The workList queue of the whole program */
@@ -78,7 +35,7 @@ public class Context {
     public Set<SymbolExpr> fieldExprParseCandidates;
     public ConstraintCollector collector;
 
-    public Context(CallGraph cg) {
+    public InterContext(CallGraph cg) {
         this.callGraph = cg;
         this.workList = new LinkedList<>();
         this.solvedFunc = new HashSet<>();
@@ -92,28 +49,12 @@ public class Context {
     }
 
     public void createIntraContext(FunctionNode funcNode) {
-        IntraContext intraCtx = new IntraContext();
+        IntraContext intraCtx = new IntraContext(funcNode, collector);
         intraCtxMap.put(funcNode, intraCtx);
     }
 
     public IntraContext getIntraContext(FunctionNode funcNode) {
         return intraCtxMap.get(funcNode);
-    }
-
-    public void addTracedSymbol(FunctionNode funcNode, HighSymbol highSymbol) {
-        IntraContext intraCtx = intraCtxMap.get(funcNode);
-        if (intraCtx == null) {
-            Logging.error("Context", "Failed to get intraContext for " + funcNode.value.getName());
-            return;
-        }
-        intraCtx.tracedSymbols.add(highSymbol);
-    }
-
-    public void addTracedVarnode(FunctionNode funcNode, Varnode vn) {
-        var tracedVns = intraCtxMap.get(funcNode).tracedVarnodes;
-        if (tracedVns.add(vn)) {
-            Logging.debug("Context", "Add traced varnode: " + vn);
-        }
     }
 
     public void addMemExprToParse(SymbolExpr expr) {
@@ -129,136 +70,6 @@ public class Context {
     public void addFieldExprToParse(SymbolExpr expr) {
         Logging.info("Context", "Add FieldExpr to parse: " + expr.toString());
         fieldExprParseCandidates.add(expr);
-    }
-
-    /**
-     * create a new SymbolExpr and add it to the dataFlowFacts
-     * @param funcNode the current function node
-     * @param vn the varnode which holds the dataflow fact
-     * @param symbolExpr the new symbolExpr
-     */
-    public void addNewExprIntoDataFlowFacts(FunctionNode funcNode, Varnode vn, SymbolExpr symbolExpr) {
-        var intraCtx = intraCtxMap.get(funcNode);
-        if (intraCtx == null) {
-            Logging.error("Context", "Failed to get intraContext for " + funcNode.value.getName());
-            return;
-        }
-        var curDataFlowFact = intraCtx.dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(intraCtx.dataFlowFactKSize));
-
-        if (curDataFlowFact.add(symbolExpr)) {
-            Logging.debug("Context", "New " + vn + " -> " + curDataFlowFact);
-        }
-        addTracedVarnode(funcNode, vn);
-    }
-
-
-    /**
-     * Merge the dataflow facts from input to output
-     * @param funcNode the current function node
-     * @param input the input varnode
-     * @param output the output varnode
-     * @param isStrongUpdate if true, the output varnode's dataflow facts will be cleared before merging
-     */
-    public void mergeSymbolExpr(FunctionNode funcNode, Varnode input, Varnode output, boolean isStrongUpdate) {
-        var intraCtx = intraCtxMap.get(funcNode);
-        assert intraCtx != null;
-        var dataFlowFacts = intraCtx.dataFlowFacts;
-        var inputFacts = dataFlowFacts.get(input);
-
-        if (inputFacts == null) {
-            Logging.warn("Context", "Failed to get dataflow fact for " + input);
-            return;
-        }
-
-        var outputFacts = dataFlowFacts.computeIfAbsent(output, k -> new KSet<>(intraCtx.dataFlowFactKSize));
-        if (isStrongUpdate) {
-            outputFacts.clear();
-        }
-
-        outputFacts.merge(inputFacts);
-        addTracedVarnode(funcNode, output);
-        Logging.debug("Context", "Merge " + output + " -> " + outputFacts);
-    }
-
-    /**
-     * Initialize the dataFlowFacts using the candidate HighSymbols
-     */
-    public void initIntraDataFlowFacts(FunctionNode funcNode) {
-        var intraCtx = intraCtxMap.get(funcNode);
-        // Update the interestedVn
-        for (var symbol: intraCtx.tracedSymbols) {
-            Logging.info("Context", "Candidate HighSymbol: " + symbol.getName());
-
-            SymbolExpr expr;
-            TypeConstraint constraint;
-            var dataType = symbol.getDataType();
-            if (symbol.isGlobal()) {
-                expr = new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
-                expr.addAttribute(SymbolExpr.Attribute.GLOBAL);
-                constraint = collector.getConstraint(expr);
-            } else {
-                expr = new SymbolExpr.Builder().rootSymbol(symbol).build();
-                constraint = collector.getConstraint(expr);
-            }
-
-            if (dataType instanceof Pointer ptr) {
-                var ptrEE = ptr.getDataType();
-                if (ptrEE instanceof Array || ptrEE instanceof Structure || ptrEE instanceof Union) {
-                    Logging.info("Context", "Found decompiler recovered Pointer, points to " + dataType.getName());
-                    expr.addAttribute(SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
-                    dataType = ptrEE;
-                }
-            }
-
-            if (dataType instanceof Array array) {
-                Logging.info("Context", "Found decompiler recovered Array " + dataType.getName());
-                expr.addAttribute(SymbolExpr.Attribute.ARRAY);
-                expr.setVariableSize(array.getLength());
-                constraint.updateTypeConstraintByArrayDataType(array);
-            }
-            else if (dataType instanceof Structure structure) {
-                Logging.info("Context", "Found decompiler recovered Structure " + dataType.getName());
-                expr.addAttribute(SymbolExpr.Attribute.STRUCT);
-                expr.setVariableSize(structure.getLength());
-                constraint.updateTypeConstraintByCompositeDataType(structure);
-            }
-            else if (dataType instanceof Union union) {
-                Logging.info("Context", "Found decompiler recovered Union " + dataType.getName());
-                expr.addAttribute(SymbolExpr.Attribute.UNION);
-                expr.setVariableSize(union.getLength());
-                constraint.updateTypeConstraintByCompositeDataType(union);
-            }
-
-            // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:
-            // 1. HighSymbol is not used in the function
-            // 2. HighSymbol is used in the function, but ghidra's decompiler failed to find the HighVariable
-            if (symbol.getHighVariable() == null) {
-                Logging.warn("Context", funcNode.value.getName() + " -> HighSymbol: " + symbol.getName() + " has no HighVariable");
-            } else {
-                // Initialize the dataFlowFacts using the interested varnodes and add
-                // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
-                // TODO: this may cause flow-insensitive, ... we can improve it in the future
-                for (var vn: symbol.getHighVariable().getInstances()) {
-                    addTracedVarnode(funcNode, vn);
-                    addNewExprIntoDataFlowFacts(funcNode, vn, expr);
-                }
-            }
-        }
-    }
-
-    public boolean isTracedVn(FunctionNode funcNode, Varnode vn) {
-        var intraCtx = intraCtxMap.get(funcNode);
-        return intraCtx.tracedVarnodes.contains(vn);
-    }
-
-    public KSet<SymbolExpr> getIntraDataFlowFacts(FunctionNode funcNode, Varnode vn) {
-        var intraCtx = intraCtxMap.get(funcNode);
-        var res = intraCtx.dataFlowFacts.get(vn);
-        if (res == null) {
-            Logging.warn("Context", "Failed to get dataflow fact for " + vn);
-            return null;
-        }
-        return res;
     }
 
     public void addTypeAliasRelation(SymbolExpr from, SymbolExpr to, TypeAliasGraph.EdgeType edgeType) {

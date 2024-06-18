@@ -1,5 +1,6 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.context.InterContext;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.*;
@@ -13,14 +14,14 @@ import java.util.Set;
 import java.util.List;
 
 public class InterSolver {
-    Context ctx;
+    InterContext ctx;
 
     /** The call graph of the whole program */
     CallGraph cg;
 
     public InterSolver(CallGraph cg) {
         this.cg = cg;
-        this.ctx = new Context(this.cg);
+        this.ctx = new InterContext(this.cg);
 
         var addr = FunctionHelper.getAddress(Global.startAddress);
         var startFunc = cg.getNodebyAddr(addr);
@@ -47,9 +48,9 @@ public class InterSolver {
             } else {
                 Logging.info("InterSolver", "Leaf function: " + funcNode.value.getName());
             }
-            ctx.createIntraContext(funcNode);
 
-            IntraSolver intraSolver = new IntraSolver(funcNode, ctx);
+            ctx.createIntraContext(funcNode);
+            IntraSolver intraSolver = new IntraSolver(funcNode, ctx, ctx.getIntraContext(funcNode));
             intraSolver.solve();
 
             ctx.solvedFunc.add(funcNode);

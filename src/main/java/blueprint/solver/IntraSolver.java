@@ -1,5 +1,7 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.context.InterContext;
+import blueprint.base.dataflow.context.IntraContext;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 
@@ -9,39 +11,18 @@ import blueprint.utils.Logging;
 public class IntraSolver {
 
     private final FunctionNode funcNode;
-    private final Context ctx;
-
+    private final InterContext interCtx;
+    private final IntraContext intraCtx;
     private final PCodeVisitor visitor;
 
-    public IntraSolver(FunctionNode funcNode, Context ctx) {
+    public IntraSolver(FunctionNode funcNode, InterContext interCtx, IntraContext intraCtx) {
         // TODO: fix ghidra's function prototype error.
         this.funcNode = funcNode;
-        this.ctx = ctx;
-        visitor = new PCodeVisitor(this.funcNode, this.ctx);
+        this.interCtx = interCtx;
+        this.intraCtx = intraCtx;
+        visitor = new PCodeVisitor(this.funcNode, this.interCtx, this.intraCtx);
 
-        /*
-         * IMPORTANT: Update the candidate HighSymbols that need to collect data-flow facts
-         * Currently, we only collect data-flow facts on :
-         * 1. parameters
-         * 2. arguments
-         * 3. return values
-         * and their aliases.
-         */
-        if (funcNode.parameters.isEmpty()) {
-            Logging.warn("IntraSolver", "No parameters in the function");
-        }
-        for (var symbol : funcNode.parameters) {
-            ctx.addTracedSymbol(funcNode, symbol);
-        }
-        for (var symbol : funcNode.localVariables) {
-            ctx.addTracedSymbol(funcNode, symbol);
-        }
-        for (var symbol : funcNode.globalVariables) {
-            ctx.addTracedSymbol(funcNode, symbol);
-        }
-
-        // initialize the data-flow facts
-        ctx.initIntraDataFlowFacts(funcNode);
+        intraCtx.initialize();
     }
 
 
@@ -52,13 +33,5 @@ public class IntraSolver {
         visitor.run();
 
         Logging.info("IntraSolver", "Solved function: " + funcNode.value.getName());
-    }
-
-    /**
-     * Get the context of the intra-procedural analysis
-     * @return The HashMap of HighVariable and TypeBuilder in the function.
-     */
-    public Context getCtx() {
-        return ctx;
     }
 }

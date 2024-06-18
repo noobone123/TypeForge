@@ -1,10 +1,8 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.SymbolExpr;
-import blueprint.base.dataflow.constraints.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
-import blueprint.utils.FunctionHelper;
-import blueprint.utils.Global;
+import blueprint.base.dataflow.context.InterContext;
 import blueprint.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -34,7 +32,7 @@ import java.util.*;
  * Finally, We take the pseudo code and Calculate the score for them, and find the best one as the final Structure Type
  */
 public class Generator {
-    public Context solverCtx;
+    public InterContext solverCtx;
     public final Map<Function, Map<HighSymbol, TypeConstraint>> funcConstraintMap = new HashMap<>();
     public final Map<HighSymbol, TypeConstraint> globalConstraintMap = new HashMap<>();
 
@@ -42,7 +40,7 @@ public class Generator {
     public final Map<HighSymbol, TypeConstraint> builtConstraints = new HashMap<>();
 
 
-    public Generator(Context solverCtx) {
+    public Generator(InterContext solverCtx) {
         this.solverCtx = solverCtx;
         this.allConstraints = new HashMap<>(solverCtx.collector.getAllEntries());
         buildConstraintMap();

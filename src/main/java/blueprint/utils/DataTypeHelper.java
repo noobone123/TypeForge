@@ -144,7 +144,18 @@ public class DataTypeHelper {
     }
 
 
-    public boolean isDecompilerRecoveredCompositeType(DataType dt) {
+    public static boolean isCompositeOrArray(DataType dt) {
         return dt instanceof Structure || dt instanceof Array || dt instanceof Union;
+    }
+
+    public static boolean isPointerDataType(DataType dt) {
+        return dt instanceof Pointer;
+    }
+
+    public static boolean isPointerToCompositeDataType(DataType dt) {
+        if (dt instanceof Pointer pointer) {
+            return isCompositeOrArray(pointer.getDataType());
+        }
+        return false;
     }
 }
