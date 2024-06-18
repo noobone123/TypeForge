@@ -257,6 +257,9 @@ public class TypeConstraint {
         // Merging size
         this.totalSize.addAll(other.totalSize);
         this.elementSize.addAll(other.elementSize);
+
+        // Merging polymorphicTypes
+        this.polymorphicTypes.addAll(other.polymorphicTypes);
     }
 
 
@@ -541,8 +544,11 @@ public class TypeConstraint {
             exprNode.put("Size", "0x" + Long.toHexString(expr.variableSize));
         });
 
-        rootNode.put("TotalSize", totalSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(totalSize.iterator().next()));
-        rootNode.put("ElementSize", elementSize.isEmpty() ? "0x" + Long.toHexString(0) : "0x" + Long.toHexString(elementSize.iterator().next()));
+        // dump all totalSize and elementSize
+        var sizeNode = rootNode.putArray("TotalSize");
+        totalSize.forEach(size -> sizeNode.add("0x" + Long.toHexString(size)));
+        var elementSizeNode = rootNode.putArray("ElementSize");
+        elementSize.forEach(size -> elementSizeNode.add("0x" + Long.toHexString(size)));
         rootNode.put("GlobalAttrs", globalAttrs.toString());
 
         var referencedByNode = rootNode.putObject("referencedBy");
@@ -580,6 +586,10 @@ public class TypeConstraint {
             var tagsArray = offsetNode.putArray("Attrs");
             fieldAttrs.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
         });
+
+        // dump polymorphicTypes
+        var polymorphicTypesNode = rootNode.putArray("PolymorphicTypes");
+        polymorphicTypes.forEach(type -> polymorphicTypesNode.add(type.getName()));
 
         return rootNode;
     }
