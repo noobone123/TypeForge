@@ -154,7 +154,6 @@ public class IntraContext {
                 }
             } else {
                 Logging.info("Context", "Found Primitive " + decompilerInferencedDT.getName());
-                constraint.addPolymorphicType(TypeDescriptorFactory.createPrimitiveTypeDescriptor(decompilerInferencedDT));
             }
 
             // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:
@@ -190,7 +189,6 @@ public class IntraContext {
     public KSet<SymbolExpr> getDataFlowFacts(Varnode vn) {
         return dataFlowFacts.get(vn);
     }
-
 
     public boolean isTracedVn(Varnode vn) {
         return tracedVarnodes.contains(vn);

@@ -41,7 +41,6 @@ public class TypeConstraint {
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
 
     /** decompiler inference info */
-    public boolean isDecompilerCompositeType = false;
     public String decompilerDataTypeName;
 
     public final Set<TypeDescriptor> polymorphicTypes;
@@ -506,7 +505,7 @@ public class TypeConstraint {
      * @return if the TypeConstraint is related to Composite DataType
      */
     public boolean isInterested() {
-        if (isDecompilerCompositeType) {
+        if (!getPolymorphicTypes().isEmpty()) {
             return true;
         }
 
@@ -524,6 +523,10 @@ public class TypeConstraint {
     public void addPolymorphicType(TypeDescriptor type) {
         polymorphicTypes.add(type);
         Logging.info("TypeConstraint", String.format("Constraint_%s adding polymorphicType: %s", shortUUID, type.getName()));
+    }
+
+    public Set<TypeDescriptor> getPolymorphicTypes() {
+        return polymorphicTypes;
     }
 
     public JsonNode getJsonObj(ObjectMapper mapper) {
