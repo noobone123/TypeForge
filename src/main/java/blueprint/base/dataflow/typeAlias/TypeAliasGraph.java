@@ -196,13 +196,17 @@ public class TypeAliasGraph<T> {
                 }
             }
 
+            // TODO: How to check if Type Agnostic ...
             if (hasOverlap) {
                 Logging.info("TypeAliasGraph", "Confirmed type agnostic param: " + dst);
                 typeAgnosticParams.add(dst);
             } else {
-                // TODO: if arg's no insterest count is larger than a threshold, we can consider it as type agnostic param
                 Logging.info("TypeAliasGraph", "Arg no interest count: " + argNoInterestCount);
                 Logging.info("TypeAliasGraph", "Src list size: " + srcList.size());
+                if (argNoInterestCount / (double)srcList.size() > 0.2) {
+                    Logging.info("TypeAliasGraph", "Confirmed type agnostic param: " + dst);
+                    typeAgnosticParams.add(dst);
+                }
             }
         }
 
