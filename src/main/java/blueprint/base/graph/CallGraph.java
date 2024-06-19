@@ -87,7 +87,6 @@ public class CallGraph extends GraphBase<Function> {
                     continue;
                 } else {
                     Logging.info("CallGraph", "Decompile function " + func.getName());
-                    funcNode.setDecompileResult(decompileRes);
                 }
             }
 

@@ -37,6 +37,7 @@ public class BluePrint extends GhidraScript {
         Logging.info("GhidraScript","Number of meaningful functions: " + meaningfulFunctions.size());
 
         CallGraph cg = CallGraph.getCallGraph();
+        DataTypeHelper.buildNameToDTMap();
 
         InterSolver interSolver = new InterSolver(cg);
         interSolver.run();

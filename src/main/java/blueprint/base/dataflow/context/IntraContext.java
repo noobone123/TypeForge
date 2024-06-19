@@ -62,7 +62,10 @@ public class IntraContext {
         return callsites;
     }
 
-    public void initialize() {
+    public boolean initialize() {
+        // initialize current function
+        if (!funcNode.initialize()) { return false; }
+
         /*
          * IMPORTANT: Update the candidate HighSymbols that need to collect data-flow facts
          * Currently, we only collect data-flow facts on :
@@ -86,6 +89,7 @@ public class IntraContext {
 
         // initialize the data-flow facts
         initDataFlowFacts();
+        return true;
     }
 
 

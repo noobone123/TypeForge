@@ -6,6 +6,45 @@ import java.util.*;
 
 public class DataTypeHelper {
 
+    public static DataTypeManager dtM = Global.currentProgram.getDataTypeManager();
+    public static Map<String, DataType> nameToDTMap = new HashMap<>();
+
+
+    public static void buildNameToDTMap() {
+        for (var iter = dtM.getAllDataTypes(); iter.hasNext(); ) {
+            var dt = iter.next();
+            nameToDTMap.put(dt.getName(), dt);
+        }
+    }
+
+    public static DataType getDataTypeByName(String name) {
+        var result = nameToDTMap.get(name);
+        if (result == null) {
+            Logging.warn("DataTypeHelper", "DataType not found: " + name);
+            return null;
+        } else {
+            return result;
+        }
+    }
+
+    public static DataType getPointerDT(DataType dt, int ptrLevel) {
+        if (ptrLevel == 0) {
+            return dt;
+        }
+        DataType result = dt;
+        while (ptrLevel > 0) {
+            result = dtM.getPointer(result);
+            if (result == null) {
+                Logging.warn("DataTypeHelper", "Pointer data type not found: " + dt.getName());
+                return null;
+            }
+            ptrLevel--;
+        }
+
+        return result;
+    }
+
+
     /**
      * Check if the data type is a complex type or a pointer pointing to a complex type.
      * Complex type includes structure, union, array, etc.

@@ -21,14 +21,16 @@ public class IntraSolver {
         this.interCtx = interCtx;
         this.intraCtx = intraCtx;
         visitor = new PCodeVisitor(this.funcNode, this.interCtx, this.intraCtx);
-
-        intraCtx.initialize();
     }
 
 
     public void solve() {
         Logging.info("IntraSolver", "Solving function: " + funcNode.value.getName());
 
+        if (!intraCtx.initialize()) {
+            Logging.warn("IntraSolver", "Failed to initialize intraContext: " + funcNode.value.getName());
+            return;
+        }
         visitor.prepare();
         visitor.run();
 

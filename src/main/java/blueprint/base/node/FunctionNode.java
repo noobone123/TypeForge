@@ -1,5 +1,6 @@
 package blueprint.base.node;
 
+import blueprint.utils.DataTypeHelper;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
@@ -7,6 +8,7 @@ import blueprint.utils.Logging;
 import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
+import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.program.model.data.ParameterDefinition;
 import ghidra.program.model.data.ParameterDefinitionImpl;
@@ -19,11 +21,6 @@ import ghidra.util.task.TaskMonitor;
 import java.util.*;
 
 public class FunctionNode extends NodeBase<Function> {
-    public List<HighSymbol> parameters = new LinkedList<>();
-    public HighSymbol returnSym = null;
-    public Set<HighSymbol> localVariables = new HashSet<>();
-    public Set<HighSymbol> globalVariables = new HashSet<>();
-
     /** Whether the function is a leaf node in the call graph */
     public boolean isLeaf = false;
 
@@ -32,80 +29,110 @@ public class FunctionNode extends NodeBase<Function> {
     public boolean isTypeAgnostic = false;
     public boolean isNormal = false;
 
+    /** Following information should be updated after each decompile */
     public HighFunction hFunc = null;
     public List<PcodeOp> pCodes = new LinkedList<>();
     public PcodeOp returnOp = null;
     DecompileResults decompileResults = null;
     Map<String, HighSymbol> nameToSymbolMap = null;
 
+    public List<HighSymbol> parameters = new LinkedList<>();
+    public List<HighSymbol> localVariables = new LinkedList<>();
+    public List<HighSymbol> globalVariables = new LinkedList<>();
+    public Map<VariableStorage, Set<DataType>> decompilerInferredDT = new HashMap<>();
+
     public FunctionNode(Function value, int id) {
         super(value, id);
-    }
-
-    public void setDecompileResult (DecompileResults res) {
-        this.decompileResults = res;
-        this.hFunc = res.getHighFunction();
-        this.nameToSymbolMap = hFunc.getLocalSymbolMap().getNameToSymbolMap();
-        if (setPrototype()) {
-            setLocalVariables();
-            setGlobalVariables();
-            setHighPCode();
-        } else {
-            this.decompile();
-        }
     }
 
     public void setTypeAgnostic() {
         isTypeAgnostic = true;
     }
 
-    /**
-     * Sync high function's prototype to database.
-     * in Ghidra, function's param and return information will not be stored in `Function` in ghidra listing model.
-     * This information can be found in `HighFunction` and we can utilize `HighFunctionDBUtil.commitParamsToDatabase`
-     * to sync this information to database.
-     */
-    private boolean setPrototype() {
-        if (hFunc == null) {
-            Logging.warn("FunctionNode", "HighFunction is not set");
-            return false;
-        }
-
+    private Optional<List<HighSymbol>> checkPrototype() {
         var funcProto = hFunc.getFunctionPrototype();
-
-        // IMPORTANT: so dirty, avoid ghidra's func prototype parse error due to XMM registers
-        if (funcProto.getNumParams() >= 10) {
-            fixFuncProto(funcProto);
-            return false;
-        }
-        else {
-            for (int i = 0; i < funcProto.getNumParams(); i++) {
-                var param = funcProto.getParam(i);
-                parameters.add(param);
+        var newParams = new ArrayList<HighSymbol>();
+        for (var i = 0; i < funcProto.getNumParams(); i++) {
+            var param = funcProto.getParam(i);
+            if (param.getStorage().getRegister() != null) {
+                if (param.getStorage().getRegister().getName().contains("XMM")) {
+                    Logging.warn("FunctionNode", "Remove XMM register parameter: " + param.getName());
+                } else {
+                    newParams.add(param);
+                }
+            } else {
+                newParams.add(param);
             }
         }
 
-        return true;
+        if (newParams.size() != funcProto.getNumParams()) {
+            Logging.info("FunctionNode", String.format("Found %d XMM register parameters in %s", funcProto.getNumParams() - newParams.size(), this.value.getName()));
+            return Optional.of(newParams);
+        } else {
+            return Optional.empty();
+        }
+    }
 
-        // Commit to database, then types and return can be found in Listing model
-        // And Information can be accessed by Function.getParameters()
-        /* WARNING: `commitParamsToDatabase` method may cause some function's wrong prototype be committed to database
-                    and wrong prototype will be propagated to other functions. Cause other functions' prototype be wrong.
-                    For example: `log_error` is a function that has variable parameters, and using SSE register, it seems
-                    that ghidra performs poorly on recognizing its prototype.
-        try {
-            HighFunctionDBUtil.commitParamsToDatabase(hFunc, true, SourceType.DEFAULT);
-            HighFunctionDBUtil.commitReturnToDatabase(hFunc, SourceType.DEFAULT);
-        } catch (Exception e) {
-            Logging.error("Failed to commit parameters and return to database");
+    private void fixFuncProto(List<HighSymbol> newParams) {
+        // init newParamsDef with newParams
+        var newParamsDef = new ParameterDefinition[newParams.size()];
+        for (var i = 0; i < newParams.size(); i++) {
+            var param = newParams.get(i);
+            newParamsDef[i] = new ParameterDefinitionImpl("param_" + (i+1), param.getDataType(), "updated");
         }
 
-        assert value.getParameters().length == parameters.size(); */
+        var funcDef = new FunctionDefinitionDataType(this.value, true);
+        funcDef.setArguments(newParamsDef);
+
+        ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(this.value.getEntryPoint(), funcDef, SourceType.USER_DEFINED);
+        Global.ghidraScript.runCommand(cmd);
+        Logging.info("FunctionNode", "Fixed function prototype: " + this.value.getName());
+    }
+
+    /**
+     * We can not fully trust decompiler inferred composite datatype, so we need to record them and fix them into primitive.
+     */
+    // TODO: handle composite datatype in stack ?
+    private Optional<Set<HighSymbol>> checkLocalVariables() {
+        Set<HighSymbol> candidate = new HashSet<>();
+        var localSymMap = hFunc.getLocalSymbolMap();
+        for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
+            var sym = it.next();
+            var dt = sym.getDataType();
+            if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
+                candidate.add(sym);
+                decompilerInferredDT.computeIfAbsent(sym.getStorage(), k -> new HashSet<>()).add(dt);
+                Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s, %s", sym.getName(), dt.getName()));
+            }
+        }
+
+        return candidate.isEmpty() ? Optional.empty() : Optional.of(candidate);
+    }
+
+
+    private void fixLocalVariableDataType(Set<HighSymbol> candidates) {
+        for (var sym : candidates) {
+            var newDT = DataTypeHelper.getDataTypeByName("void");
+            if (newDT == null) {
+                Logging.warn("FunctionNode", "Failed to find datatype");
+                continue;
+            }
+            DecompilerHelper.setLocalVariableDataType(sym, newDT, 1);
+        }
+    }
+
+
+    private void setParameters() {
+        var funcProto = hFunc.getFunctionPrototype();
+        for (int i = 0; i < funcProto.getNumParams(); i++) {
+            var param = funcProto.getParam(i);
+            parameters.add(param);
+        }
     }
 
     /**
      * Parse local variables from HighFunction.
-     * !IMPORTANT: This method should be called after `parsePrototype` method.
+     * !IMPORTANT: This method should be called after `setParameters` method.
      */
     private void setLocalVariables() {
         var localSymMap = hFunc.getLocalSymbolMap();
@@ -125,39 +152,6 @@ public class FunctionNode extends NodeBase<Function> {
             globalVariables.add(sym);
         }
     }
-
-
-    private void fixFuncProto(FunctionPrototype proto) {
-        var newParams = new ArrayList<HighSymbol>();
-        for (var i = 0; i < proto.getNumParams(); i++) {
-            var param = proto.getParam(i);
-            if (param.getStorage().getRegister() != null) {
-                if (param.getStorage().getRegister().getName().contains("XMM")) {
-                    Logging.warn("FunctionNode", "Remove XMM register parameter: " + param.getName());
-                } else {
-                    newParams.add(param);
-                }
-            }
-             else {
-                newParams.add(param);
-            }
-        }
-
-        // init newParamsDef with newParams
-        var newParamsDef = new ParameterDefinition[newParams.size()];
-        for (var i = 0; i < newParams.size(); i++) {
-            var param = newParams.get(i);
-            newParamsDef[i] = new ParameterDefinitionImpl("param_" + (i+1), param.getDataType(), "updated");
-        }
-
-        var funcDef = new FunctionDefinitionDataType(this.value, true);
-        funcDef.setArguments(newParamsDef);
-
-        ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(this.value.getEntryPoint(), funcDef, SourceType.USER_DEFINED);
-        Global.ghidraScript.runCommand(cmd);
-        Logging.info("FunctionNode", "Fixed function prototype: " + this.value.getName());
-    }
-
 
     public void setHighPCode() {
         for (var block : hFunc.getBasicBlocks()) {
@@ -207,28 +201,60 @@ public class FunctionNode extends NodeBase<Function> {
     /**
      * Decompile current function
      */
-    public void decompile() {
+    public boolean decompile() {
         DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
         try {
             if (!ifc.openProgram(Global.currentProgram)) {
                 Logging.error("FunctionNode", "Failed to use the decompiler");
-                return;
+                return false;
             }
 
             DecompileResults decompileRes = ifc.decompileFunction(value, 30, TaskMonitor.DUMMY);
             if (!decompileRes.decompileCompleted()) {
                 Logging.error("FunctionNode", "Function decompile failed" + value.getName());
+                return false;
             } else {
                 Logging.info("FunctionNode", "Decompiled function " + value.getName());
-                setDecompileResult(decompileRes);
+                updateDecompileResult(decompileRes);
+                return true;
             }
-
         } finally {
             ifc.dispose();
         }
     }
 
+    public void updateDecompileResult(DecompileResults res) {
+        this.decompileResults = res;
+        this.hFunc = res.getHighFunction();
+    }
+
+
     public String getC() {
         return decompileResults.getDecompiledFunction().getC();
+    }
+
+    /**
+     * Decompile the function, fix prototype error and get highPcodes
+     */
+    public boolean initialize() {
+        if (!decompile()) { return false; }
+        var newParams = checkPrototype();
+        if (newParams.isPresent()) {
+            fixFuncProto(newParams.get());
+            if (!decompile()) { return false; }
+        }
+
+        var fixCandidates = checkLocalVariables();
+        if (fixCandidates.isPresent()) {
+            fixLocalVariableDataType(fixCandidates.get());
+            if (!decompile()) { return false; }
+        }
+
+        setParameters();
+        setLocalVariables();
+        setGlobalVariables();
+        setHighPCode();
+
+        return true;
     }
 }

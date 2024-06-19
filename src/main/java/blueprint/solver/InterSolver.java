@@ -38,9 +38,6 @@ public class InterSolver {
                 continue;
             }
 
-            funcNode.decompile();
-            funcNode.dumpHighPcode();
-
             // If the function is not a leaf function, we should
             // collect data-flow facts from its callee functions.
             if (!funcNode.isLeaf) {

@@ -4,10 +4,8 @@ import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileOptions;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.MetaDataType;
-import ghidra.program.model.pcode.HighFunction;
-import ghidra.program.model.pcode.PcodeOp;
-import ghidra.program.model.pcode.Varnode;
-import ghidra.program.model.pcode.VarnodeAST;
+import ghidra.program.model.pcode.*;
+import ghidra.program.model.symbol.SourceType;
 
 public class DecompilerHelper {
 
@@ -24,6 +22,15 @@ public class DecompilerHelper {
         ifc.toggleCCode(true);
         ifc.toggleSyntaxTree(true);
         return ifc;
+    }
+
+    public static void setLocalVariableDataType(HighSymbol highSym, DataType dt, int ptrLevel) {
+        try {
+            var updatedDT = DataTypeHelper.getPointerDT(dt, ptrLevel);
+            HighFunctionDBUtil.updateDBVariable(highSym, null, updatedDT, SourceType.USER_DEFINED);
+        } catch (Exception e) {
+            Logging.error("DecompilerHelper", "Failed to set data type for local variable: " + highSym.getName());
+        }
     }
 
     /**
