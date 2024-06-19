@@ -102,7 +102,7 @@ public class FunctionNode extends NodeBase<Function> {
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
                 candidate.add(sym);
                 decompilerInferredDT.computeIfAbsent(sym.getStorage(), k -> new HashSet<>()).add(dt);
-                Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s, %s", sym.getName(), dt.getName()));
+                Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s -> %s", sym.getName(), dt.getName()));
             }
         }
 

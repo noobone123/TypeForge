@@ -28,6 +28,7 @@ public class DecompilerHelper {
         try {
             var updatedDT = DataTypeHelper.getPointerDT(dt, ptrLevel);
             HighFunctionDBUtil.updateDBVariable(highSym, null, updatedDT, SourceType.USER_DEFINED);
+            Logging.info("DecompilerHelper", "Set data type for local variable: " + highSym.getName() + " to " + updatedDT.getName());
         } catch (Exception e) {
             Logging.error("DecompilerHelper", "Failed to set data type for local variable: " + highSym.getName());
         }
