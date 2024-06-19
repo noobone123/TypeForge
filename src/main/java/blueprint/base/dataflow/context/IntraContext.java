@@ -112,7 +112,7 @@ public class IntraContext {
 
             SymbolExpr expr;
             TypeConstraint constraint;
-            var decompilerInferencedDT = symbol.getDataType();
+            var dataType = symbol.getDataType();
 
             // Create the SymbolExpr and Constraint for the HighSymbol
             if (symbol.isGlobal()) {
@@ -124,40 +124,42 @@ public class IntraContext {
                 constraint = collector.getConstraint(expr);
             }
 
-            if (DataTypeHelper.isCompositeOrArray(decompilerInferencedDT)) {
-                if (decompilerInferencedDT instanceof Array array) {
-                    Logging.info("Context", "Found Array " + decompilerInferencedDT.getName());
+            if (DataTypeHelper.isCompositeOrArray(dataType)) {
+                if (dataType instanceof Array array) {
+                    Logging.info("IntraContext", "Found Array " + dataType.getName());
                     expr.addAttribute(SymbolExpr.Attribute.ARRAY);
                     expr.setVariableSize(array.getLength());
                     constraint.addPolymorphicType(TypeDescriptorFactory.createArrayTypeDescriptor(array));
                 }
-                else if (decompilerInferencedDT instanceof Structure structure) {
-                    Logging.info("Context", "Found Structure " + decompilerInferencedDT.getName());
+                else if (dataType instanceof Structure structure) {
+                    Logging.info("IntraContext", "Found Structure " + dataType.getName());
                     expr.addAttribute(SymbolExpr.Attribute.STRUCT);
                     expr.setVariableSize(structure.getLength());
                     constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(structure));
                 }
-                else if (decompilerInferencedDT instanceof Union union) {
-                    Logging.info("Context", "Found Union " + decompilerInferencedDT.getName());
+                else if (dataType instanceof Union union) {
+                    Logging.info("IntraContext", "Found Union " + dataType.getName());
                     expr.addAttribute(SymbolExpr.Attribute.UNION);
                     expr.setVariableSize(union.getLength());
                     constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(union));
                 }
-            } else if (decompilerInferencedDT instanceof Pointer ptr) {
-                var ptrEE = ptr.getDataType();
-                if (DataTypeHelper.isCompositeOrArray(ptrEE)) {
-                    Logging.info("Context", "Found Pointer " + decompilerInferencedDT.getName());
-                    expr.addAttribute(SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
-                    if (ptrEE instanceof Array array) {
-                        constraint.addPolymorphicType(TypeDescriptorFactory.createArrayTypeDescriptor(array));
-                    } else if (ptrEE instanceof Structure structure) {
-                        constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(structure));
-                    } else if (ptrEE instanceof Union union) {
-                        constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(union));
+            } else if (dataType instanceof Pointer) {
+                var decompilerInferredDT = funcNode.getDecompilerInferredDT(symbol.getStorage());
+                if (decompilerInferredDT instanceof Pointer ptrDT) {
+                    if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
+                        Logging.info("IntraContext", "Found Pointer " + ptrDT.getName());
+                        expr.addAttribute(SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
+                        if (ptrDT.getDataType() instanceof Array array) {
+                            constraint.addPolymorphicType(TypeDescriptorFactory.createArrayTypeDescriptor(array));
+                        } else if (ptrDT.getDataType() instanceof Structure structure) {
+                            constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(structure));
+                        } else if (ptrDT.getDataType() instanceof Union union) {
+                            constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(union));
+                        }
                     }
                 }
             } else {
-                Logging.info("Context", "Found Primitive " + decompilerInferencedDT.getName());
+                Logging.info("IntraContext", "Found Primitive " + dataType.getName());
             }
 
             // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:

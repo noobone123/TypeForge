@@ -39,7 +39,7 @@ public class FunctionNode extends NodeBase<Function> {
     public List<HighSymbol> parameters = new LinkedList<>();
     public List<HighSymbol> localVariables = new LinkedList<>();
     public List<HighSymbol> globalVariables = new LinkedList<>();
-    public Map<VariableStorage, Set<DataType>> decompilerInferredDT = new HashMap<>();
+    public Map<VariableStorage, DataType> decompilerInferredDT = new HashMap<>();
 
     public FunctionNode(Function value, int id) {
         super(value, id);
@@ -101,7 +101,7 @@ public class FunctionNode extends NodeBase<Function> {
             var dt = sym.getDataType();
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
                 candidate.add(sym);
-                decompilerInferredDT.computeIfAbsent(sym.getStorage(), k -> new HashSet<>()).add(dt);
+                decompilerInferredDT.put(sym.getStorage(), dt);
                 Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s -> %s", sym.getName(), dt.getName()));
             }
         }
@@ -256,5 +256,10 @@ public class FunctionNode extends NodeBase<Function> {
         setHighPCode();
 
         return true;
+    }
+
+
+    public DataType getDecompilerInferredDT(VariableStorage storage) {
+        return decompilerInferredDT.get(storage);
     }
 }
