@@ -293,6 +293,13 @@ public class InterContext {
             Logging.info("Context", String.format("There may exist a nested constraint in %s: offset 0x%x", expr, offsetValue));
             updateNestedConstraint(expr, constraint, offsetValue, collector.getConstraint(expr));
         }
+
+        // If the CallSite Arguments are dereference expressions, For example
+        // foo(*(a+0x10)), it's source code may be:
+        // foo(a->field)
+        if (expr.isDereference()) {
+            parseFieldAccessExpr(expr);
+        }
     }
 
     private void updateMemAccessConstraint(SymbolExpr expr, TypeConstraint parentTypeConstraint, long offsetValue, TypeConstraint constraint) {

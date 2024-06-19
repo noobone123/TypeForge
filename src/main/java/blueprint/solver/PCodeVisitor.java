@@ -13,6 +13,7 @@ import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
 import blueprint.utils.HighSymbolHelper;
 import blueprint.utils.Logging;
+import ghidra.app.util.bin.format.pe.OffsetValidator;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.*;
 
@@ -259,6 +260,7 @@ public class PCodeVisitor {
     private void handlePtrSub(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
         var base = inputs[0];
+        var offset = inputs[1];
         SymbolExpr outputExpr = null;
 
         if (base.isRegister()) {
@@ -271,8 +273,8 @@ public class PCodeVisitor {
             // 114_(unique, 0x3200, 8)[noHighSym] has no initial Facts but 133_(unique, 0x3200, 8)[local_28] has initial Facts
             if (reg.getName().equals("RSP")) {
                 // local symbol
-                if (inputs[1].getHigh().getSymbol() != null) {
-                    var sym = inputs[1].getHigh().getSymbol();
+                if (offset.getHigh().getSymbol() != null) {
+                    var sym = offset.getHigh().getSymbol();
                     outputExpr = new SymbolExpr.Builder().rootSymbol(sym).build();
                     outputExpr = SymbolExpr.reference(interCtx, outputExpr);
                 } else {
@@ -280,13 +282,29 @@ public class PCodeVisitor {
                     return;
                 }
             }
+            else {
+                Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve other base register %s", reg.getName()));
+            }
         }
-        else if (base.isConstant() && base.getOffset() == 0 && inputs[1].isConstant()) {
+        // In this case, base is a constant, which means it may be a global symbol
+        else if (base.isConstant() && base.getOffset() == 0 && offset.isConstant()) {
             // Global symbol
-            var sym = inputs[1].getHigh().getSymbol();
+            var sym = offset.getHigh().getSymbol();
             outputExpr = new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(sym), sym).build();
             outputExpr = SymbolExpr.reference(interCtx, outputExpr);
-        } else {
+        }
+        // if base is a traced varnode, means it's a fieldAccess of a structure
+        else if (intraCtx.isTracedVn(base) && offset.isConstant()) {
+            var baseExprs = intraCtx.getDataFlowFacts(base);
+            var offsetValue = getSigned(offset);
+            if (OffsetSanityCheck(offsetValue)) {
+                var offsetExpr = new SymbolExpr.Builder().constant(offsetValue).build();
+                for (var baseExpr: baseExprs) {
+                    outputExpr = add(interCtx, baseExpr, offsetExpr);
+                }
+            }
+        }
+        else {
             Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve %s", base));
             return;
         }
@@ -473,7 +491,7 @@ public class PCodeVisitor {
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
-                    // ctx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                     interCtx.addFieldExprToParse(storedValueExpr);
                 }
             }

@@ -123,7 +123,7 @@ public class Generator {
                 prefixNode = mapper2.createObjectNode();
                 root2.set(prefix, prefixNode);
             }
-            prefixNode.put(symExpr.getRepresentation(), "Constraint_" + constraint.shortUUID);
+            prefixNode.put(symExpr.toString(), "Constraint_" + constraint.shortUUID);
         });
 
         try {
