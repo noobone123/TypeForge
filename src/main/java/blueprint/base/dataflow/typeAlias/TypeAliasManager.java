@@ -56,15 +56,15 @@ public class TypeAliasManager<T> {
     }
 
     /**
-     * If a graph has no symbol expressions in the given interested set, remove it from the manager
-     * @param interested the set of symbol expressions which constraints are meaningful (possibly composite data type)
+     * If a graph has no nodes with fields, it is redundant and should be removed.
+     * @param baseToFieldsMap A map from base to its fields
      */
-    public void removeRedundantGraphs(Set<SymbolExpr> interested) {
+    public void removeRedundantGraphs(Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap) {
         Set<TypeAliasGraph<T>> toRemove = new HashSet<>();
         for (var graph: graphs) {
             boolean hasInterestedNode = false;
             for (var node: graph.getNodes()) {
-                if (node instanceof SymbolExpr expr && interested.contains(expr)) {
+                if (node instanceof SymbolExpr expr && baseToFieldsMap.containsKey(expr) && !baseToFieldsMap.get(expr).isEmpty()) {
                     hasInterestedNode = true;
                     break;
                 }

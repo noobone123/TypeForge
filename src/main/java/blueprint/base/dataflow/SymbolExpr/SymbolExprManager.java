@@ -11,33 +11,29 @@ import java.util.*;
 
 public class SymbolExprManager {
 
-    Set<SymbolExpr> allExprs;
     Map<SymbolExpr, TypeConstraint> exprToConstraint;
-    Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> fieldExprsMap;
+    Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap;
     Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
-    Map<SymbolExpr.Attribute, SymbolExpr> attributeToExpr;
+    Map<SymbolExpr.Attribute, Set<SymbolExpr>> attributeToExpr;
     InterContext interCtx;
 
     public SymbolExprManager(InterContext interCtx) {
-        allExprs = new HashSet<>();
         exprToConstraint = new HashMap<>();
-        fieldExprsMap = new HashMap<>();
+        baseToFieldsMap = new HashMap<>();
         fieldToBaseMap = new HashMap<>();
         attributeToExpr = new HashMap<>();
         this.interCtx = interCtx;
     }
 
-    public Set<SymbolExpr> getAllBaseExprs() {
-        return fieldExprsMap.keySet();
-    }
-
-    public TreeMap<Long, Set<SymbolExpr>> getFieldInfo(SymbolExpr base) {
-        return fieldExprsMap.get(base);
-    }
-
+    /**
+     * Get the fieldAccess Expressions by given baseExpression and offset value
+     * @param base the base expression
+     * @param offset the offset value
+     * @return the fieldAccess Expressions
+     */
     public Optional<Set<SymbolExpr>> getFieldExprsByOffset(SymbolExpr base, long offset) {
-        if (fieldExprsMap.containsKey(base)) {
-            return Optional.ofNullable(fieldExprsMap.get(base).get(offset));
+        if (baseToFieldsMap.containsKey(base)) {
+            return Optional.ofNullable(baseToFieldsMap.get(base).get(offset));
         } else {
             return Optional.empty();
         }
@@ -50,7 +46,7 @@ public class SymbolExprManager {
         // fieldExprsMap's Value is a Set, because there may be multiple fieldsAccessExpr
         // For example:
         // a: { 0x8: [ *(a + 0x8), *(a + b * 0x10 + 0x8) ] }
-        fieldExprsMap.computeIfAbsent(base, k -> new TreeMap<>()).computeIfAbsent(offset, k -> new HashSet<>()).add(field);
+        baseToFieldsMap.computeIfAbsent(base, k -> new TreeMap<>()).computeIfAbsent(offset, k -> new HashSet<>()).add(field);
         fieldToBaseMap.put(field, base);
     }
 
@@ -61,7 +57,11 @@ public class SymbolExprManager {
      */
     public void addExprAttribute(SymbolExpr expr, SymbolExpr.Attribute attr) {
         expr.addAttribute(attr);
-        attributeToExpr.put(attr, expr);
+        attributeToExpr.computeIfAbsent(attr, k -> new HashSet<>()).add(expr);
+    }
+
+    public Set<SymbolExpr> getExprsByAttribute(SymbolExpr.Attribute attr) {
+        return attributeToExpr.getOrDefault(attr, new HashSet<>());
     }
 
     /**
@@ -100,6 +100,32 @@ public class SymbolExprManager {
             return createConstraint(expr);
         }
         return result;
+    }
+
+
+    public Map<SymbolExpr, TypeConstraint> getExprToConstraintMapCopy() {
+        return new HashMap<>(exprToConstraint);
+    }
+
+    public void updateExprToConstraintMap(Map<SymbolExpr, TypeConstraint> newMap) {
+        exprToConstraint.clear();
+        exprToConstraint.putAll(newMap);
+    }
+
+    public Map<SymbolExpr, TypeConstraint> getExprToConstraintMap() {
+        return exprToConstraint;
+    }
+
+    public Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> getBaseToFieldsMap() {
+        return baseToFieldsMap;
+    }
+
+    public Set<SymbolExpr> getAllBaseExprs() {
+        return baseToFieldsMap.keySet();
+    }
+
+    public TreeMap<Long, Set<SymbolExpr>> getFieldInfo(SymbolExpr base) {
+        return baseToFieldsMap.get(base);
     }
 
 

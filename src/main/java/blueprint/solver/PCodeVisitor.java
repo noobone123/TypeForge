@@ -515,7 +515,7 @@ public class PCodeVisitor {
             var retFacts = intraCtx.getDataFlowFacts(retVn);
             for (var retExpr : retFacts) {
                 intraCtx.setReturnExpr(retExpr);
-                interCtx.addArgOrReturnExpr(retExpr, pcodeOp, AccessPoints.AccessType.RETURN_VALUE);
+                symExprManager.addExprAttribute(retExpr, SymbolExpr.Attribute.RETURN);
                 Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
@@ -549,7 +549,6 @@ public class PCodeVisitor {
             var argFacts = intraCtx.getDataFlowFacts(argVn);
             for (var argExpr : argFacts) {
                 symExprManager.addExprAttribute(argExpr, SymbolExpr.Attribute.ARGUMENT);
-                interCtx.addArgOrReturnExpr(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
 
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(inputIdx - 1);

@@ -1,6 +1,7 @@
 package blueprint.base.dataflow.context;
 
 import blueprint.base.dataflow.AccessPoints;
+import blueprint.base.dataflow.SymbolExpr.ParsedExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
@@ -32,8 +33,6 @@ public class InterContext {
 
     public AccessPoints APs;
     public TypeAliasManager<SymbolExpr> typeAliasManager;
-    public Set<SymbolExpr> memAccessExprParseCandidates;
-    public Set<SymbolExpr> ArgOrReturnExprParseCandidates;
     public Set<SymbolExpr> fieldExprParseCandidates;
     public SymbolExprManager symExprManager;
 
@@ -44,8 +43,6 @@ public class InterContext {
         this.intraCtxMap = new HashMap<>();
         this.APs = new AccessPoints();
         this.typeAliasManager = new TypeAliasManager<>();
-        this.memAccessExprParseCandidates = new HashSet<>();
-        this.ArgOrReturnExprParseCandidates = new HashSet<>();
         this.fieldExprParseCandidates = new HashSet<>();
         this.symExprManager = new SymbolExprManager(this);
     }
@@ -62,11 +59,6 @@ public class InterContext {
     public void addFieldAccessExpr(SymbolExpr expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType) {
         fieldExprParseCandidates.add(expr);
         APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType);
-    }
-
-    public void addArgOrReturnExpr(SymbolExpr expr, PcodeOp pcodeOp, AccessPoints.AccessType accessType) {
-        ArgOrReturnExprParseCandidates.add(expr);
-        APs.addArgOrReturnAccessPoint(expr, pcodeOp, accessType);
     }
 
     public void addTypeAliasRelation(SymbolExpr from, SymbolExpr to, TypeAliasGraph.EdgeType edgeType) {
@@ -88,25 +80,18 @@ public class InterContext {
 
         handleMemoryAlias();
 
+        typeAliasManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
 
-//        removeRedundantConstraints();
-//        // merging
-//        mergeByTypeAliasGraph();
-//
-//        // Parsing all FieldAccessExpr to refine the constraint's skeleton
-//        for (var symExpr : fieldExprParseCandidates) {
-//            parseFieldAccessExpr(symExpr);
-//        }
-//        // Parsing all CallAccessExpr to add Tags for the constraint's skeleton
-//        for (var symExpr : ArgOrReturnExprParseCandidates) {
-//            parseCallAccessExpr(symExpr);
-//        }
-//
-//        // merge constraints according to memory alias
-//        mergeConstraints();
-//
-//        // Remove meaningLess constraints
-//        removeRedundantConstraints();
+        // merging constraints according to type alias graph
+        mergeByTypeAliasGraph();
+
+        handleExprWithAttributions();
+
+        // merge constraints according to memory alias
+        // mergeConstraints();
+
+        // Remove meaningLess constraints
+        removeRedundantConstraints();
 
         Logging.info("InterContext", "Collect constraints done.");
     }
@@ -138,22 +123,20 @@ public class InterContext {
 
 
     private void mergeByTypeAliasGraph() {
-        typeAliasManager.removeRedundantGraphs(collector.getAllExprs());
-
         for (var graph: typeAliasManager.getGraphs()) {
             if (graph.getNumNodes() > 1) {
                 var mayTypeAgnosticParams = graph.findMayTypeAgnosticParams();
                 if (!mayTypeAgnosticParams.isEmpty()) {
-                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, collector.copy());
+                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, symExprManager.getExprToConstraintMapCopy());
                     if (!confirmedTypeAgnositicParams.isEmpty()) {
                         Logging.info("Context", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
-                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, collector);
+                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, symExprManager.getExprToConstraintMap());
                     } else {
                         Logging.info("Context", "No confirmed type agnostic params found.");
-                        graph.mergeNodesConstraints(graph.getNodes(), collector);
+                        graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap());
                     }
                 } else {
-                    graph.mergeNodesConstraints(graph.getNodes(), collector);
+                    graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap());
                 }
             }
         }
@@ -168,18 +151,18 @@ public class InterContext {
      * However, we think these two constraints are actually the same type, so we should merge them here.
      */
     private void mergeConstraints() {
-        var workList = new LinkedList<TypeConstraint>();
-        var allConstraints = collector.getAllConstraints();
-        for (var constraint : allConstraints) {
-            if (hasMultiReferenceField(constraint)) {
-                workList.add(constraint);
-            }
-        }
-
-        while (!workList.isEmpty()) {
-            var cur = workList.poll();
-            mergeMultiReference(cur, workList);
-        }
+//        var workList = new LinkedList<TypeConstraint>();
+//        var allConstraints = collector.getAllConstraints();
+//        for (var constraint : allConstraints) {
+//            if (hasMultiReferenceField(constraint)) {
+//                workList.add(constraint);
+//            }
+//        }
+//
+//        while (!workList.isEmpty()) {
+//            var cur = workList.poll();
+//            mergeMultiReference(cur, workList);
+//        }
     }
 
 
@@ -192,7 +175,7 @@ public class InterContext {
      */
     private void removeRedundantConstraints() {
         var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
-        for (var entry : collector.getAllEntries().entrySet()) {
+        for (var entry : symExprManager.getExprToConstraintMap().entrySet()) {
             var expr = entry.getKey();
             var constraint = entry.getValue();
             if (constraint.isInterested()) {
@@ -200,11 +183,11 @@ public class InterContext {
             } else {
                 TypeConstraint.remove(constraint);
                 Logging.warn("Context", String.format("Remove not interested %s -> Constraint_%s",
-                        expr.toString(), constraint.getName()));
+                        expr.toString(), constraint.toString()));
             }
         }
 
-        collector.updateAllEntries(finalResult);
+        symExprManager.updateExprToConstraintMap(finalResult);
     }
 
 
@@ -218,92 +201,71 @@ public class InterContext {
     private void parseFieldAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
-        Logging.info("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: Constraint_%s, derefDepth: %d",
-                expr, parentTypeConstraint != null ? parentTypeConstraint.getName() : "null", derefDepth));
+        Logging.info("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: %s, derefDepth: %d",
+                expr, parentTypeConstraint != null ? parentTypeConstraint : "null", derefDepth));
 
-        SymbolExpr base = null, offset = null, index = null, scale = null;
-        long offsetValue;
+        ParsedExpr parsed = null;
         if (!expr.isDereference()) {
             Logging.error("InterContext", String.format("Current Expression %s is not a field access expression", expr));
             return;
         } else {
-            if (expr.getNestedExpr().isDereference()) {
-                base = expr.getNestedExpr();
-                offsetValue = 0L;
-            } else {
-                base = expr.getNestedExpr().getBase();
-                offset = expr.getNestedExpr().getOffset();
-                index = expr.getNestedExpr().getIndex();
-                scale = expr.getNestedExpr().getScale();
-
-                if (offset != null) {
-                    if (!offset.isConst()) {
-                        Logging.warn("InterContext", String.format("Offset is not a constant: %s, Skipping...", expr));
-                        return;
-                    } else {
-                        offsetValue = offset.getConstant();
-                    }
-                } else {
-                    offsetValue = 0L;
-                }
-            }
+            var parsedExpr = ParsedExpr.parseFieldAccessExpr(expr);
+            if (parsedExpr.isEmpty()) { return; }
+            parsed = parsedExpr.get();
         }
 
-        var baseConstraint = symExprManager.getOrCreateConstraint(base);
-        updateFieldAccessConstraint(baseConstraint, offsetValue, expr);
-        symExprManager.addFieldRelation(base, offsetValue, expr);
+        var baseConstraint = symExprManager.getOrCreateConstraint(parsed.base);
+        updateFieldAccessConstraint(baseConstraint, parsed.offsetValue, expr);
+        symExprManager.addFieldRelation(parsed.base, parsed.offsetValue, expr);
         if (parentTypeConstraint != null) {
-            updateReferenceConstraint(baseConstraint, offsetValue, parentTypeConstraint);
+            updateReferenceConstraint(baseConstraint, parsed.offsetValue, parentTypeConstraint);
         }
 
-        if (index != null && scale != null) {
-            if (scale.isNoZeroConst()) {
-                baseConstraint.setElementSize(scale.getConstant());
+        if (parsed.index != null && parsed.scale != null) {
+            if (parsed.scale.isNoZeroConst()) {
+                baseConstraint.setElementSize(parsed.scale.getConstant());
             }
         }
 
         // If base is still dereference expr, means base is a field with pointer type which points to a composite data type.
-        if (base.isDereference()) {
-            parseFieldAccessExpr(base, baseConstraint, derefDepth + 1);
+        if (parsed.base.isDereference()) {
+            parseFieldAccessExpr(parsed.base, baseConstraint, derefDepth + 1);
         }
     }
 
     /**
-     * Parse the Argument Access SymbolExpr and build the constraints for it.
-     * @param expr the Expression to parse
+     * Handle the SymbolExpressions with some special attributes. Like Argument, CodePTR, ...
      */
-    private void parseCallAccessExpr(SymbolExpr expr) {
-        if (expr == null) return;
-        Logging.info("Context", String.format("Parsing CallAccessExpr %s", expr));
-
-        var base = expr.getBase();
-        var offset = expr.getOffset();
-        // If the CallSite Arguments are Expressions like base + offset, For example
-        // foo(a+0x10, *(a+0x10)+0x10), it's source code may be:
-        // foo(&a.field, &(a->field1).field2) or foo(&a->field, ...)
-        // which means there may exist a nested constraint.
-        if (base != null && offset != null && expr.hasAttribute(SymbolExpr.Attribute.ARGUMENT) &&
-                offset.isConst() && collector.hasConstraint(base)) {
-            var constraint = collector.getConstraint(base);
-            long offsetValue = offset.getConstant();
-            Logging.info("Context", String.format("There may exist a nested constraint in %s: offset 0x%x", expr, offsetValue));
-            updateNestedConstraint(expr, constraint, offsetValue, collector.getConstraint(expr));
+    private void handleExprWithAttributions() {
+        // Handle the CallSite Arguments
+        for (var expr: symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT)) {
+            if (symExprManager.getConstraint(expr) != null && symExprManager.getConstraint(expr).isInterested()
+                    && expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
+                var base = expr.getBase();
+                var offset = expr.getOffset().getConstant();
+                var nestedConstraint = symExprManager.getConstraint(expr);
+                updateNestedConstraint(symExprManager.getConstraint(base), offset, nestedConstraint);
+                Logging.info("Context", String.format("There may exist a nested constraint in %s: offset 0x%x", expr, offset));
+            }
         }
 
-        // If the CallSite Arguments are dereference expressions, For example
-        // foo(*(a+0x10)), it's source code may be:
-        // foo(a->field)
-        if (expr.isDereference()) {
-            parseFieldAccessExpr(expr);
+        // Handle the CodePTR
+        for (var expr: symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR)) {
+            if (expr.isDereference()) {
+                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
+                if (parsed.isEmpty()) { return; }
+                var base = parsed.get().base;
+                var offset = parsed.get().offsetValue;
+                var constraint = symExprManager.getConstraint(base);
+                constraint.addFieldAttr(offset, TypeConstraint.Attribute.CODE_PTR);
+            }
         }
     }
 
-    private void updateNestedConstraint(SymbolExpr expr, TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
-        var ap = APs.getCallAccessPoints(expr);
-        updateFieldAccessConstraint(nester, offsetValue, ap);
+    private void updateNestedConstraint(TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
         nester.addNestTo(offsetValue, nestee);
-        nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
         nestee.addNestedBy(nester, offsetValue);
+        nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
     }
 
     private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, SymbolExpr fieldExpr) {
@@ -329,34 +291,34 @@ public class InterContext {
     }
 
     private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
-        for (var entry : constraint.referenceTo.entrySet()) {
-            if (entry.getValue().size() > 1) {
-                Logging.info("Context", String.format("Constraint_%s has multiple referenceTo at 0x%x", constraint.shortUUID, entry.getKey()));
-                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
-                if (!shouldMerge) {
-                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
-                    continue;
-                }
-
-                TypeConstraint newMergedConstraint = new TypeConstraint();
-                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
-                var toMerge = new HashSet<>(entry.getValue());
-                for (var ref : toMerge) {
-                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
-                    newMergedConstraint.merge(ref);
-                }
-
-                if (hasMultiReferenceField(newMergedConstraint)) {
-                    workList.add(newMergedConstraint);
-                }
-
-                // add the new merged constraint in the symExprToConstraints
-                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
-                    collector.updateConstraint(symExpr, newMergedConstraint);
-                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
-                }
-            }
-        }
+//        for (var entry : constraint.referenceTo.entrySet()) {
+//            if (entry.getValue().size() > 1) {
+//                Logging.info("Context", String.format("Constraint_%s has multiple referenceTo at 0x%x", constraint.shortUUID, entry.getKey()));
+//                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
+//                if (!shouldMerge) {
+//                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
+//                    continue;
+//                }
+//
+//                TypeConstraint newMergedConstraint = new TypeConstraint();
+//                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
+//                var toMerge = new HashSet<>(entry.getValue());
+//                for (var ref : toMerge) {
+//                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
+//                    newMergedConstraint.merge(ref);
+//                }
+//
+//                if (hasMultiReferenceField(newMergedConstraint)) {
+//                    workList.add(newMergedConstraint);
+//                }
+//
+//                // add the new merged constraint in the symExprToConstraints
+//                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
+//                    collector.updateConstraint(symExpr, newMergedConstraint);
+//                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
+//                }
+//            }
+//        }
     }
 
 

@@ -76,24 +76,15 @@ public class AccessPoints {
 
     /** Expressions in memAccessMap: (param + 1) means there is a load/store into (param + 1), loaded value can be represented as *(param + 1) */
     private final Map<SymbolExpr, Set<AP>> fieldExprToAccessMap;
-    /** Expressions in callAccessMap: (param + 1) means there is a callsite, using (param + 1) as an argument, or *(a + 1) as return value */
-    private final Map<SymbolExpr, Set<AP>> argOrReturnExprToAccessMap;
 
     public AccessPoints() {
         fieldExprToAccessMap = new HashMap<>();
-        argOrReturnExprToAccessMap = new HashMap<>();
     }
 
     public void addFieldAccessPoint(SymbolExpr symExpr, PcodeOp op, DataType type, AccessType accessType) {
         fieldExprToAccessMap.putIfAbsent(symExpr, new HashSet<>());
         fieldExprToAccessMap.get(symExpr).add(new AP(op, type, accessType));
         Logging.info("AccessPoints", String.format("Add Field Access %s for [%s] with type [%s]", accessType, symExpr, type.getName()));
-    }
-
-    public void addArgOrReturnAccessPoint(SymbolExpr symExpr, PcodeOp op, AccessType accessType) {
-        argOrReturnExprToAccessMap.putIfAbsent(symExpr, new HashSet<>());
-        argOrReturnExprToAccessMap.get(symExpr).add(new AP(op, null, accessType));
-        Logging.info("AccessPoints", String.format("Add Argument/Return Access %s for [%s]", accessType, symExpr));
     }
 
     public Set<AP> getFieldAccessPoints(SymbolExpr symExpr) {

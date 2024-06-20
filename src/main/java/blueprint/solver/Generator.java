@@ -36,22 +36,22 @@ public class Generator {
     public final Map<Function, Map<HighSymbol, TypeConstraint>> funcConstraintMap = new HashMap<>();
     public final Map<HighSymbol, TypeConstraint> globalConstraintMap = new HashMap<>();
 
-    public final Map<SymbolExpr, TypeConstraint> allConstraints;
+    public final Map<SymbolExpr, TypeConstraint> exprToConstraint;
     public final Map<HighSymbol, TypeConstraint> builtConstraints = new HashMap<>();
 
 
     public Generator(InterContext solverCtx) {
         this.solverCtx = solverCtx;
-        this.allConstraints = new HashMap<>(solverCtx.collector.getAllEntries());
+        this.exprToConstraint = new HashMap<>(solverCtx.symExprManager.getExprToConstraintMap());
         buildConstraintMap();
 
-        for (var entry: allConstraints.entrySet()) {
+        for (var entry: exprToConstraint.entrySet()) {
             buildSkeleton(entry.getKey(), entry.getValue());
         }
     }
 
     public void buildConstraintMap() {
-        for (var entry : allConstraints.entrySet()) {
+        for (var entry : exprToConstraint.entrySet()) {
             var expr = entry.getKey();
             if (expr.isVariable()) {
                 var highSym = expr.getRootHighSymbol();
@@ -105,7 +105,7 @@ public class Generator {
         File outputFile = new File(outputDir, "constraints.json");
         var mapper = new ObjectMapper();
         var root = mapper.createObjectNode();
-        allConstraints.forEach((symExpr, constraint) -> {
+        exprToConstraint.forEach((symExpr, constraint) -> {
             root.set("Constraint_" + constraint.shortUUID, constraint.getJsonObj(mapper));
         });
 
@@ -113,7 +113,7 @@ public class Generator {
         File outputFile2 = new File(outputDir, "metadata.json");
         var mapper2 = new ObjectMapper();
         var root2 = mapper2.createObjectNode();
-        allConstraints.forEach((symExpr, constraint) -> {
+        exprToConstraint.forEach((symExpr, constraint) -> {
             if (!symExpr.isVariable()) {
                 return;
             }

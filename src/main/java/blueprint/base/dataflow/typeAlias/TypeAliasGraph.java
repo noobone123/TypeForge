@@ -131,9 +131,9 @@ public class TypeAliasGraph<T> {
     }
 
 
-    public Set<T> checkTypeAgnosticParams(Set<T> candidates, ConstraintCollector collector) {
+    public Set<T> checkTypeAgnosticParams(Set<T> candidates, Map<SymbolExpr, TypeConstraint> exprToConstraint) {
         TypeAliasGraph<T> copyGraph = createCopy();
-        copyGraph.removeTypeAgnosticCallEdgesAndMerge(candidates, collector);
+        copyGraph.removeTypeAgnosticCallEdgesAndMerge(candidates, exprToConstraint);
 
         var mayTypeAgnosticParamToArgMap = new HashMap<T, Set<T>>();
         for (T dst: candidates) {
@@ -159,9 +159,9 @@ public class TypeAliasGraph<T> {
 
             Logging.info("TypeAliasGraph", "Checking type agnostic param: " + dst);
             for (int i = 0; i < srcList.size(); i++) {
-                var constraintI = collector.getConstraint((SymbolExpr)srcList.get(i));
+                var constraintI = exprToConstraint.get((SymbolExpr)srcList.get(i));
                 for (int j = i + 1; j < srcList.size(); j++) {
-                    var constraintJ = collector.getConstraint((SymbolExpr)srcList.get(j));
+                    var constraintJ = exprToConstraint.get((SymbolExpr)srcList.get(j));
                     Logging.info("TypeAliasGraph", String.format("Checking overlap between %s -> %s and %s -> %s", srcList.get(i), constraintI, srcList.get(j), constraintJ));
                     if (!constraintI.isInterested()) {
                         argNoInterestCount++;
@@ -214,7 +214,7 @@ public class TypeAliasGraph<T> {
         return typeAgnosticParams;
     }
 
-    public void removeTypeAgnosticCallEdgesAndMerge(Set<T> candidates, ConstraintCollector collector) {
+    public void removeTypeAgnosticCallEdgesAndMerge(Set<T> candidates, Map<SymbolExpr, TypeConstraint> exprToConstraint) {
         for (var dst: candidates) {
             var incomingEdges = new HashSet<>(graph.incomingEdgesOf(dst));
             for (var edge: incomingEdges) {
@@ -228,19 +228,19 @@ public class TypeAliasGraph<T> {
         var subGraphs = getConnectedComponents();
 
         for (var graph: subGraphs) {
-            mergeNodesConstraints(graph, collector);
+            mergeNodesConstraints(graph, exprToConstraint);
         }
     }
 
-    public void mergeNodesConstraints(Set<T> mergedNodes, ConstraintCollector collector) {
+    public void mergeNodesConstraints(Set<T> mergedNodes, Map<SymbolExpr, TypeConstraint> exprToConstraint) {
         var mergedConstraint = new TypeConstraint();
         for (T node: mergedNodes) {
-            TypeConstraint constraint = collector.getConstraint((SymbolExpr)node);
+            TypeConstraint constraint = exprToConstraint.get((SymbolExpr)node);
             if (constraint != null) {
-                Logging.debug("TypeAliasGraph", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", node, mergedConstraint.getName(), constraint.getName()));
                 mergedConstraint.merge(constraint);
+                Logging.debug("TypeAliasGraph", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", node, mergedConstraint.getName(), constraint.getName()));
             }
-            collector.updateConstraint((SymbolExpr)node, mergedConstraint);
+            exprToConstraint.put((SymbolExpr)node, mergedConstraint);
             Logging.debug("TypeAliasGraph", String.format("Set %s -> %s", node, mergedConstraint));
         }
     }

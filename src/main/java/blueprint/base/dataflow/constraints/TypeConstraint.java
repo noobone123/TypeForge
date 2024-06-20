@@ -17,7 +17,8 @@ public class TypeConstraint {
     public enum Attribute {
         SAME_ACCESS_ON_MULTI_OFFSETS,
         MAY_NESTED,
-        MAY_ARRAY_PTR
+        MAY_ARRAY_PTR,
+        CODE_PTR
     }
 
     /**
@@ -472,7 +473,7 @@ public class TypeConstraint {
 
         for (var ap : fields) {
             if (ap.dataType != null) {
-                endOffset = Math.max(endOffset, offset + ((PrimitiveTypeDescriptor)ap.dataType).getDataTypeSize());
+                endOffset = Math.max(endOffset, offset + ap.dataType.getLength());
             }
         }
         return endOffset;

@@ -17,6 +17,7 @@ public class SymbolExpr {
 
     public enum Attribute {
         ARGUMENT,
+        RETURN,
         ARRAY,
         STRUCT,
         UNION,
