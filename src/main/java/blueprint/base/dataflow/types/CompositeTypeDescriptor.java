@@ -2,7 +2,6 @@ package blueprint.base.dataflow.types;
 
 import ghidra.program.model.data.Array;
 import ghidra.program.model.data.Composite;
-import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.Pointer;
 
 import java.util.HashMap;
@@ -32,10 +31,10 @@ public class CompositeTypeDescriptor implements TypeDescriptor {
                         // Recursive pointer
                         fieldMap.put(fieldOffset, this);
                     } else {
-                        fieldMap.put(fieldOffset, TypeDescriptorFactory.createCompositeTypeDescriptor(com));
+                        fieldMap.put(fieldOffset, TypeDescriptorManager.createCompositeTypeDescriptor(com));
                     }
                 } else {
-                    fieldMap.put(fieldOffset, TypeDescriptorFactory.createPrimitiveTypeDescriptor(ptreeDT));
+                    fieldMap.put(fieldOffset, TypeDescriptorManager.createPrimitiveTypeDescriptor(ptreeDT));
                 }
             }
             else if (fieldType instanceof Composite com) {
@@ -44,16 +43,16 @@ public class CompositeTypeDescriptor implements TypeDescriptor {
                     // Recursive composite
                     fieldMap.put(fieldOffset, this);
                 } else {
-                    fieldMap.put(fieldOffset, TypeDescriptorFactory.createCompositeTypeDescriptor(com));
+                    fieldMap.put(fieldOffset, TypeDescriptorManager.createCompositeTypeDescriptor(com));
                 }
             }
             else if (fieldType instanceof Array array) {
                 fieldPtrLevelMap.put(fieldOffset, 0);
-                fieldMap.put(fieldOffset, TypeDescriptorFactory.createArrayTypeDescriptor(array));
+                fieldMap.put(fieldOffset, TypeDescriptorManager.createArrayTypeDescriptor(array));
             }
             else {
                 fieldPtrLevelMap.put(fieldOffset, 0);
-                fieldMap.put(fieldOffset, TypeDescriptorFactory.createPrimitiveTypeDescriptor(fieldType));
+                fieldMap.put(fieldOffset, TypeDescriptorManager.createPrimitiveTypeDescriptor(fieldType));
             }
         }
     }

@@ -1,6 +1,6 @@
 package blueprint.base.dataflow.constraints;
 
-import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.utils.Logging;
 
 import java.util.HashMap;
@@ -15,6 +15,7 @@ public class ConstraintCollector {
         this.exprToConstraint = new HashMap<>();
     }
 
+    // TODO: getConstraint and createConstraint should split into two functions ?
     public TypeConstraint getConstraint(SymbolExpr expr) {
         TypeConstraint constraint;
         if (exprToConstraint.containsKey(expr)) {

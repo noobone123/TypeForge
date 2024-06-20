@@ -1,0 +1,287 @@
+package blueprint.base.dataflow.SymbolExpr;
+
+import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.context.InterContext;
+import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
+import blueprint.utils.Logging;
+import ghidra.program.model.address.Address;
+import ghidra.program.model.pcode.HighSymbol;
+
+import java.util.*;
+
+public class SymbolExprManager {
+
+    Set<SymbolExpr> allExprs;
+    Map<SymbolExpr, TypeConstraint> exprToConstraint;
+    Map<SymbolExpr, TreeMap<Long, SymbolExpr>> fieldExprMap;
+    Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
+    InterContext interCtx;
+
+    public SymbolExprManager(InterContext interCtx) {
+        allExprs = new HashSet<>();
+        exprToConstraint = new HashMap<>();
+        fieldExprMap = new HashMap<>();
+        fieldToBaseMap = new HashMap<>();
+        this.interCtx = interCtx;
+    }
+
+    /**
+     * Create a TypeConstraint for the given expression
+     * @param expr the expression to create constraint for
+     */
+    public TypeConstraint createConstraint(SymbolExpr expr) {
+        TypeConstraint constraint = new TypeConstraint();
+        exprToConstraint.put(expr, constraint);
+        Logging.debug("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
+        return constraint;
+    }
+
+    /**
+     * Get the TypeConstraint for the given expression
+     * @param expr the expression to get constraint for
+     * @return the TypeConstraint for the given expression
+     */
+    public TypeConstraint getConstraint(SymbolExpr expr) {
+        if (exprToConstraint.containsKey(expr)) {
+            Logging.debug("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr.getRepresentation(), exprToConstraint.get(expr)));
+            return exprToConstraint.get(expr);
+        } else {
+            Logging.debug("SymbolExprManager", String.format("No TypeConstraint found for %s", expr.getRepresentation()));
+            return null;
+        }
+    }
+
+    /**
+     * Get or create a TypeConstraint for the given expression
+     * @return the TypeConstraint for the given expression
+     */
+    public TypeConstraint getOrCreateConstraint(SymbolExpr expr) {
+        var result = getConstraint(expr);
+        if (result == null) {
+            return createConstraint(expr);
+        }
+        return result;
+    }
+
+
+    /**
+     * Add operation on two SymbolExpr
+     * @return the result of the add operation
+     */
+    public SymbolExpr add(SymbolExpr a, SymbolExpr b) {
+        if (a.hasIndexScale() && b.hasIndexScale()) {
+            Logging.error("SymbolExprManager", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
+        }
+
+        // ensure that the constant value is always on the right side of the expression
+        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
+            return add(b, a);
+        }
+        // ensure that the index * scale is always on the right side of base
+        if (a.hasIndexScale() && !a.hasBase()) {
+            if (!b.isConst()) {
+                return add(b, a);
+            }
+        }
+
+        Builder builder = new Builder();
+        if (a.isConst() && b.isConst()) {
+            builder.constant(a.constant + b.constant);
+        }
+        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
+            if (b.hasIndexScale()) {
+                // Set `base + index * scale` and `base` type alias
+                interCtx.addTypeAliasRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeAliasGraph.EdgeType.INDIRECT);
+                builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
+                a.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
+            } else {
+                builder.base(a).offset(b);
+            }
+        }
+        else if (!a.hasBase() && a.hasIndexScale()) {
+            if (a.hasOffset()) {
+                builder.index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
+            } else {
+                builder.index(a.indexExpr).scale(a.scaleExpr).offset(b);
+            }
+        }
+
+        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
+            builder.base(a.baseExpr).offset(add(a.offsetExpr, b));
+        }
+        else if (a.hasBase() && a.hasIndexScale()) {
+            if (a.hasOffset()) {
+                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
+            } else {
+                builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(b);
+                a.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
+            }
+        }
+        else {
+            Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
+        }
+        return builder.build();
+    }
+
+    /**
+     * Multiply operation on two SymbolExpr
+     * @return the result of the multiply operation
+     */
+    public SymbolExpr multiply(SymbolExpr a, SymbolExpr b) {
+        if (!a.isConst() && !b.isConst) {
+            Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
+        }
+
+        // ensure that the constant value is always on the right side of the expression
+        if (a.isNoZeroConst() && !b.isNoZeroConst()) {
+            return multiply(b, a);
+        }
+
+        Builder builder = new Builder();
+        if (a.isConst() && b.isConst()) {
+            builder.constant(a.constant * b.constant);
+        }
+        else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
+            builder.index(a).scale(b);
+        }
+        else if (!a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
+            builder.index(a.indexExpr).scale(multiply(a.scaleExpr, b));
+        }
+        else if (a.hasBase() && a.hasOffset() && !a.hasIndexScale()) {
+            builder.index(a).scale(b);
+        }
+        else {
+            Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            return null;
+        }
+
+        return builder.build();
+    }
+
+    /**
+     * Dereference operation on a SymbolExpr
+     * @return the result of the dereference operation
+     */
+    public SymbolExpr dereference(SymbolExpr a) {
+        if (a.isNoZeroConst()) {
+            throw new IllegalArgumentException("Cannot dereference a constant value.");
+        }
+        var newExpr = new Builder().dereference(a).build();
+        if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
+            interCtx.addTypeAliasRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeAliasGraph.EdgeType.INDIRECT);
+        }
+        return newExpr;
+    }
+
+    /**
+     * Reference operation on a SymbolExpr
+     * @return the result of the reference operation
+     */
+    public SymbolExpr reference(SymbolExpr a) {
+        if (a.isNoZeroConst()) {
+            throw new IllegalArgumentException("Cannot reference a constant value.");
+        }
+        return new Builder().reference(a).build();
+    }
+
+
+    /**
+     * Builder Pattern for creating SymbolExpr
+     */
+    public static class Builder {
+        private static final Map<Integer, SymbolExpr> builderCache = new HashMap<>();
+        public SymbolExpr baseExpr = null;
+        public SymbolExpr indexExpr = null;
+        public SymbolExpr scaleExpr = null;
+        public SymbolExpr offsetExpr = null;
+        public HighSymbol rootSym = null;
+        public long constant = 0;
+        public boolean dereference = false;
+        public boolean reference = false;
+        public SymbolExpr nestedExpr = null;
+        public boolean isConst = false;
+        public boolean isGlobal = false;
+        public Address globalAddr = null;
+
+        public Builder base(SymbolExpr base) {
+            this.baseExpr = base;
+            return this;
+        }
+
+        public Builder index(SymbolExpr index) {
+            this.indexExpr = index;
+            return this;
+        }
+
+        public Builder scale(SymbolExpr scale) {
+            this.scaleExpr = scale;
+            return this;
+        }
+
+        public Builder offset(SymbolExpr offset) {
+            this.offsetExpr = offset;
+            return this;
+        }
+
+        public Builder rootSymbol(HighSymbol symbol) {
+            this.rootSym = symbol;
+            return this;
+        }
+
+        public Builder constant(long constant) {
+            this.isConst = true;
+            this.constant = constant;
+            return this;
+        }
+
+        public Builder dereference(SymbolExpr nested) {
+            this.dereference = true;
+            this.nestedExpr = nested;
+            this.isGlobal = nested.isGlobal;
+            this.globalAddr = nested.globalAddr;
+            return this;
+        }
+
+        public Builder reference(SymbolExpr nested) {
+            this.reference = true;
+            this.nestedExpr = nested;
+            this.isGlobal = nested.isGlobal;
+            this.globalAddr = nested.globalAddr;
+            return this;
+        }
+
+        public Builder global(Address globalAddr, HighSymbol symbol) {
+            this.isGlobal = true;
+            this.globalAddr = globalAddr;
+            this.rootSymbol(symbol);
+            return this;
+        }
+
+        public SymbolExpr build() {
+            if ((indexExpr != null && scaleExpr == null) || (indexExpr == null && scaleExpr != null)) {
+                throw new IllegalArgumentException("indexExpr and scaleExpr must either both be null or both be non-null.");
+            }
+
+            int hash;
+            if (isGlobal) {
+                hash = Objects.hash(globalAddr, reference);
+            } else {
+                hash = Objects.hash(baseExpr, indexExpr, scaleExpr,
+                        offsetExpr, rootSym, constant,
+                        dereference, reference, nestedExpr,
+                        isConst);
+            }
+
+            if (builderCache.containsKey(hash)) {
+                return builderCache.get(hash);
+            }
+
+            SymbolExpr expr = new SymbolExpr(this);
+            builderCache.put(hash, expr);
+            return expr;
+        }
+    }
+}

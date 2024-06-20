@@ -1,6 +1,7 @@
 package blueprint.base.dataflow.context;
 
 import blueprint.base.dataflow.AccessPoints;
+import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.ConstraintCollector;
 import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
@@ -10,7 +11,7 @@ import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
-import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 
 
 import java.util.*;
@@ -33,7 +34,7 @@ public class InterContext {
     public Set<SymbolExpr> memAccessExprParseCandidates;
     public Set<SymbolExpr> callAccessExprParseCandidates;
     public Set<SymbolExpr> fieldExprParseCandidates;
-    public ConstraintCollector collector;
+    public SymbolExprManager symExprManager;
 
     public InterContext(CallGraph cg) {
         this.callGraph = cg;
@@ -45,11 +46,11 @@ public class InterContext {
         this.memAccessExprParseCandidates = new HashSet<>();
         this.callAccessExprParseCandidates = new HashSet<>();
         this.fieldExprParseCandidates = new HashSet<>();
-        this.collector = new ConstraintCollector();
+        this.symExprManager = new SymbolExprManager(this);
     }
 
     public void createIntraContext(FunctionNode funcNode) {
-        IntraContext intraCtx = new IntraContext(funcNode, collector);
+        IntraContext intraCtx = new IntraContext(funcNode, symExprManager);
         intraCtxMap.put(funcNode, intraCtx);
     }
 

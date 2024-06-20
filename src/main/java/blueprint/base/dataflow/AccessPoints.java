@@ -1,5 +1,6 @@
 package blueprint.base.dataflow;
 
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.types.TypeDescriptor;
 import blueprint.utils.Logging;
 import ghidra.program.model.pcode.PcodeOp;
@@ -101,20 +102,6 @@ public class AccessPoints {
 
     public Set<AP> getCallAccessPoints(SymbolExpr symExpr) {
         return callAccessMap.get(symExpr);
-    }
-
-    public Set<SymbolExpr> getAllMemAccessExprs() {
-        return memoryAccessMap.keySet();
-    }
-
-    public Set<SymbolExpr> getAllCallAccessExprs() {
-        return callAccessMap.keySet();
-    }
-
-    public Set<SymbolExpr> getAllAccessExprs() {
-        Set<SymbolExpr> allAccessExprs = new HashSet<>(memoryAccessMap.keySet());
-        allAccessExprs.addAll(callAccessMap.keySet());
-        return allAccessExprs;
     }
 }
 

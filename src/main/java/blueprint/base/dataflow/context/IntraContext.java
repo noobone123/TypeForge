@@ -1,10 +1,11 @@
 package blueprint.base.dataflow.context;
 
 import blueprint.base.dataflow.KSet;
-import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.ConstraintCollector;
 import blueprint.base.dataflow.constraints.TypeConstraint;
-import blueprint.base.dataflow.types.TypeDescriptorFactory;
+import blueprint.base.dataflow.types.TypeDescriptorManager;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.HighSymbolHelper;
@@ -34,16 +35,16 @@ public class IntraContext {
     public HashSet<SymbolExpr> returnExprs;
     public int dataFlowFactKSize = 10;
     public Map<PcodeOp, FunctionNode> callsites;
-    public ConstraintCollector collector;
+    public SymbolExprManager symbolExprManager;
 
-    public IntraContext(FunctionNode funcNode, ConstraintCollector collector) {
+    public IntraContext(FunctionNode funcNode, SymbolExprManager symbolExprManager) {
         this.funcNode = funcNode;
         this.tracedSymbols = new HashSet<>();
         this.tracedVarnodes = new HashSet<>();
         this.dataFlowFacts = new HashMap<>();
         this.returnExprs = new HashSet<>();
         this.callsites = new HashMap<>();
-        this.collector = collector;
+        this.symbolExprManager = symbolExprManager;
     }
 
     public void setReturnExpr(SymbolExpr expr) {
@@ -116,32 +117,31 @@ public class IntraContext {
 
             // Create the SymbolExpr and Constraint for the HighSymbol
             if (symbol.isGlobal()) {
-                expr = new SymbolExpr.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
+                expr = new SymbolExprManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
                 expr.addAttribute(SymbolExpr.Attribute.GLOBAL);
-                constraint = collector.getConstraint(expr);
             } else {
-                expr = new SymbolExpr.Builder().rootSymbol(symbol).build();
-                constraint = collector.getConstraint(expr);
+                expr = new SymbolExprManager.Builder().rootSymbol(symbol).build();
             }
+            constraint = symbolExprManager.createConstraint(expr);
 
             if (DataTypeHelper.isCompositeOrArray(dataType)) {
                 if (dataType instanceof Array array) {
                     Logging.info("IntraContext", "Found Array " + dataType.getName());
                     expr.addAttribute(SymbolExpr.Attribute.ARRAY);
                     expr.setVariableSize(array.getLength());
-                    constraint.addPolymorphicType(TypeDescriptorFactory.createArrayTypeDescriptor(array));
+                    constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                 }
                 else if (dataType instanceof Structure structure) {
                     Logging.info("IntraContext", "Found Structure " + dataType.getName());
                     expr.addAttribute(SymbolExpr.Attribute.STRUCT);
                     expr.setVariableSize(structure.getLength());
-                    constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(structure));
+                    constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                 }
                 else if (dataType instanceof Union union) {
                     Logging.info("IntraContext", "Found Union " + dataType.getName());
                     expr.addAttribute(SymbolExpr.Attribute.UNION);
                     expr.setVariableSize(union.getLength());
-                    constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(union));
+                    constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                 }
             } else if (dataType instanceof Pointer) {
                 var decompilerInferredDT = funcNode.getDecompilerInferredDT(symbol.getStorage());
@@ -150,11 +150,11 @@ public class IntraContext {
                         Logging.info("IntraContext", "Found Pointer " + ptrDT.getName());
                         expr.addAttribute(SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
                         if (ptrDT.getDataType() instanceof Array array) {
-                            constraint.addPolymorphicType(TypeDescriptorFactory.createArrayTypeDescriptor(array));
+                            constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                         } else if (ptrDT.getDataType() instanceof Structure structure) {
-                            constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(structure));
+                            constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                         } else if (ptrDT.getDataType() instanceof Union union) {
-                            constraint.addPolymorphicType(TypeDescriptorFactory.createCompositeTypeDescriptor(union));
+                            constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                         }
                     }
                 }

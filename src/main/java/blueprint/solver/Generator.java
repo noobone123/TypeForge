@@ -1,6 +1,6 @@
 package blueprint.solver;
 
-import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.context.InterContext;
 import blueprint.utils.Logging;

@@ -1,7 +1,7 @@
 package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
-import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.types.TypeDescriptor;
 import blueprint.utils.Logging;

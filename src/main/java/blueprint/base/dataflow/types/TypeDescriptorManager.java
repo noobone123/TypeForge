@@ -4,7 +4,7 @@ import ghidra.program.model.data.Array;
 import ghidra.program.model.data.Composite;
 import ghidra.program.model.data.DataType;
 
-public class TypeDescriptorFactory {
+public class TypeDescriptorManager {
 
     public static TypeDescriptor createPrimitiveTypeDescriptor(DataType type) {
         return new PrimitiveTypeDescriptor(type);

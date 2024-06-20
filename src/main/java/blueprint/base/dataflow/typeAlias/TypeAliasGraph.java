@@ -1,6 +1,6 @@
 package blueprint.base.dataflow.typeAlias;
 
-import blueprint.base.dataflow.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.constraints.ConstraintCollector;
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
