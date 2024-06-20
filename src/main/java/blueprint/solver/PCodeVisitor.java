@@ -6,8 +6,6 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.context.InterContext;
 import blueprint.base.dataflow.context.IntraContext;
-import blueprint.base.dataflow.types.DummyType;
-import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
@@ -445,14 +443,11 @@ public class PCodeVisitor {
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
         var leftValueExprs = intraCtx.getDataFlowFacts(output);
-        var primitiveType = new PrimitiveTypeDescriptor(outDT);
-
         var loadAddrExprs = intraCtx.getDataFlowFacts(input);
         for (var loadAddrExpr : loadAddrExprs) {
             var loadedValueExpr = symExprManager.dereference(loadAddrExpr);
 
-            interCtx.getAccessPoints().addMemAccessPoint(loadAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.LOAD);
-            interCtx.addMemExprToParse(loadAddrExpr);
+            interCtx.addFieldAccessExpr(loadedValueExpr, pcodeOp, outDT, AccessPoints.AccessType.LOAD);
 
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
@@ -460,7 +455,6 @@ public class PCodeVisitor {
                 Logging.debug("PCodeVisitor", "Loaded varnode has already held symbolExpr, set type alias ...");
                 for (var leftValueExpr : leftValueExprs) {
                     interCtx.addTypeAliasRelation(loadedValueExpr, leftValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
-                    interCtx.addFieldExprToParse(loadedValueExpr);
                 }
             }
 
@@ -484,17 +478,14 @@ public class PCodeVisitor {
 
         var rightValueExprs = intraCtx.getDataFlowFacts(rightValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
-        var primitiveType = new PrimitiveTypeDescriptor(storedValueDT);
 
         for (var storedAddrExpr : intraCtx.getDataFlowFacts(storedAddrVn)) {
             var storedValueExpr = symExprManager.dereference(storedAddrExpr);
-            interCtx.getAccessPoints().addMemAccessPoint(storedAddrExpr, pcodeOp, primitiveType, AccessPoints.AccessType.STORE);
-            interCtx.addMemExprToParse(storedAddrExpr);
+            interCtx.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE);
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
                     interCtx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
-                    interCtx.addFieldExprToParse(storedValueExpr);
                 }
             }
         }
@@ -509,10 +500,7 @@ public class PCodeVisitor {
 
         var indirectCallFacts = intraCtx.getDataFlowFacts(indirectCallVn);
         for (var symExpr : indirectCallFacts) {
-            if (symExpr.isDereference()) {
-                interCtx.getAccessPoints().addMemAccessPoint(symExpr.getNestedExpr(), pcodeOp, new DummyType("CodePtr"), AccessPoints.AccessType.INDIRECT);
-                interCtx.addMemExprToParse(symExpr.getNestedExpr());
-            }
+            symExprManager.addExprAttribute(symExpr, SymbolExpr.Attribute.CODE_PTR);
         }
     }
 
@@ -526,9 +514,8 @@ public class PCodeVisitor {
 
             var retFacts = intraCtx.getDataFlowFacts(retVn);
             for (var retExpr : retFacts) {
-                interCtx.intraCtxMap.get(funcNode).setReturnExpr(retExpr);
-                interCtx.getAccessPoints().addCallAccessPoint(retExpr, pcodeOp, AccessPoints.AccessType.RETURN_VALUE);
-                interCtx.addCallExprToParse(retExpr);
+                intraCtx.setReturnExpr(retExpr);
+                interCtx.addArgOrReturnExpr(retExpr, pcodeOp, AccessPoints.AccessType.RETURN_VALUE);
                 Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
@@ -561,9 +548,8 @@ public class PCodeVisitor {
 
             var argFacts = intraCtx.getDataFlowFacts(argVn);
             for (var argExpr : argFacts) {
-                argExpr.addAttribute(SymbolExpr.Attribute.ARGUMENT);
-                interCtx.getAccessPoints().addCallAccessPoint(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
-                interCtx.addCallExprToParse(argExpr);
+                symExprManager.addExprAttribute(argExpr, SymbolExpr.Attribute.ARGUMENT);
+                interCtx.addArgOrReturnExpr(argExpr, pcodeOp, AccessPoints.AccessType.ARGUMENT);
 
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(inputIdx - 1);

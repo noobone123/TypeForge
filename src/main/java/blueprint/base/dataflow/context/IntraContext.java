@@ -3,7 +3,6 @@ package blueprint.base.dataflow.context;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
-import blueprint.base.dataflow.constraints.ConstraintCollector;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.types.TypeDescriptorManager;
 import blueprint.base.node.FunctionNode;
@@ -118,7 +117,7 @@ public class IntraContext {
             // Create the SymbolExpr and Constraint for the HighSymbol
             if (symbol.isGlobal()) {
                 expr = new SymbolExprManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
-                expr.addAttribute(SymbolExpr.Attribute.GLOBAL);
+                symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.GLOBAL);
             } else {
                 expr = new SymbolExprManager.Builder().rootSymbol(symbol).build();
             }
@@ -127,19 +126,19 @@ public class IntraContext {
             if (DataTypeHelper.isCompositeOrArray(dataType)) {
                 if (dataType instanceof Array array) {
                     Logging.info("IntraContext", "Found Array " + dataType.getName());
-                    expr.addAttribute(SymbolExpr.Attribute.ARRAY);
+                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.ARRAY);
                     expr.setVariableSize(array.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                 }
                 else if (dataType instanceof Structure structure) {
                     Logging.info("IntraContext", "Found Structure " + dataType.getName());
-                    expr.addAttribute(SymbolExpr.Attribute.STRUCT);
+                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.STRUCT);
                     expr.setVariableSize(structure.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                 }
                 else if (dataType instanceof Union union) {
                     Logging.info("IntraContext", "Found Union " + dataType.getName());
-                    expr.addAttribute(SymbolExpr.Attribute.UNION);
+                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.UNION);
                     expr.setVariableSize(union.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                 }
@@ -148,7 +147,7 @@ public class IntraContext {
                 if (decompilerInferredDT instanceof Pointer ptrDT) {
                     if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
                         Logging.info("IntraContext", "Found Pointer " + ptrDT.getName());
-                        expr.addAttribute(SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
+                        symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
                         if (ptrDT.getDataType() instanceof Array array) {
                             constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                         } else if (ptrDT.getDataType() instanceof Structure structure) {

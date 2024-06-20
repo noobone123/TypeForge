@@ -19,7 +19,8 @@ public class TypeAliasGraph<T> {
         RETURN,
         DATAFLOW,
         REFERENCE,
-        INDIRECT
+        INDIRECT,
+        MEMALIAS,
     }
 
     public static class TypeAliasEdge extends DefaultEdge {

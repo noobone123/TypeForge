@@ -2,7 +2,6 @@ package blueprint.base.dataflow.context;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
-import blueprint.base.dataflow.constraints.ConstraintCollector;
 import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
@@ -12,6 +11,8 @@ import blueprint.base.node.FunctionNode;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import ghidra.program.model.data.DataType;
+import ghidra.program.model.pcode.PcodeOp;
 
 
 import java.util.*;
@@ -32,7 +33,7 @@ public class InterContext {
     public AccessPoints APs;
     public TypeAliasManager<SymbolExpr> typeAliasManager;
     public Set<SymbolExpr> memAccessExprParseCandidates;
-    public Set<SymbolExpr> callAccessExprParseCandidates;
+    public Set<SymbolExpr> ArgOrReturnExprParseCandidates;
     public Set<SymbolExpr> fieldExprParseCandidates;
     public SymbolExprManager symExprManager;
 
@@ -44,7 +45,7 @@ public class InterContext {
         this.APs = new AccessPoints();
         this.typeAliasManager = new TypeAliasManager<>();
         this.memAccessExprParseCandidates = new HashSet<>();
-        this.callAccessExprParseCandidates = new HashSet<>();
+        this.ArgOrReturnExprParseCandidates = new HashSet<>();
         this.fieldExprParseCandidates = new HashSet<>();
         this.symExprManager = new SymbolExprManager(this);
     }
@@ -58,19 +59,14 @@ public class InterContext {
         return intraCtxMap.get(funcNode);
     }
 
-    public void addMemExprToParse(SymbolExpr expr) {
-        Logging.info("Context", "Add MemExpr to parse: " + expr.toString());
-        memAccessExprParseCandidates.add(expr);
-    }
-
-    public void addCallExprToParse(SymbolExpr expr) {
-        Logging.info("Context", "Add CallExpr to parse: " + expr.toString());
-        callAccessExprParseCandidates.add(expr);
-    }
-
-    public void addFieldExprToParse(SymbolExpr expr) {
-        Logging.info("Context", "Add FieldExpr to parse: " + expr.toString());
+    public void addFieldAccessExpr(SymbolExpr expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType) {
         fieldExprParseCandidates.add(expr);
+        APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType);
+    }
+
+    public void addArgOrReturnExpr(SymbolExpr expr, PcodeOp pcodeOp, AccessPoints.AccessType accessType) {
+        ArgOrReturnExprParseCandidates.add(expr);
+        APs.addArgOrReturnAccessPoint(expr, pcodeOp, accessType);
     }
 
     public void addTypeAliasRelation(SymbolExpr from, SymbolExpr to, TypeAliasGraph.EdgeType edgeType) {
@@ -85,30 +81,59 @@ public class InterContext {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void collectConstraints() {
-        // Parsing all MemAccessExpr first to build the constraint's skeleton
-        for (var symExpr : memAccessExprParseCandidates) {
-            parseMemAccessExpr(symExpr, null, 0);
-        }
-        removeRedundantConstraints();
-        // merging
-        mergeByTypeAliasGraph();
-
-        // Parsing all FieldAccessExpr to refine the constraint's skeleton
+        // Parsing all fieldAccess Expressions first to build the constraint's skeleton
         for (var symExpr : fieldExprParseCandidates) {
-            parseFieldAccessExpr(symExpr);
-        }
-        // Parsing all CallAccessExpr to add Tags for the constraint's skeleton
-        for (var symExpr : callAccessExprParseCandidates) {
-            parseCallAccessExpr(symExpr);
+            parseFieldAccessExpr(symExpr, null, 0);
         }
 
-        // merge constraints according to memory alias
-        mergeConstraints();
+        handleMemoryAlias();
 
-        // Remove meaningLess constraints
-        removeRedundantConstraints();
 
-        Logging.info("Context", "Collect constraints done.");
+//        removeRedundantConstraints();
+//        // merging
+//        mergeByTypeAliasGraph();
+//
+//        // Parsing all FieldAccessExpr to refine the constraint's skeleton
+//        for (var symExpr : fieldExprParseCandidates) {
+//            parseFieldAccessExpr(symExpr);
+//        }
+//        // Parsing all CallAccessExpr to add Tags for the constraint's skeleton
+//        for (var symExpr : ArgOrReturnExprParseCandidates) {
+//            parseCallAccessExpr(symExpr);
+//        }
+//
+//        // merge constraints according to memory alias
+//        mergeConstraints();
+//
+//        // Remove meaningLess constraints
+//        removeRedundantConstraints();
+
+        Logging.info("InterContext", "Collect constraints done.");
+    }
+
+    /**
+     * Current memory alias graph is not complete, it only contains the alias relationship with explicit data-flow relations.
+     * And alias relations introduced by memory alias is not handled yet.
+     * For example: if `a` and `b` is alias, then `*(a + 0x10)` and `*(b + 0x10)` should be alias too.
+     * In this method, we consider fields as type alias only if their bases are alias and offsets are the same.
+     */
+    // TODO: using workList algorithm to make type alias graph reach a fixed point, currently we only consider 1-layer memory alias.
+    private void handleMemoryAlias() {
+        var allBaseExprs = symExprManager.getAllBaseExprs();
+        for (var baseExpr: allBaseExprs) {
+            var fieldExprs = symExprManager.getFieldInfo(baseExpr);
+            for (var fieldInfo: fieldExprs.entrySet()) {
+                var offset = fieldInfo.getKey();
+                var fieldAccessExprs = fieldInfo.getValue();
+                var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset);
+                for (var otherFieldExpr: otherFieldExprsWithSameOffset) {
+                    for (var fieldAccessExpr: fieldAccessExprs) {
+                        addTypeAliasRelation(fieldAccessExpr, otherFieldExpr, TypeAliasGraph.EdgeType.MEMALIAS);
+                        Logging.debug("InterContext", String.format("Add memory alias relation between %s and %s", fieldAccessExpr, otherFieldExpr));
+                    }
+                }
+            }
+        }
     }
 
 
@@ -184,92 +209,62 @@ public class InterContext {
 
 
     /**
-     * Parse the Memory Access SymbolExpr and build the constraints for it.
-     * For example: if there is a MemAccessExpr: *(a+0x8)=b, the MemAccessExpr is a+0x8
+     * Parse the Field Access SymbolExpr and build the constraints for it.
+     * For example: if there is a statement: *(a + 0x8) = b, the FieldAccess Expression is *(a + 0x8)
      * @param expr the Expression to parse
      * @param parentTypeConstraint if the expr is a recursive dereference, the parentTypeConstraint is the constraint of the parent expr
      * @param derefDepth the dereference depth of the expr
      */
-    private void parseMemAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
+    private void parseFieldAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
-        Logging.info("Context", String.format("Parsing MemAccessExpr %s, parentTypeConstraint: Constraint_%s, derefDepth: %d", expr, parentTypeConstraint != null ? parentTypeConstraint.getName() : "null", derefDepth));
+        Logging.info("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: Constraint_%s, derefDepth: %d",
+                expr, parentTypeConstraint != null ? parentTypeConstraint.getName() : "null", derefDepth));
 
-        var base = expr.getBase();
-        var offset = expr.getOffset();
-        var index = expr.getIndex();
-        var scale = expr.getScale();
-        long offsetValue = 0;
+        SymbolExpr base = null, offset = null, index = null, scale = null;
+        long offsetValue;
+        if (!expr.isDereference()) {
+            Logging.error("InterContext", String.format("Current Expression %s is not a field access expression", expr));
+            return;
+        } else {
+            if (expr.getNestedExpr().isDereference()) {
+                base = expr.getNestedExpr();
+                offsetValue = 0L;
+            } else {
+                base = expr.getNestedExpr().getBase();
+                offset = expr.getNestedExpr().getOffset();
+                index = expr.getNestedExpr().getIndex();
+                scale = expr.getNestedExpr().getScale();
 
-        // case: a or *(expr)
-        if (expr.isRootSymExpr() || expr.isDereference()) {
-            var constraint = collector.getConstraint(expr);
-
-            updateMemAccessConstraint(expr, parentTypeConstraint, offsetValue, constraint);
-
-            if (expr.isDereference()) {
-                parseMemAccessExpr(expr.getNestedExpr(), constraint, derefDepth + 1);
-            }
-        }
-
-        else if (base != null) {
-            var constraint = collector.getConstraint(base);
-
-            if (expr.hasOffset() && offset.isConst()) {
-                offsetValue = offset.getConstant();
-            }
-            else if (expr.hasOffset() && !offset.isConst()) {
-                Logging.warn("Context", String.format("Offset is not a constant: %s, Skipping...", expr));
-                return;
-            }
-
-            updateMemAccessConstraint(expr, parentTypeConstraint, offsetValue, constraint);
-
-            if (index != null && scale != null) {
-                if (scale.isNoZeroConst()) {
-                    constraint.setElementSize(scale.getConstant());
+                if (offset != null) {
+                    if (!offset.isConst()) {
+                        Logging.warn("InterContext", String.format("Offset is not a constant: %s, Skipping...", expr));
+                        return;
+                    } else {
+                        offsetValue = offset.getConstant();
+                    }
+                } else {
+                    offsetValue = 0L;
                 }
             }
-            if (base.isDereference()) {
-                parseMemAccessExpr(base.getNestedExpr(), constraint, derefDepth + 1);
+        }
+
+        var baseConstraint = symExprManager.getOrCreateConstraint(base);
+        updateFieldAccessConstraint(baseConstraint, offsetValue, expr);
+        symExprManager.addFieldRelation(base, offsetValue, expr);
+        if (parentTypeConstraint != null) {
+            updateReferenceConstraint(baseConstraint, offsetValue, parentTypeConstraint);
+        }
+
+        if (index != null && scale != null) {
+            if (scale.isNoZeroConst()) {
+                baseConstraint.setElementSize(scale.getConstant());
             }
         }
 
-        else {
-            Logging.warn("Context", String.format("Failed to parse MemAccessExpr %s", expr));
-        }
-    }
-
-    /**
-     * For example: if there is a MemAccessExpr: *(a + 0x8) = b, the FieldAccessExpr is *(a + 0x8).
-     * We need to parse the FieldAccessExpr only when this FieldAccessExpr is a pointer which points to a composite data type.
-     * @param expr the Expression to parse
-     */
-    private void parseFieldAccessExpr(SymbolExpr expr) {
-        if (!expr.isDereference()) {
-            return;
-        }
-        Logging.info("Context", String.format("Parsing FieldAccessExpr %s", expr));
-
-        // If FieldAccessExpr is a pointer points to a composite data type,
-        // this FieldAccessExpr should have aliases in TypeAliasGraph with composite data type.
-        var aliasGraph = typeAliasManager.getTypeAliasGraph(expr);
-        if (aliasGraph == null) {
-            Logging.debug("Context", String.format("FieldAccessExpr %s has no type alias", expr));
-            return;
-        }
-
-        boolean isFieldPointToComposite = false;
-        for (var aliasExpr: aliasGraph.getNodes()) {
-            if (collector.hasConstraint(aliasExpr) && collector.getConstraint(aliasExpr).isInterested()) {
-                isFieldPointToComposite = true;
-                break;
-            }
-        }
-
-        if (isFieldPointToComposite) {
-            Logging.debug("Context", String.format("FieldAccessExpr %s may points to composite data type", expr));
-            parseMemAccessExpr(expr, null, 0);
+        // If base is still dereference expr, means base is a field with pointer type which points to a composite data type.
+        if (base.isDereference()) {
+            parseFieldAccessExpr(base, baseConstraint, derefDepth + 1);
         }
     }
 
@@ -303,34 +298,24 @@ public class InterContext {
         }
     }
 
-    private void updateMemAccessConstraint(SymbolExpr expr, TypeConstraint parentTypeConstraint, long offsetValue, TypeConstraint constraint) {
-        if (parentTypeConstraint == null) {
-            updateFieldAccess(constraint, offsetValue, APs.getMemoryAccessPoints(expr));
-        } else {
-            updateReferenceConstraint(constraint, offsetValue, parentTypeConstraint);
+    private void updateNestedConstraint(SymbolExpr expr, TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
+        var ap = APs.getCallAccessPoints(expr);
+        updateFieldAccessConstraint(nester, offsetValue, ap);
+        nester.addNestTo(offsetValue, nestee);
+        nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
+        nestee.addNestedBy(nester, offsetValue);
+    }
+
+    private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, SymbolExpr fieldExpr) {
+        var fieldAPs = APs.getFieldAccessPoints(fieldExpr);
+        for (var ap: fieldAPs) {
+            baseConstraint.addFieldAccess(offsetValue, ap);
         }
     }
 
     private void updateReferenceConstraint(TypeConstraint referencer, long offsetValue, TypeConstraint referencee) {
         referencee.addReferencedBy(referencer, offsetValue);
         referencer.addReferenceTo(offsetValue, referencee);
-    }
-
-    private void updateNestedConstraint(SymbolExpr expr, TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
-        var ap = APs.getCallAccessPoints(expr);
-        updateFieldAccess(nester, offsetValue, ap);
-        nester.addNestTo(offsetValue, nestee);
-        nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
-        nestee.addNestedBy(nester, offsetValue);
-    }
-
-    private void updateFieldAccess(TypeConstraint currentTC, long offsetValue, Set<AccessPoints.AP> APs) {
-        if (APs == null) {
-            return;
-        }
-        for (var ap: APs) {
-            currentTC.addFieldAccess(offsetValue, ap);
-        }
     }
 
 
@@ -373,6 +358,30 @@ public class InterContext {
             }
         }
     }
+
+
+    private Set<SymbolExpr> getOtherFieldExprsWithSameOffset(SymbolExpr baseExpr, long offset) {
+        var result = new HashSet<SymbolExpr>();
+        var typeAliasGraph = typeAliasManager.getTypeAliasGraph(baseExpr);
+        if (typeAliasGraph == null) {
+            return result;
+        }
+
+        for (var node: typeAliasGraph.getNodes()) {
+            if (node.equals(baseExpr)) {
+                continue;
+            } else {
+                var fieldExprs = symExprManager.getFieldExprsByOffset(node, offset);
+                if (fieldExprs.isPresent()) {
+                    result.add(node);
+                    Logging.debug("InterContext", String.format("Found other field expr %s with offset 0x%x", node, offset));
+                }
+            }
+        }
+
+        return result;
+    }
+
 
     private boolean checkOffsetSize(TypeConstraint constraint, long offset, int wantedSize) {
         boolean result = true;

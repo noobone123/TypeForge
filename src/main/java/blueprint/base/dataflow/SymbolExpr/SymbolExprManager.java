@@ -13,16 +13,55 @@ public class SymbolExprManager {
 
     Set<SymbolExpr> allExprs;
     Map<SymbolExpr, TypeConstraint> exprToConstraint;
-    Map<SymbolExpr, TreeMap<Long, SymbolExpr>> fieldExprMap;
+    Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> fieldExprsMap;
     Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
+    Map<SymbolExpr.Attribute, SymbolExpr> attributeToExpr;
     InterContext interCtx;
 
     public SymbolExprManager(InterContext interCtx) {
         allExprs = new HashSet<>();
         exprToConstraint = new HashMap<>();
-        fieldExprMap = new HashMap<>();
+        fieldExprsMap = new HashMap<>();
         fieldToBaseMap = new HashMap<>();
+        attributeToExpr = new HashMap<>();
         this.interCtx = interCtx;
+    }
+
+    public Set<SymbolExpr> getAllBaseExprs() {
+        return fieldExprsMap.keySet();
+    }
+
+    public TreeMap<Long, Set<SymbolExpr>> getFieldInfo(SymbolExpr base) {
+        return fieldExprsMap.get(base);
+    }
+
+    public Optional<Set<SymbolExpr>> getFieldExprsByOffset(SymbolExpr base, long offset) {
+        if (fieldExprsMap.containsKey(base)) {
+            return Optional.ofNullable(fieldExprsMap.get(base).get(offset));
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Update the SymbolExpr's field relationship
+     */
+    public void addFieldRelation(SymbolExpr base, long offset, SymbolExpr field) {
+        // fieldExprsMap's Value is a Set, because there may be multiple fieldsAccessExpr
+        // For example:
+        // a: { 0x8: [ *(a + 0x8), *(a + b * 0x10 + 0x8) ] }
+        fieldExprsMap.computeIfAbsent(base, k -> new TreeMap<>()).computeIfAbsent(offset, k -> new HashSet<>()).add(field);
+        fieldToBaseMap.put(field, base);
+    }
+
+    /**
+     * Add an attribute to the given expression
+     * @param expr the expression to add attribute to
+     * @param attr the attribute to add
+     */
+    public void addExprAttribute(SymbolExpr expr, SymbolExpr.Attribute attr) {
+        expr.addAttribute(attr);
+        attributeToExpr.put(attr, expr);
     }
 
     /**
@@ -94,7 +133,7 @@ public class SymbolExprManager {
                 // Set `base + index * scale` and `base` type alias
                 interCtx.addTypeAliasRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeAliasGraph.EdgeType.INDIRECT);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
-                a.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
+                addExprAttribute(a, SymbolExpr.Attribute.MAY_ARRAY_PTR);
             } else {
                 builder.base(a).offset(b);
             }
@@ -115,7 +154,7 @@ public class SymbolExprManager {
                 builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
             } else {
                 builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(b);
-                a.addAttribute(SymbolExpr.Attribute.MAY_ARRAY_PTR);
+                addExprAttribute(a, SymbolExpr.Attribute.MAY_ARRAY_PTR);
             }
         }
         else {
