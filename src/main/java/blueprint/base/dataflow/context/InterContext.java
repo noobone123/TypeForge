@@ -127,7 +127,7 @@ public class InterContext {
                 var entry = new AbstractMap.SimpleEntry<>(baseExpr, fieldInfo.getKey());
                 workList.add(entry);
                 visited.add(entry);
-                Logging.debug("InterContext", "Add baseExpr " + baseExpr + " with offset " + fieldInfo.getKey());
+                Logging.debug("InterContext", String.format("Add baseExpr %s with offset 0x%x", baseExpr, fieldInfo.getKey()));
             }
         }
 
@@ -154,7 +154,7 @@ public class InterContext {
                                 var newEntry = new AbstractMap.SimpleEntry<>(otherFieldExpr, newFieldInfo.getKey());
                                 if (visited.add(newEntry)) {
                                     workList.add(newEntry);
-                                    Logging.debug("InterContext", "Add new field expr " + otherFieldExpr + " with offset " + newFieldInfo.getKey());
+                                    Logging.debug("InterContext", String.format("Add otherFieldExpr %s with offset 0x%x", otherFieldExpr, newFieldInfo.getKey()));
                                 }
                             }
                         }
