@@ -381,7 +381,7 @@ public class InterContext {
                     var exprs = fieldExprs.get();
                     for (var expr : exprs) {
                         if (result.add(expr)) {
-                            Logging.debug("InterContext", String.format("Found other field expr %s with same offset %d", expr, offset));
+                            Logging.debug("InterContext", String.format("Found other field expr %s with same offset 0x%x", expr, offset));
                         }
                     }
                 }
