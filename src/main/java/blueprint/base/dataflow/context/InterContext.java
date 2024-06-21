@@ -9,7 +9,6 @@ import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.base.dataflow.typeAlias.TypeAliasManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
-import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import ghidra.program.model.data.DataType;
@@ -68,6 +67,20 @@ public class InterContext {
         typeAliasManager.addEdge(from, to, edgeType);
     }
 
+    public boolean addMemoryAliasRelation(SymbolExpr from, SymbolExpr to) {
+        if (from.equals(to)) {
+            return false;
+        }
+        // If there is already an existing edge between from and to, we don't need to add a new one.
+        if (typeAliasManager.hasEdge(from, to)) {
+            Logging.debug("InterContext", String.format("There is already an existing edge between %s and %s", from, to));
+            return false;
+        }
+        typeAliasManager.addEdge(from, to, TypeAliasGraph.EdgeType.MEMALIAS);
+        return true;
+    }
+
+
     /**
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
@@ -102,19 +115,49 @@ public class InterContext {
      * For example: if `a` and `b` is alias, then `*(a + 0x10)` and `*(b + 0x10)` should be alias too.
      * In this method, we consider fields as type alias only if their bases are alias and offsets are the same.
      */
-    // TODO: using workList algorithm to make type alias graph reach a fixed point, currently we only consider 1-layer memory alias.
     private void handleMemoryAlias() {
+        var workList = new LinkedList<Map.Entry<SymbolExpr, Long>>();
+        var visited = new HashSet<Map.Entry<SymbolExpr, Long>>();
         var allBaseExprs = symExprManager.getAllBaseExprs();
+
+        Logging.info("InterContext", "Start to handle memory alias.");
         for (var baseExpr: allBaseExprs) {
             var fieldExprs = symExprManager.getFieldInfo(baseExpr);
-            for (var fieldInfo: fieldExprs.entrySet()) {
-                var offset = fieldInfo.getKey();
-                var fieldAccessExprs = fieldInfo.getValue();
-                var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset);
-                for (var otherFieldExpr: otherFieldExprsWithSameOffset) {
-                    for (var fieldAccessExpr: fieldAccessExprs) {
-                        addTypeAliasRelation(fieldAccessExpr, otherFieldExpr, TypeAliasGraph.EdgeType.MEMALIAS);
-                        Logging.debug("InterContext", String.format("Add memory alias relation between %s and %s", fieldAccessExpr, otherFieldExpr));
+            for (var fieldInfo : fieldExprs.entrySet()) {
+                var entry = new AbstractMap.SimpleEntry<>(baseExpr, fieldInfo.getKey());
+                workList.add(entry);
+                visited.add(entry);
+                Logging.debug("InterContext", "Add baseExpr " + baseExpr + " with offset " + fieldInfo.getKey());
+            }
+        }
+
+        while (!workList.isEmpty()) {
+            var entry = workList.poll();
+            var baseExpr = entry.getKey();
+            var offset = entry.getValue();
+
+            Logging.debug("InterContext", String.format("Processing baseExpr %s with offset 0x%x", baseExpr, offset));
+            var currentFieldExprs = symExprManager.getFieldExprsByOffset(baseExpr, offset);
+            var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset);
+
+            if (currentFieldExprs.isEmpty()) { continue; }
+            for (var currentFieldExpr: currentFieldExprs.get()) {
+                for (var otherFieldExpr : otherFieldExprsWithSameOffset) {
+                    if (addMemoryAliasRelation(currentFieldExpr, otherFieldExpr)) {
+                        // If a new memory alias relation is added, and new added otherFieldExpr still has fields, we need to add them into workList
+                        var newFieldExprs = symExprManager.getFieldInfo(otherFieldExpr);
+                        if (newFieldExprs == null) {
+                            Logging.debug("InterContext", String.format("Other field expr %s has no fields.", otherFieldExpr));
+                        }
+                        else {
+                            for (var newFieldInfo : newFieldExprs.entrySet()) {
+                                var newEntry = new AbstractMap.SimpleEntry<>(otherFieldExpr, newFieldInfo.getKey());
+                                if (visited.add(newEntry)) {
+                                    workList.add(newEntry);
+                                    Logging.debug("InterContext", "Add new field expr " + otherFieldExpr + " with offset " + newFieldInfo.getKey());
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -335,8 +378,12 @@ public class InterContext {
             } else {
                 var fieldExprs = symExprManager.getFieldExprsByOffset(node, offset);
                 if (fieldExprs.isPresent()) {
-                    result.add(node);
-                    Logging.debug("InterContext", String.format("Found other field expr %s with offset 0x%x", node, offset));
+                    var exprs = fieldExprs.get();
+                    for (var expr : exprs) {
+                        if (result.add(expr)) {
+                            Logging.debug("InterContext", String.format("Found other field expr %s with same offset %d", expr, offset));
+                        }
+                    }
                 }
             }
         }

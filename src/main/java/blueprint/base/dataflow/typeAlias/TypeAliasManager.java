@@ -47,6 +47,13 @@ public class TypeAliasManager<T> {
         }
     }
 
+    public boolean hasEdge(T from, T to) {
+        TypeAliasGraph<T> fromGraph = exprToGraph.get(from);
+        TypeAliasGraph<T> toGraph = exprToGraph.get(to);
+        return fromGraph != null && fromGraph == toGraph;
+    }
+
+
     public TypeAliasGraph<T> getTypeAliasGraph(T node) {
         return exprToGraph.get(node);
     }
