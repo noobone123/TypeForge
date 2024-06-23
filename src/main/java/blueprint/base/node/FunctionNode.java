@@ -8,6 +8,7 @@ import blueprint.utils.Logging;
 import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
+import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.program.model.data.ParameterDefinition;
@@ -21,13 +22,36 @@ import ghidra.util.task.TaskMonitor;
 import java.util.*;
 
 public class FunctionNode extends NodeBase<Function> {
+
+    public static class CallSite {
+        public Address calleeAddr;
+        public PcodeOp callOp;
+        public List<Varnode> arguments;
+
+        public CallSite(Address CalleeAddr, PcodeOp callOp) {
+            this.calleeAddr = CalleeAddr;
+            this.callOp = callOp;
+            this.arguments = new ArrayList<>();
+            for (int i = 1; i < callOp.getNumInputs(); i++) {
+                arguments.add(callOp.getInput(i));
+            }
+        }
+    }
+
+
     /** Whether the function is a leaf node in the call graph */
     public boolean isLeaf = false;
-
     public boolean isMeaningful = false;
     public boolean isExternal = false;
     public boolean isTypeAgnostic = false;
     public boolean isNormal = false;
+    public boolean needFixPrototype = false;
+
+    public boolean isVarArg = false;
+    public int fixedParamNum = 0;
+
+    public List<HighSymbol> newParams = new ArrayList<>();
+    public Map<PcodeOp, CallSite> callSites = new HashMap<>();
 
     /** Following information should be updated after each decompile */
     public HighFunction hFunc = null;
@@ -123,8 +147,10 @@ public class FunctionNode extends NodeBase<Function> {
 
 
     private void setParameters() {
+        parameters.clear();
         var funcProto = hFunc.getFunctionPrototype();
-        for (int i = 0; i < funcProto.getNumParams(); i++) {
+        var totalParamsNum = isVarArg ? fixedParamNum : funcProto.getNumParams();
+        for (int i = 0; i < totalParamsNum; i++) {
             var param = funcProto.getParam(i);
             parameters.add(param);
         }
@@ -135,6 +161,7 @@ public class FunctionNode extends NodeBase<Function> {
      * !IMPORTANT: This method should be called after `setParameters` method.
      */
     private void setLocalVariables() {
+        localVariables.clear();
         var localSymMap = hFunc.getLocalSymbolMap();
         for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();
@@ -146,23 +173,11 @@ public class FunctionNode extends NodeBase<Function> {
     }
 
     private void setGlobalVariables() {
+        globalVariables.clear();
         var globalSymMap = hFunc.getGlobalSymbolMap();
         for (Iterator<HighSymbol> it = globalSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();
             globalVariables.add(sym);
-        }
-    }
-
-    public void setHighPCode() {
-        for (var block : hFunc.getBasicBlocks()) {
-            var iter = block.getIterator();
-            while (iter.hasNext()) {
-                PcodeOp op = iter.next();
-                pCodes.add(op);
-                if (op.getOpcode() == PcodeOp.RETURN) {
-                    returnOp = op;
-                }
-            }
         }
     }
 
@@ -233,29 +248,65 @@ public class FunctionNode extends NodeBase<Function> {
         return decompileResults.getDecompiledFunction().getC();
     }
 
+
+    public boolean initCheck() {
+        // Be careful: fix current function's prototype may influence other function's decompile result
+        // So fix function's prototype should be done after all functions are decompiled
+        if (needFixPrototype) {
+            Logging.info("FunctionNode", "Need to fix function prototype");
+            fixFuncProto(this.newParams);
+            if (!decompile()) { return false; }
+            collectPCodeInfo();
+            setParameters();
+            setLocalVariables();
+            setGlobalVariables();
+        }
+        return true;
+    }
+
+
     /**
-     * Decompile the function, fix prototype error and get highPcodes
+     * Decompile the function
      */
     public boolean initialize() {
         if (!decompile()) { return false; }
         var newParams = checkPrototype();
         if (newParams.isPresent()) {
-            fixFuncProto(newParams.get());
-            if (!decompile()) { return false; }
+            needFixPrototype = true;
+            this.newParams = newParams.get();
         }
 
         var fixCandidates = checkLocalVariables();
         if (fixCandidates.isPresent()) {
+            Logging.info("FunctionNode", "Found local variables pointed to composite datatype");
             fixLocalVariableDataType(fixCandidates.get());
             if (!decompile()) { return false; }
         }
 
+        collectPCodeInfo();
         setParameters();
         setLocalVariables();
         setGlobalVariables();
-        setHighPCode();
-
         return true;
+    }
+
+    public void collectPCodeInfo() {
+        returnOp = null;
+        callSites.clear();
+        for (var block : hFunc.getBasicBlocks()) {
+            var iter = block.getIterator();
+            while (iter.hasNext()) {
+                PcodeOp op = iter.next();
+                pCodes.add(op);
+                if (op.getOpcode() == PcodeOp.RETURN) {
+                    returnOp = op;
+                }
+                if (op.getOpcode() == PcodeOp.CALL) {
+                    var callSite = new CallSite(op.getInput(0).getAddress(), op);
+                    callSites.put(op, callSite);
+                }
+            }
+        }
     }
 
 

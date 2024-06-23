@@ -204,10 +204,6 @@ public class TypeAliasGraph<T> {
             } else {
                 Logging.info("TypeAliasGraph", "Arg no interest count: " + argNoInterestCount);
                 Logging.info("TypeAliasGraph", "Src list size: " + srcList.size());
-                if (argNoInterestCount / (double)srcList.size() > 0.2) {
-                    Logging.info("TypeAliasGraph", "Confirmed type agnostic param: " + dst);
-                    typeAgnosticParams.add(dst);
-                }
             }
         }
 

@@ -42,7 +42,6 @@ public class IntraContext {
         this.tracedVarnodes = new HashSet<>();
         this.dataFlowFacts = new HashMap<>();
         this.returnExprs = new HashSet<>();
-        this.callsites = new HashMap<>();
         this.symbolExprManager = symbolExprManager;
     }
 
@@ -54,17 +53,9 @@ public class IntraContext {
         return this.returnExprs;
     }
 
-    public void addCallSite(PcodeOp op, FunctionNode funcNode) {
-        callsites.put(op, funcNode);
-    }
-
-    public Map<PcodeOp, FunctionNode> getCallSites() {
-        return callsites;
-    }
-
     public boolean initialize() {
         // initialize current function
-        if (!funcNode.initialize()) { return false; }
+        if (!funcNode.initCheck()) { return false; }
 
         /*
          * IMPORTANT: Update the candidate HighSymbols that need to collect data-flow facts

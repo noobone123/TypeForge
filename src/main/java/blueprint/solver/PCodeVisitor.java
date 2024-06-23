@@ -524,7 +524,7 @@ public class PCodeVisitor {
     private void handleCall(PcodeOp pcodeOp) {
         var calleeAddr = pcodeOp.getInput(0).getAddress();
         var calleeNode = interCtx.callGraph.getNodebyAddr(calleeAddr);
-        interCtx.getIntraContext(funcNode).addCallSite(pcodeOp, calleeNode);
+        var callSite = funcNode.callSites.get(pcodeOp);
 
         if (!interCtx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
             Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
@@ -538,9 +538,16 @@ public class PCodeVisitor {
             Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");
         }
 
-        // TODO: how to handle cases when arguments and parameters are inconsistency?
-        for (int inputIdx = 1; inputIdx < pcodeOp.getNumInputs(); inputIdx++) {
-            var argVn = pcodeOp.getInput(inputIdx);
+        var totalArgNum = 0;
+        if (calleeNode.isVarArg) {
+            Logging.info("PCodeVisitor", String.format("Callee function %s is vararg", calleeNode.value.getName()));
+            totalArgNum = calleeNode.fixedParamNum;
+        } else {
+            totalArgNum = calleeNode.parameters.size();
+        }
+
+        for (int argIdx = 0; argIdx < totalArgNum; argIdx++) {
+            var argVn = callSite.arguments.get(argIdx);
             if (!intraCtx.isTracedVn(argVn)) {
                 Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
                 continue;
@@ -551,7 +558,7 @@ public class PCodeVisitor {
                 symExprManager.addExprAttribute(argExpr, SymbolExpr.Attribute.ARGUMENT);
 
                 if (!calleeNode.isExternal) {
-                    var param = calleeNode.parameters.get(inputIdx - 1);
+                    var param = calleeNode.parameters.get(argIdx);
                     var paramExpr = new SymbolExprManager.Builder().rootSymbol(param).build();
                     interCtx.addTypeAliasRelation(argExpr, paramExpr, TypeAliasGraph.EdgeType.CALL);
                 }

@@ -8,10 +8,7 @@ import blueprint.utils.*;
 import ghidra.program.model.address.Address;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.List;
+import java.util.*;
 
 public class InterSolver {
     InterContext ctx;
@@ -31,6 +28,8 @@ public class InterSolver {
 
 
     public void run() {
+        checkCallSitesInconsistency();
+
         while (!ctx.workList.isEmpty()) {
             FunctionNode funcNode = ctx.workList.poll();
             if (!funcNode.isMeaningful || funcNode.isTypeAgnostic) {
@@ -60,6 +59,31 @@ public class InterSolver {
         generator.dumpResults(new File(Global.outputDirectory));
     }
 
+    public void checkCallSitesInconsistency() {
+        // Records the Map of Callee function and its callsites' argument number
+        Map<FunctionNode, Set<Integer>> argNum = new HashMap<>();
+        // traverse all functions in worklist
+        for (var funcNode: ctx.workList) {
+            for (var callsite: funcNode.callSites.values()) {
+                var callee = cg.getNodebyAddr(callsite.calleeAddr);
+                argNum.computeIfAbsent(callee, k -> new HashSet<>()).add(callsite.arguments.size());
+                argNum.get(callee).add(callee.parameters.size());
+            }
+        }
+
+        for (var entry: argNum.entrySet()) {
+            var funcNode = entry.getKey();
+            var argNums = entry.getValue();
+            if (argNums.size() > 1) {
+                Logging.warn("InterSolver", "Inconsistent argument number for function: " + funcNode.value.getName());
+                var minArgNum = Collections.min(argNums);
+                funcNode.isVarArg = true;
+                funcNode.fixedParamNum = minArgNum;
+            }
+        }
+    }
+
+
     /**
      * Build the worklist for intra-procedural solver, the element's order in the worklist is ...
      */
@@ -70,8 +94,12 @@ public class InterSolver {
         postOrderTraversal(root, visited, sortedFuncs);
 
         for (FunctionNode funcNode : sortedFuncs) {
-            Logging.info("InterSolver", "Add function to worklist: " + funcNode.value.getName());
+            if (!funcNode.initialize()) {
+                Logging.warn("InterSolver", "Failed to pre-analyze function: " + funcNode.value.getName());
+                continue;
+            }
             ctx.workList.add(funcNode);
+            Logging.info("InterSolver", "Added function to workList: " + funcNode.value.getName());
         }
     }
 
