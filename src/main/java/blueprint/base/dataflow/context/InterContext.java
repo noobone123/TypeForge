@@ -33,7 +33,7 @@ public class InterContext {
 
     public AccessPoints APs;
     public TypeAliasManager<SymbolExpr> typeAliasManager;
-    public Set<SymbolExpr> fieldExprParseCandidates;
+    public Set<SymbolExpr> fieldExprCandidates;
     public SymbolExprManager symExprManager;
 
     public InterContext(CallGraph cg) {
@@ -43,7 +43,7 @@ public class InterContext {
         this.intraCtxMap = new HashMap<>();
         this.APs = new AccessPoints();
         this.typeAliasManager = new TypeAliasManager<>();
-        this.fieldExprParseCandidates = new HashSet<>();
+        this.fieldExprCandidates = new HashSet<>();
         this.symExprManager = new SymbolExprManager(this);
     }
 
@@ -57,7 +57,7 @@ public class InterContext {
     }
 
     public void addFieldAccessExpr(SymbolExpr expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType) {
-        fieldExprParseCandidates.add(expr);
+        fieldExprCandidates.add(expr);
         APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType);
     }
 
@@ -88,8 +88,8 @@ public class InterContext {
      */
     public void collectConstraints() {
         // Parsing all fieldAccess Expressions first to build the constraint's skeleton
-        for (var symExpr : fieldExprParseCandidates) {
-            parseFieldAccessExpr(symExpr, null, 0);
+        for (var symExpr : fieldExprCandidates) {
+            buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
         handleMemoryAlias();
@@ -237,7 +237,7 @@ public class InterContext {
      * @param parentTypeConstraint if the expr is a recursive dereference, the parentTypeConstraint is the constraint of the parent expr
      * @param derefDepth the dereference depth of the expr
      */
-    private void parseFieldAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
+    private void buildConstraintByFieldAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
         Logging.info("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: %s, derefDepth: %d",
@@ -268,7 +268,7 @@ public class InterContext {
 
         // If base is still dereference expr, means base is a field with pointer type which points to a composite data type.
         if (parsed.base.isDereference()) {
-            parseFieldAccessExpr(parsed.base, baseConstraint, derefDepth + 1);
+            buildConstraintByFieldAccessExpr(parsed.base, baseConstraint, derefDepth + 1);
         }
     }
 
@@ -276,10 +276,24 @@ public class InterContext {
      * Handle the SymbolExpressions with some special attributes. Like Argument, CodePTR, ...
      */
     private void handleExprWithAttributions() {
-        // Handle the CallSite Arguments
         for (var expr: symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT)) {
-            if (symExprManager.getConstraint(expr) != null && symExprManager.getConstraint(expr).isInterested()
-                    && expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
+            if (symExprManager.getConstraint(expr) == null || !symExprManager.getConstraint(expr).isInterested()) {
+                continue;
+            }
+
+            // If there is a fieldAccessExpression as an argument, we should update the referenceTo constraint
+            if (expr.isDereference()) {
+                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
+                if (parsed.isEmpty()) { continue; }
+                var base = parsed.get().base;
+                var offset = parsed.get().offsetValue;
+                var referencee = symExprManager.getConstraint(expr);
+                var referencer = symExprManager.getConstraint(base);
+                updateReferenceConstraint(referencer, offset, referencee);
+            }
+
+            // If there is a base + offset Expression as an argument, we should update the nested constraint
+            if (expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
                 var base = expr.getBase();
                 var offset = expr.getOffset().getConstant();
                 var nestedConstraint = symExprManager.getConstraint(expr);
