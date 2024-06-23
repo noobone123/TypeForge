@@ -116,29 +116,32 @@ public class InterContext {
      * In this method, we consider fields as type alias only if their bases are alias and offsets are the same.
      */
     private void handleMemoryAlias() {
-        var workList = new LinkedList<Map.Entry<SymbolExpr, Long>>();
-        var visited = new HashSet<Map.Entry<SymbolExpr, Long>>();
+        var workList = new LinkedList<SimpleEntry>();
+        var visited = new HashSet<SimpleEntry>();
         var allBaseExprs = symExprManager.getAllBaseExprs();
 
         Logging.info("InterContext", "Start to handle memory alias.");
         for (var baseExpr: allBaseExprs) {
             var fieldExprs = symExprManager.getFieldInfo(baseExpr);
             for (var fieldInfo : fieldExprs.entrySet()) {
-                var entry = new AbstractMap.SimpleEntry<>(baseExpr, fieldInfo.getKey());
+                var entry = new SimpleEntry(baseExpr, fieldInfo.getKey());
                 workList.add(entry);
-                visited.add(entry);
                 Logging.debug("InterContext", String.format("Add baseExpr %s with offset 0x%x", baseExpr, fieldInfo.getKey()));
             }
         }
 
         while (!workList.isEmpty()) {
             var entry = workList.poll();
-            var baseExpr = entry.getKey();
-            var offset = entry.getValue();
+            var baseExpr = entry.baseExpr;
+            var offset = entry.offset;
 
+            if (visited.contains(entry)) {
+                continue;
+            }
             Logging.debug("InterContext", String.format("Processing baseExpr %s with offset 0x%x", baseExpr, offset));
+            visited.add(entry);
             var currentFieldExprs = symExprManager.getFieldExprsByOffset(baseExpr, offset);
-            var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset);
+            var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset, visited);
 
             if (currentFieldExprs.isEmpty()) { continue; }
             for (var currentFieldExpr: currentFieldExprs.get()) {
@@ -151,11 +154,8 @@ public class InterContext {
                         }
                         else {
                             for (var newFieldInfo : newFieldExprs.entrySet()) {
-                                var newEntry = new AbstractMap.SimpleEntry<>(otherFieldExpr, newFieldInfo.getKey());
-                                if (visited.add(newEntry)) {
-                                    workList.add(newEntry);
-                                    Logging.debug("InterContext", String.format("Add otherFieldExpr %s with offset 0x%x", otherFieldExpr, newFieldInfo.getKey()));
-                                }
+                                workList.add(new SimpleEntry(otherFieldExpr, newFieldInfo.getKey()));
+                                Logging.debug("InterContext", String.format("Add otherFieldExpr %s with offset 0x%x", otherFieldExpr, newFieldInfo.getKey()));
                             }
                         }
                     }
@@ -365,7 +365,7 @@ public class InterContext {
     }
 
 
-    private Set<SymbolExpr> getOtherFieldExprsWithSameOffset(SymbolExpr baseExpr, long offset) {
+    private Set<SymbolExpr> getOtherFieldExprsWithSameOffset(SymbolExpr baseExpr, long offset, Set<SimpleEntry> visited) {
         var result = new HashSet<SymbolExpr>();
         var typeAliasGraph = typeAliasManager.getTypeAliasGraph(baseExpr);
         if (typeAliasGraph == null) {
@@ -378,6 +378,7 @@ public class InterContext {
             } else {
                 var fieldExprs = symExprManager.getFieldExprsByOffset(node, offset);
                 if (fieldExprs.isPresent()) {
+                    visited.add(new SimpleEntry(node, offset));
                     var exprs = fieldExprs.get();
                     for (var expr : exprs) {
                         if (result.add(expr)) {
@@ -389,6 +390,34 @@ public class InterContext {
         }
 
         return result;
+    }
+
+
+    static class SimpleEntry {
+        final SymbolExpr baseExpr;
+        final long offset;
+
+        public SimpleEntry(SymbolExpr baseExpr, long offset) {
+            this.baseExpr = baseExpr;
+            this.offset = offset;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(baseExpr, offset);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+            SimpleEntry that = (SimpleEntry) obj;
+            return offset == that.offset && baseExpr.equals(that.baseExpr);
+        }
     }
 
 
