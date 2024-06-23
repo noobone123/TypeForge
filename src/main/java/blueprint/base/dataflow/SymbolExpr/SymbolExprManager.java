@@ -107,7 +107,7 @@ public class SymbolExprManager {
         return new HashMap<>(exprToConstraint);
     }
 
-    public void updateExprToConstraintMap(Map<SymbolExpr, TypeConstraint> newMap) {
+    public void updateAllExprToConstraintMap(Map<SymbolExpr, TypeConstraint> newMap) {
         exprToConstraint.clear();
         exprToConstraint.putAll(newMap);
     }
@@ -124,8 +124,16 @@ public class SymbolExprManager {
         return baseToFieldsMap.keySet();
     }
 
+    public Set<TypeConstraint> getAllConstraints() {
+        return new HashSet<>(exprToConstraint.values());
+    }
+
     public TreeMap<Long, Set<SymbolExpr>> getFieldInfo(SymbolExpr base) {
         return baseToFieldsMap.get(base);
+    }
+
+    public void updateExprToConstraintMap(SymbolExpr expr, TypeConstraint constraint) {
+        exprToConstraint.put(expr, constraint);
     }
 
 

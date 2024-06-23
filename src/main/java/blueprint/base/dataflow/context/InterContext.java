@@ -9,6 +9,7 @@ import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.base.dataflow.typeAlias.TypeAliasManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import ghidra.program.model.data.DataType;
@@ -100,8 +101,8 @@ public class InterContext {
 
         handleExprWithAttributions();
 
-        // merge constraints according to memory alias
-        // mergeConstraints();
+        // merge constraints in same offset
+        mergeConstraints();
 
         // Remove meaningLess constraints
         removeRedundantConstraints();
@@ -172,40 +173,35 @@ public class InterContext {
                 if (!mayTypeAgnosticParams.isEmpty()) {
                     var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, symExprManager.getExprToConstraintMapCopy());
                     if (!confirmedTypeAgnositicParams.isEmpty()) {
-                        Logging.info("Context", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
-                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, symExprManager.getExprToConstraintMap());
+                        Logging.info("InterContext", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
+                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, symExprManager.getExprToConstraintMap(), true);
                     } else {
-                        Logging.info("Context", "No confirmed type agnostic params found.");
-                        graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap());
+                        Logging.info("InterContext", "No confirmed type agnostic params found.");
+                        graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
                     }
                 } else {
-                    graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap());
+                    graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
                 }
             }
         }
     }
 
 
-    /**
-     * Sometimes one field may reference multiple constraints, For example:
-     * If FuncA: *(a + 0x10) and FuncB: *(b + 0x10) has no direct data-flow relation,
-     * but a and b has a direct data-flow relation, then Solver will create 2 constraints for a + 0x10 and b + 0x10
-     * and these two constraints will be put into same offset when merging a and b.
-     * However, we think these two constraints are actually the same type, so we should merge them here.
-     */
+    // TODO: checking FieldConflict before merging ...
     private void mergeConstraints() {
-//        var workList = new LinkedList<TypeConstraint>();
-//        var allConstraints = collector.getAllConstraints();
-//        for (var constraint : allConstraints) {
-//            if (hasMultiReferenceField(constraint)) {
-//                workList.add(constraint);
-//            }
-//        }
-//
-//        while (!workList.isEmpty()) {
-//            var cur = workList.poll();
-//            mergeMultiReference(cur, workList);
-//        }
+        var workList = new LinkedList<TypeConstraint>();
+        var allConstraints = symExprManager.getAllConstraints();
+        for (var constraint : allConstraints) {
+            if (hasMultiReferenceField(constraint)) {
+                Logging.info("InterContext", String.format("%s has multi reference fields", constraint));
+                workList.add(constraint);
+            }
+        }
+
+        while (!workList.isEmpty()) {
+            var cur = workList.poll();
+            mergeMultiReference(cur, workList);
+        }
     }
 
 
@@ -230,7 +226,7 @@ public class InterContext {
             }
         }
 
-        symExprManager.updateExprToConstraintMap(finalResult);
+        symExprManager.updateAllExprToConstraintMap(finalResult);
     }
 
 
@@ -334,34 +330,34 @@ public class InterContext {
     }
 
     private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
-//        for (var entry : constraint.referenceTo.entrySet()) {
-//            if (entry.getValue().size() > 1) {
-//                Logging.info("Context", String.format("Constraint_%s has multiple referenceTo at 0x%x", constraint.shortUUID, entry.getKey()));
-//                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
-//                if (!shouldMerge) {
-//                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
-//                    continue;
-//                }
-//
-//                TypeConstraint newMergedConstraint = new TypeConstraint();
-//                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
-//                var toMerge = new HashSet<>(entry.getValue());
-//                for (var ref : toMerge) {
-//                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
-//                    newMergedConstraint.merge(ref);
-//                }
-//
-//                if (hasMultiReferenceField(newMergedConstraint)) {
-//                    workList.add(newMergedConstraint);
-//                }
-//
-//                // add the new merged constraint in the symExprToConstraints
-//                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
-//                    collector.updateConstraint(symExpr, newMergedConstraint);
-//                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
-//                }
-//            }
-//        }
+        for (var entry : constraint.referenceTo.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                Logging.info("Context", String.format("%s has multiple referenceTo at 0x%x", constraint.toString(), entry.getKey()));
+                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
+                if (!shouldMerge) {
+                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
+                    continue;
+                }
+
+                TypeConstraint newMergedConstraint = new TypeConstraint();
+                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
+                var toMerge = new HashSet<>(entry.getValue());
+                for (var ref : toMerge) {
+                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
+                    newMergedConstraint.fullMerge(ref);
+                }
+
+                if (hasMultiReferenceField(newMergedConstraint)) {
+                    workList.add(newMergedConstraint);
+                }
+
+                // add the new merged constraint in the symExprToConstraints
+                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
+                    symExprManager.updateExprToConstraintMap(symExpr, newMergedConstraint);
+                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
+                }
+            }
+        }
     }
 
 

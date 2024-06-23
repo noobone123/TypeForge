@@ -1,7 +1,6 @@
 package blueprint.base.dataflow.typeAlias;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
-import blueprint.base.dataflow.constraints.ConstraintCollector;
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
 import org.jgrapht.graph.DefaultDirectedGraph;
@@ -132,8 +131,9 @@ public class TypeAliasGraph<T> {
 
 
     public Set<T> checkTypeAgnosticParams(Set<T> candidates, Map<SymbolExpr, TypeConstraint> exprToConstraint) {
+        Logging.info("TypeAliasGraph", String.format("Checking type agnostic params: %s", candidates));
         TypeAliasGraph<T> copyGraph = createCopy();
-        copyGraph.removeTypeAgnosticCallEdgesAndMerge(candidates, exprToConstraint);
+        copyGraph.removeTypeAgnosticCallEdgesAndMerge(candidates, exprToConstraint, false);
 
         var mayTypeAgnosticParamToArgMap = new HashMap<T, Set<T>>();
         for (T dst: candidates) {
@@ -214,7 +214,8 @@ public class TypeAliasGraph<T> {
         return typeAgnosticParams;
     }
 
-    public void removeTypeAgnosticCallEdgesAndMerge(Set<T> candidates, Map<SymbolExpr, TypeConstraint> exprToConstraint) {
+    public void removeTypeAgnosticCallEdgesAndMerge(Set<T> candidates, Map<SymbolExpr, TypeConstraint> exprToConstraint, boolean fullMerge) {
+        Logging.info("TypeAliasGraph", String.format("Remove type agnostic arguments: %s", candidates));
         for (var dst: candidates) {
             var incomingEdges = new HashSet<>(graph.incomingEdgesOf(dst));
             for (var edge: incomingEdges) {
@@ -228,17 +229,23 @@ public class TypeAliasGraph<T> {
         var subGraphs = getConnectedComponents();
 
         for (var graph: subGraphs) {
-            mergeNodesConstraints(graph, exprToConstraint);
+            mergeNodesConstraints(graph, exprToConstraint, fullMerge);
         }
     }
 
-    public void mergeNodesConstraints(Set<T> mergedNodes, Map<SymbolExpr, TypeConstraint> exprToConstraint) {
+    public void mergeNodesConstraints(Set<T> mergedNodes, Map<SymbolExpr, TypeConstraint> exprToConstraint, boolean fullMerge) {
+        Logging.info("TypeAliasGraph", String.format("Merging node's constraints: %s", mergedNodes));
         var mergedConstraint = new TypeConstraint();
         for (T node: mergedNodes) {
             TypeConstraint constraint = exprToConstraint.get((SymbolExpr)node);
             if (constraint != null) {
-                mergedConstraint.merge(constraint);
-                Logging.debug("TypeAliasGraph", String.format("Merge %s Constraint: Constraint_%s <- Constraint_%s", node, mergedConstraint.getName(), constraint.getName()));
+                if (fullMerge) {
+                    mergedConstraint.fullMerge(constraint);
+                    Logging.debug("TypeAliasGraph", String.format("Fully Merge %s Constraint: Constraint_%s <- Constraint_%s", node, mergedConstraint.getName(), constraint.getName()));
+                } else {
+                    mergedConstraint.fieldMerge(constraint);
+                    Logging.debug("TypeAliasGraph", String.format("Field Merge %s Constraint: Constraint_%s <- Constraint_%s", node, mergedConstraint.getName(), constraint.getName()));
+                }
             }
             exprToConstraint.put((SymbolExpr)node, mergedConstraint);
             Logging.debug("TypeAliasGraph", String.format("Set %s -> %s", node, mergedConstraint));

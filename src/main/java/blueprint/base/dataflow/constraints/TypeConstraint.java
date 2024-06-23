@@ -2,7 +2,6 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
-import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.types.TypeDescriptor;
 import blueprint.utils.Logging;
 
@@ -224,11 +223,8 @@ public class TypeConstraint {
         return associatedExpr;
     }
 
-    public void merge(TypeConstraint other) {
-        if (other == null) {
-            return;
-        }
 
+    public void fieldMerge(TypeConstraint other) {
         // merging fieldAccess
         other.fieldAccess.forEach((offset, aps) -> {
             this.fieldAccess.putIfAbsent(offset, new HashSet<>());
@@ -240,6 +236,20 @@ public class TypeConstraint {
             this.fieldAttrs.putIfAbsent(offset, new HashSet<>());
             this.fieldAttrs.get(offset).addAll(tagSet);
         });
+    }
+
+    /**
+     * Fully merge the other TypeConstraint's info into the current TypeConstraint, be careful to using.
+     * Because mergeXRef will change the relationship between constraints.
+     * @param other The other TypeConstraint to merge
+     */
+    public void fullMerge(TypeConstraint other) {
+        if (other == null) {
+            return;
+        }
+
+        // merging fieldAccess
+        fieldMerge(other);
 
         // Merging global attributes
         this.globalAttrs.addAll(other.globalAttrs);
