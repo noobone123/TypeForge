@@ -71,6 +71,7 @@ public class SymbolExprManager {
     public TypeConstraint createConstraint(SymbolExpr expr) {
         TypeConstraint constraint = new TypeConstraint();
         exprToConstraint.put(expr, constraint);
+        constraint.addAssociatedExpr(expr);
         Logging.debug("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
         return constraint;
     }
@@ -134,6 +135,7 @@ public class SymbolExprManager {
 
     public void updateExprToConstraintMap(SymbolExpr expr, TypeConstraint constraint) {
         exprToConstraint.put(expr, constraint);
+        constraint.addAssociatedExpr(expr);
     }
 
 

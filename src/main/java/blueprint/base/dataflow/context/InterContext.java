@@ -335,15 +335,15 @@ public class InterContext {
                 Logging.info("Context", String.format("%s has multiple referenceTo at 0x%x", constraint.toString(), entry.getKey()));
                 boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
                 if (!shouldMerge) {
-                    Logging.warn("Context", String.format("Constraint_%s has different size at 0x%x when handling multiReference.", constraint.shortUUID, entry.getKey()));
+                    Logging.warn("Context", String.format("%s has different size at 0x%x when handling multiReference.", constraint, entry.getKey()));
                     continue;
                 }
 
                 TypeConstraint newMergedConstraint = new TypeConstraint();
-                Logging.debug("Context", String.format("Created new merged constraint: Constraint_%s", newMergedConstraint.shortUUID));
+                Logging.debug("Context", String.format("Created new merged constraint: %s", newMergedConstraint));
                 var toMerge = new HashSet<>(entry.getValue());
                 for (var ref : toMerge) {
-                    Logging.debug("Context", String.format("Merging Constraint_%s to Constraint_%s", ref.shortUUID, newMergedConstraint.shortUUID));
+                    Logging.debug("Context", String.format("Merging %s to %s", ref, newMergedConstraint));
                     newMergedConstraint.fullMerge(ref);
                 }
 
@@ -354,7 +354,7 @@ public class InterContext {
                 // add the new merged constraint in the symExprToConstraints
                 for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
                     symExprManager.updateExprToConstraintMap(symExpr, newMergedConstraint);
-                    Logging.info("Context", String.format("Set expr %s -> Constraint_%s", symExpr, newMergedConstraint.shortUUID));
+                    Logging.info("Context", String.format("Set expr %s -> %s", symExpr, newMergedConstraint));
                 }
             }
         }
