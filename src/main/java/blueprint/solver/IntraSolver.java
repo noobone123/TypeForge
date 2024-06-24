@@ -20,7 +20,7 @@ public class IntraSolver {
         this.funcNode = funcNode;
         this.interCtx = interCtx;
         this.intraCtx = intraCtx;
-        visitor = new PCodeVisitor(this.funcNode, this.interCtx, this.intraCtx);
+        visitor = new PCodeVisitor(this.funcNode, this.interCtx, this.intraCtx, true);
     }
 
 

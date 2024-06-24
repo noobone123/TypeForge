@@ -99,6 +99,7 @@ public class InterContext {
         // merging constraints according to type alias graph
         mergeByTypeAliasGraph();
 
+        handleReference();
         handleExprWithAttributions();
 
         // merge constraints in same offset
@@ -273,23 +274,39 @@ public class InterContext {
     }
 
     /**
+     * Add the reference relationship between the referencer and referencee.
+     * In buildConstraintByFieldAccessExpr, we only add the reference relationship only if there is reference relationship which can be inferred from the field access expression.
+     * But in some cases like `*(a + 0x10) = b`, if a and b are both pointer to composite datatype, we should add the reference relationship between a and b.
+     */
+    private void handleReference() {
+        for (var expr: fieldExprCandidates) {
+            if (symExprManager.getConstraint(expr) == null || !symExprManager.getConstraint(expr).isInterested()) {
+                continue;
+            }
+
+            if (expr.isDereference()) {
+                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
+                if (parsed.isEmpty()) {
+                    continue;
+                }
+                var base = parsed.get().base;
+                var offset = parsed.get().offsetValue;
+                var referencee = symExprManager.getConstraint(expr);
+                var referencer = symExprManager.getConstraint(base);
+                if (!referencer.hasReferenceTo(offset, referencee)) {
+                    updateReferenceConstraint(referencer, offset, referencee);
+                }
+            }
+        }
+    }
+
+    /**
      * Handle the SymbolExpressions with some special attributes. Like Argument, CodePTR, ...
      */
     private void handleExprWithAttributions() {
         for (var expr: symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT)) {
             if (symExprManager.getConstraint(expr) == null || !symExprManager.getConstraint(expr).isInterested()) {
                 continue;
-            }
-
-            // If there is a fieldAccessExpression as an argument, we should update the referenceTo constraint
-            if (expr.isDereference()) {
-                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
-                if (parsed.isEmpty()) { continue; }
-                var base = parsed.get().base;
-                var offset = parsed.get().offsetValue;
-                var referencee = symExprManager.getConstraint(expr);
-                var referencer = symExprManager.getConstraint(base);
-                updateReferenceConstraint(referencer, offset, referencee);
             }
 
             // If there is a base + offset Expression as an argument, we should update the nested constraint

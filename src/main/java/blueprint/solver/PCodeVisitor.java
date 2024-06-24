@@ -29,11 +29,15 @@ public class PCodeVisitor {
     /** The workList queue of current function */
     public LinkedList<PcodeOpAST> workList = new LinkedList<>();
 
-    public PCodeVisitor(FunctionNode funcNode, InterContext interCtx, IntraContext intraCtx) {
+    /** If trace all generated expressions during the abstract interpretation */
+    private boolean traceAllExprs = false;
+
+    public PCodeVisitor(FunctionNode funcNode, InterContext interCtx, IntraContext intraCtx, boolean traceAllExprs) {
         this.funcNode = funcNode;
         this.interCtx = interCtx;
         this.intraCtx = intraCtx;
         symExprManager = intraCtx.symbolExprManager;
+        this.traceAllExprs = traceAllExprs;
     }
 
     /**

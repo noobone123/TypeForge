@@ -148,6 +148,10 @@ public class TypeConstraint {
         Logging.debug("TypeConstraint", String.format("Constraint_%s adding referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
     }
 
+    public boolean hasReferenceTo(long offset, TypeConstraint other) {
+        return referenceTo.containsKey(offset) && referenceTo.get(offset).contains(other);
+    }
+
     public void removeReferenceTo(long offset, TypeConstraint other) {
         if (referenceTo.containsKey(offset)) {
             referenceTo.get(offset).remove(other);
