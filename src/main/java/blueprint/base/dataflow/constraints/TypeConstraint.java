@@ -32,6 +32,7 @@ public class TypeConstraint {
      * </code>
      */
     public final TreeMap<Long, HashSet<AccessPoints.AP>> fieldAccess;
+    public final TreeMap<Long, HashSet<SymbolExpr>> fieldExprMap;
     /** The fieldMap should be built by the fieldAccess after merging */
     public final TreeMap<Long, DataType> fieldMap;
     public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
@@ -64,6 +65,7 @@ public class TypeConstraint {
 
     public TypeConstraint() {
         fieldAccess = new TreeMap<>();
+        fieldExprMap = new TreeMap<>();
         fieldMap = new TreeMap<>();
         fieldAttrs = new TreeMap<>();
         globalAttrs = new HashSet<>();
@@ -91,9 +93,13 @@ public class TypeConstraint {
         accessOffsets.get(ap).add(offset);
         fieldAccess.putIfAbsent(offset, new HashSet<>());
         if (fieldAccess.get(offset).add(ap)) {
-            fieldAccess.get(offset).add(ap);
             Logging.info("TypeConstraint", String.format("Constraint_%s adding field access: 0x%x -> %s", shortUUID, offset, ap.dataType));
         }
+    }
+
+    public void addFieldExpr(long offset, SymbolExpr fieldAccessExpr) {
+        fieldExprMap.putIfAbsent(offset, new HashSet<>());
+        fieldExprMap.get(offset).add(fieldAccessExpr);
     }
 
     public void addField(long offset, DataType type) {
@@ -256,6 +262,12 @@ public class TypeConstraint {
 
         // Merging associatedExpr
         this.associatedExpr.addAll(other.associatedExpr);
+
+        // Merging fieldExpr
+        other.fieldExprMap.forEach((offset, exprs) -> {
+            this.fieldExprMap.putIfAbsent(offset, new HashSet<>());
+            this.fieldExprMap.get(offset).addAll(exprs);
+        });
 
         // Merging accessOffsets
         other.accessOffsets.forEach((ap, offsets) -> {
@@ -596,6 +608,9 @@ public class TypeConstraint {
 
             var tagsArray = offsetNode.putArray("Attrs");
             fieldAttrs.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
+
+            var exprsArray = offsetNode.putArray("Exprs");
+            fieldExprMap.getOrDefault(offset, new HashSet<>()).forEach(expr -> exprsArray.add(expr.toString()));
         });
 
         // dump polymorphicTypes

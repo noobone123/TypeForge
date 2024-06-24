@@ -323,6 +323,7 @@ public class InterContext {
 
     private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, SymbolExpr fieldExpr) {
         var fieldAPs = APs.getFieldAccessPoints(fieldExpr);
+        baseConstraint.addFieldExpr(offsetValue, fieldExpr);
         for (var ap: fieldAPs) {
             baseConstraint.addFieldAccess(offsetValue, ap);
         }
