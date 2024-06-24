@@ -133,6 +133,7 @@ public class PCodeVisitor {
      * c = *(a + 4) or *(a + 4) = c, then we can say that `a` is a base address of a structure.
      * @param pcodeOp the PCodeOpAST
      */
+    // TODO: handle sub symbolExpr
     private void handleAddOrSub(PcodeOpAST pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
@@ -203,6 +204,7 @@ public class PCodeVisitor {
      * and input2 is element size.
      * @param pcodeOp The PCodeOp
      */
+    // TODO: if input2 is 0x1, just ignore it.
     private void handlePtrAdd(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
 

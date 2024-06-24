@@ -170,19 +170,20 @@ public class InterContext {
     private void mergeByTypeAliasGraph() {
         for (var graph: typeAliasManager.getGraphs()) {
             if (graph.getNumNodes() > 1) {
-                var mayTypeAgnosticParams = graph.findMayTypeAgnosticParams();
-                if (!mayTypeAgnosticParams.isEmpty()) {
-                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, symExprManager.getExprToConstraintMapCopy());
-                    if (!confirmedTypeAgnositicParams.isEmpty()) {
-                        Logging.info("InterContext", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
-                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, symExprManager.getExprToConstraintMap(), true);
-                    } else {
-                        Logging.info("InterContext", "No confirmed type agnostic params found.");
-                        graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
-                    }
-                } else {
-                    graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
-                }
+//                var mayTypeAgnosticParams = graph.findMayTypeAgnosticParams();
+//                if (!mayTypeAgnosticParams.isEmpty()) {
+//                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, symExprManager.getExprToConstraintMapCopy());
+//                    if (!confirmedTypeAgnositicParams.isEmpty()) {
+//                        Logging.info("InterContext", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
+//                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, symExprManager.getExprToConstraintMap(), true);
+//                    } else {
+//                        Logging.info("InterContext", "No confirmed type agnostic params found.");
+//                        graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
+//                    }
+//                } else {
+//                    graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
+//                }
+                graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
             }
         }
     }
@@ -229,7 +230,6 @@ public class InterContext {
 
         symExprManager.updateAllExprToConstraintMap(finalResult);
     }
-
 
     /**
      * Parse the Field Access SymbolExpr and build the constraints for it.
@@ -362,7 +362,8 @@ public class InterContext {
     }
 
     private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
-        for (var entry : constraint.referenceTo.entrySet()) {
+        var entrySetCopy = new HashSet<>(constraint.referenceTo.entrySet());
+        for (var entry : entrySetCopy) {
             if (entry.getValue().size() > 1) {
                 Logging.info("Context", String.format("%s has multiple referenceTo at 0x%x", constraint.toString(), entry.getKey()));
                 boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());

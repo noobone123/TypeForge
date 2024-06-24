@@ -118,19 +118,19 @@ public class FunctionNode extends NodeBase<Function> {
      */
     // TODO: handle composite datatype in stack ?
     private Optional<Set<HighSymbol>> checkLocalVariables() {
-        Set<HighSymbol> candidate = new HashSet<>();
+        Set<HighSymbol> reTypeCandidate = new HashSet<>();
         var localSymMap = hFunc.getLocalSymbolMap();
         for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();
             var dt = sym.getDataType();
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
-                candidate.add(sym);
+                reTypeCandidate.add(sym);
                 decompilerInferredDT.put(sym.getStorage(), dt);
                 Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s -> %s", sym.getName(), dt.getName()));
             }
         }
 
-        return candidate.isEmpty() ? Optional.empty() : Optional.of(candidate);
+        return reTypeCandidate.isEmpty() ? Optional.empty() : Optional.of(reTypeCandidate);
     }
 
 

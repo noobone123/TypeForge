@@ -268,6 +268,7 @@ public class SymbolExprManager {
      */
     public static class Builder {
         private static final Map<Integer, SymbolExpr> builderCache = new HashMap<>();
+        private static final Map<String, SymbolExpr> exprStringToExpr = new HashMap<>();
         public SymbolExpr baseExpr = null;
         public SymbolExpr indexExpr = null;
         public SymbolExpr scaleExpr = null;
@@ -358,6 +359,7 @@ public class SymbolExprManager {
 
             SymbolExpr expr = new SymbolExpr(this);
             builderCache.put(hash, expr);
+            exprStringToExpr.put(expr.toString(), expr);
             return expr;
         }
     }

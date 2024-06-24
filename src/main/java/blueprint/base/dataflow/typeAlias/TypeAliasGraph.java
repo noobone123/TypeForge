@@ -2,7 +2,9 @@ package blueprint.base.dataflow.typeAlias;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import org.jgrapht.Graph;
+import org.jgrapht.GraphPath;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
+import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.Graphs;
@@ -10,6 +12,7 @@ import org.jgrapht.Graphs;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.utils.Logging;
 
+import java.lang.reflect.Type;
 import java.util.*;
 
 public class TypeAliasGraph<T> {
@@ -259,6 +262,40 @@ public class TypeAliasGraph<T> {
 
         return result;
     }
+
+
+    public Set<List<T>> getPath(T src, T dst) {
+        Set<List<T>> resultPaths = new HashSet<>();
+        Queue<List<T>> queue = new LinkedList<>();
+        Set<T> visited = new HashSet<>();
+
+        queue.add(new ArrayList<>(List.of(src)));
+        visited.add(src);
+
+        while (!queue.isEmpty()) {
+            List<T> path = queue.poll();
+            T lastVertex = path.get(path.size() - 1);
+
+            if (lastVertex.equals(dst)) {
+                resultPaths.add(path);
+                continue; // No need to further explore this path
+            }
+
+            for (TypeAliasEdge edge : graph.edgesOf(lastVertex)) {
+                T neighbor = Graphs.getOppositeVertex(graph, edge, lastVertex);
+                if (!visited.contains(neighbor)) {
+                    visited.add(neighbor);
+                    List<T> newPath = new ArrayList<>(path);
+                    newPath.add(neighbor);
+                    queue.add(newPath);
+                }
+            }
+        }
+
+        return resultPaths;
+    }
+
+
 
     public String toGraphviz() {
         StringBuilder builder = new StringBuilder();
