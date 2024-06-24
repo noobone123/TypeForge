@@ -340,9 +340,11 @@ public class SymbolExprManager {
                 throw new IllegalArgumentException("indexExpr and scaleExpr must either both be null or both be non-null.");
             }
 
+
             int hash;
             if (isGlobal) {
-                hash = Objects.hash(globalAddr, reference);
+                hash = Objects.hash(globalAddr, indexExpr, scaleExpr,
+                        offsetExpr, constant, dereference, reference, nestedExpr);
             } else {
                 hash = Objects.hash(baseExpr, indexExpr, scaleExpr,
                         offsetExpr, rootSym, constant,

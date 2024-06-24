@@ -249,7 +249,8 @@ public class SymbolExpr {
     @Override
     public int hashCode() {
         if (isGlobal) {
-            return Objects.hash(globalAddr, reference);
+            return Objects.hash(globalAddr, indexExpr, scaleExpr,
+                    offsetExpr, constant, dereference, reference, nestedExpr);
         }
         else {
             return Objects.hash(baseExpr, indexExpr, scaleExpr,
