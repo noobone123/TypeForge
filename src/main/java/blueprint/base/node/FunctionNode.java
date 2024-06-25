@@ -171,12 +171,14 @@ public class FunctionNode extends NodeBase<Function> {
             if (parameters.contains(sym)) {
                 continue;
             }
-            localVariables.add(sym);
 
             var mergedGroups = getMergedGroup(sym);
             if (mergedGroups.size() > 1) {
                 Logging.info("FunctionNode", "Found merged local variable: " + sym.getName());
                 mergedVariables.add(sym);
+            }
+            else {
+                localVariables.add(sym);
             }
         }
     }

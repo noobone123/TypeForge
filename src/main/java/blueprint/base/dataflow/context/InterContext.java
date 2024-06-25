@@ -65,6 +65,12 @@ public class InterContext {
         if (from.equals(to)) {
             return;
         }
+
+        if (isMergedVariableExpr(from) || isMergedVariableExpr(to)) {
+            Logging.info("InterContext", String.format("Skip adding type alias relation between merged variables: %s and %s", from, to));
+            return;
+        }
+
         typeAliasManager.addEdge(from, to, edgeType);
     }
 
@@ -77,6 +83,11 @@ public class InterContext {
             Logging.debug("InterContext", String.format("There is already an existing edge between %s and %s", from, to));
             return false;
         }
+        if (isMergedVariableExpr(from) || isMergedVariableExpr(to)) {
+            Logging.info("InterContext", String.format("Skip adding type alias relation between merged variables: %s and %s", from, to));
+            return false;
+        }
+
         typeAliasManager.addEdge(from, to, TypeAliasGraph.EdgeType.MEMALIAS);
         return true;
     }
@@ -446,6 +457,17 @@ public class InterContext {
             }
             SimpleEntry that = (SimpleEntry) obj;
             return offset == that.offset && baseExpr.equals(that.baseExpr);
+        }
+    }
+
+    private boolean isMergedVariableExpr(SymbolExpr expr) {
+        var rootSym = expr.getRootHighSymbol();
+        if (rootSym.isGlobal()) { return false; }
+        var function = rootSym.getHighFunction().getFunction();
+        var funcNode = callGraph.getNode(function);
+        if (funcNode.mergedVariables.isEmpty()) { return false; }
+        else {
+            return funcNode.mergedVariables.contains(rootSym);
         }
     }
 

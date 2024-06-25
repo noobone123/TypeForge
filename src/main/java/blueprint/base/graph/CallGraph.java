@@ -185,6 +185,10 @@ public class CallGraph extends GraphBase<Function> {
         return funcNode;
     }
 
+    @Override
+    public FunctionNode getNode(Function value) {
+        return (FunctionNode) super.getNode(value);
+    }
 
     public FunctionNode getNodebyAddr(Address addr) {
         return addrToNode.get(addr);

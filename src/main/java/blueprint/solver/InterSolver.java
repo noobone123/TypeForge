@@ -52,11 +52,11 @@ public class InterSolver {
             ctx.solvedFunc.add(funcNode);
         }
 
-//        ctx.collectConstraints();
-//
-//        var generator = new Generator(ctx);
-//        // generator.buildSkeletonOfVariable();
-//        generator.dumpResults(new File(Global.outputDirectory));
+        ctx.collectConstraints();
+
+        var generator = new Generator(ctx);
+        // generator.buildSkeletonOfVariable();
+        generator.dumpResults(new File(Global.outputDirectory));
     }
 
     public void checkCallSitesInconsistency() {

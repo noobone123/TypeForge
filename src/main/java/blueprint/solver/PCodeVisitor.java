@@ -458,8 +458,8 @@ public class PCodeVisitor {
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
             if (leftValueExprs != null) {
-                Logging.debug("PCodeVisitor", "Loaded varnode has already held symbolExpr, set type alias ...");
                 for (var leftValueExpr : leftValueExprs) {
+                    Logging.debug("PCodeVisitor", String.format("Loaded varnode has already held %s, set type alias of %s and %s", leftValueExpr, loadedValueExpr, leftValueExpr));
                     interCtx.addTypeAliasRelation(loadedValueExpr, leftValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                 }
             }
@@ -490,7 +490,7 @@ public class PCodeVisitor {
             interCtx.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE);
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
-                    Logging.debug("PCodeVisitor", "Stored value has already held symbolExpr, set type alias ...");
+                    Logging.debug("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));
                     interCtx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeAliasGraph.EdgeType.DATAFLOW);
                 }
             }
@@ -590,12 +590,6 @@ public class PCodeVisitor {
                         for (var retValueExpr : retExprs) {
                             interCtx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeAliasGraph.EdgeType.RETURN);
                         }
-                    }
-                }
-                // If receiverFacts has no corresponding symbolExpr
-                else {
-                    for (var retValueExpr : retExprs) {
-                        intraCtx.updateDataFlowFacts(receiverVn, retValueExpr);
                     }
                 }
             }
