@@ -65,6 +65,9 @@ public class FunctionNode extends NodeBase<Function> {
     public List<HighSymbol> globalVariables = new LinkedList<>();
     public Map<VariableStorage, DataType> decompilerInferredDT = new HashMap<>();
 
+    /** If a local variable is merged, these variables should not appear in TypeAliasGraph */
+    public HashSet<HighSymbol> mergedVariables = new HashSet<>();
+
     public FunctionNode(Function value, int id) {
         super(value, id);
     }
@@ -169,6 +172,12 @@ public class FunctionNode extends NodeBase<Function> {
                 continue;
             }
             localVariables.add(sym);
+
+            var mergedGroups = getMergedGroup(sym);
+            if (mergedGroups.size() > 1) {
+                Logging.info("FunctionNode", "Found merged local variable: " + sym.getName());
+                mergedVariables.add(sym);
+            }
         }
     }
 
@@ -276,6 +285,14 @@ public class FunctionNode extends NodeBase<Function> {
             this.newParams = newParams.get();
         }
 
+        var splitCandidates = checkNeedSplitVariable();
+        if (splitCandidates.isPresent()) {
+            for (var sym: splitCandidates.get()) {
+                splitMergedVariables(sym);
+            }
+            if (!decompile()) { return false; }
+        }
+
         var fixCandidates = checkLocalVariables();
         if (fixCandidates.isPresent()) {
             Logging.info("FunctionNode", "Found local variables pointed to composite datatype");
@@ -307,6 +324,68 @@ public class FunctionNode extends NodeBase<Function> {
                 }
             }
         }
+    }
+
+    public Optional<Set<HighSymbol>> checkNeedSplitVariable() {
+        Set<HighSymbol> result = new HashSet<>();
+        Set<HighSymbol> allHighSymbols = new HashSet<>();
+        for (Iterator<HighSymbol> it = hFunc.getLocalSymbolMap().getSymbols(); it.hasNext(); ) {
+            var sym = it.next();
+            allHighSymbols.add(sym);
+        }
+
+        for (var sym: allHighSymbols) {
+            var var = sym.getHighVariable();
+            if (sym.isIsolated()) {
+                continue;
+            }
+            if (var == null) {
+                continue;
+            }
+            var mergedGroups = getMergedGroup(sym);
+            if (mergedGroups.size() > 1) {
+                if (sym.isParameter()) {
+                    // If the merged variable is a parameter, we should split it out
+                    result.add(sym);
+                    Logging.info("FunctionNode", String.format("Found variables need to split: %s", sym.getName()));
+                }
+            }
+        }
+
+        return result.isEmpty() ? Optional.empty() : Optional.of(result);
+    }
+
+
+    private void splitMergedVariables(HighSymbol highSym) {
+        var variable = highSym.getHighVariable();
+        for (var vn: variable.getInstances()) {
+            try {
+                HighVariable newVar = hFunc.splitOutMergeGroup(variable, vn);
+                HighSymbol newSymbol = newVar.getSymbol();
+                Logging.info("FunctionNode", "Split merged variable: " + newSymbol.getName());
+            }
+            catch (PcodeException e) {
+                Logging.warn("FunctionNode", "Failed to split merged variable: " + variable.getName());
+                return;
+            }
+
+            DataType dt = highSym.getDataType();
+            try {
+                HighFunctionDBUtil.updateDBVariable(highSym, null, dt, SourceType.USER_DEFINED);
+            } catch (Exception e) {
+                Logging.warn("FunctionNode", "Failed to update variable: " + variable.getName());
+            }
+        }
+    }
+
+    private Set<Short> getMergedGroup(HighSymbol highSym) {
+        Set<Short> mergedGroups = new HashSet<>();
+        var variable = highSym.getHighVariable();
+        if (variable == null) { return mergedGroups; }
+        for (var vn: variable.getInstances()) {
+            mergedGroups.add(vn.getMergeGroup());
+        }
+        return mergedGroups;
     }
 
 
