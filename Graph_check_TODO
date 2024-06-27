@@ -2,51 +2,9 @@
 [0013d7de]-fdevent_register: *(puVar2 + 0x8) --- ("MEMALIAS") --- [0015b66e]-fdlog_files_flush: *(*(fdlog_files + local_c * 0x8) + 0x8)
 
 
-Enter source node: [001135d0]-http_response_static_errdoc: param_1
-Enter destination node: [0011a135]-network_close: *(*(param_1 + 0x150) + local_10 * 0x8)
-[001135d0]-http_response_static_errdoc: param_1 --- ("CALL") --- [00113a2e]-http_response_write_prepare: param_1
-[00113a2e]-http_response_write_prepare: param_1 --- ("CALL") --- [001141a5]-http_response_handler: param_1
-[001141a5]-http_response_handler: param_1 --- ("CALL") --- [001133b6]-http_response_comeback: param_1
-[001133b6]-http_response_comeback: param_1 --- ("CALL") --- [0014ee15]-config_cond_cache_reset: param_1
-[0014ee15]-config_cond_cache_reset: param_1 --- ("CALL") --- [00115583]-connection_accepted: puVar2
-[00115583]-connection_accepted: puVar2 --- ("CALL") --- [0013d7de]-fdevent_register: param_4
-[0013d7de]-fdevent_register: param_4 --- ("CALL") --- [0011ae92]-network_register_fdevents: *(*(param_1 + 0x140) + local_c * 0x8)
-[0011ae92]-network_register_fdevents: *(*(param_1 + 0x140) + local_c * 0x8) --- ("MEMALIAS") --- [0010f2db]-server_sockets_restore: *(*(param_1 + 0x150) + local_10 * 0x8)
-[0010f2db]-server_sockets_restore: *(*(param_1 + 0x150) + local_10 * 0x8) --- ("MEMALIAS") --- [0011a135]-network_close: *(*(param_1 + 0x150) + local_10 * 0x8)
-[0011a135]-network_close: *(*(param_1 + 0x150) + local_10 * 0x8)
-Enter source node: [0012f70d]-buffer_init: pvVar1
-Enter destination node: stat_cache_free_fam: param_1
-Node not found in the graph.
-Enter source node: [001461a2]-stat_cache_free_fam: param_1
-Enter destination node: [0012f70d]-buffer_init: pvVar1
-[001461a2]-stat_cache_free_fam: param_1 --- ("CALL") --- [Global]: DAT_00176af0
-[Global]: DAT_00176af0 --- ("RETURN") --- [001460b3]-stat_cache_init_fam: __ptr
-[001460b3]-stat_cache_init_fam: __ptr --- ("CALL") --- [0013d7de]-fdevent_register: param_4
-[0013d7de]-fdevent_register: param_4 --- ("DATAFLOW") --- [0013d7de]-fdevent_register: *(puVar2 + 0x8)
-[0013d7de]-fdevent_register: *(puVar2 + 0x8) --- ("MEMALIAS") --- [0015b66e]-fdlog_files_flush: *(*(fdlog_files + local_c * 0x8) + 0x8)
-[0015b66e]-fdlog_files_flush: *(*(fdlog_files + local_c * 0x8) + 0x8) --- ("CALL") --- [00133ac6]-write_all: param_2
-[00133ac6]-write_all: param_2 --- ("CALL") --- [0013408f]-log_error_write: *param_2
-[0013408f]-log_error_write: *param_2 --- ("MEMALIAS") --- [00118828]-buffer_copy_buffer: *param_2
-[00118828]-buffer_copy_buffer: *param_2 --- ("CALL") --- [0012fc86]-buffer_copy_string_len: param_2
-[0012fc86]-buffer_copy_string_len: param_2 --- ("CALL") --- [00121bdc]-config_tokenizer: pcVar5
-[00121bdc]-config_tokenizer: pcVar5 --- ("INDIRECT") --- [00121bdc]-config_tokenizer: (pcVar5 + (local_2c + local_28) * 0x1)
-[00121bdc]-config_tokenizer: (pcVar5 + (local_2c + local_28) * 0x1) --- ("CALL") --- [0012fd4f]-buffer_append_string_len: param_3
-[0012fd4f]-buffer_append_string_len: param_3 --- ("CALL") --- [00138409]-chunkqueue_append_mem_extend_chunk: param_3
-[00138409]-chunkqueue_append_mem_extend_chunk: param_3 --- ("CALL") --- [0013854f]-chunkqueue_append_mem: param_3
-[0013854f]-chunkqueue_append_mem: param_3 --- ("CALL") --- [00138c59]-chunkqueue_steal: local_30
-[00138c59]-chunkqueue_steal: local_30 --- ("DATAFLOW") --- [00138c59]-chunkqueue_steal: param_3
-[00138c59]-chunkqueue_steal: param_3 --- ("CALL") --- [0011cb6e]-http_range_single: local_18
-[0011cb6e]-http_range_single: local_18 --- ("CALL") --- [00130405]-li_itostrn: param_3
-[00130405]-li_itostrn: param_3 --- ("CALL") --- [00130277]-itostr: param_2
-[00130277]-itostr: param_2 --- ("CALL") --- [001302cf]-buffer_append_int: param_2
-[001302cf]-buffer_append_int: param_2 --- ("CALL") --- [0011a70a]-network_init: *(local_150 + 0xa4)
-[0011a70a]-network_init: *(local_150 + 0xa4) --- ("MEMALIAS") --- [00118ed9]-network_host_parse_addr: *(param_1 + 0xa4)
-[00118ed9]-network_host_parse_addr: *(param_1 + 0xa4) --- ("MEMALIAS") --- [0011f7df]-config_insert_srvconf: *(param_1 + 0xa4)
-[0011f7df]-config_insert_srvconf: *(param_1 + 0xa4) --- ("DATAFLOW") --- [0011f7df]-config_insert_srvconf: *(local_28 + 0x8)
-[0011f7df]-config_insert_srvconf: *(local_28 + 0x8) --- ("CALL") --- [00148f23]-array_get_element_klen: param_1
-[00148f23]-array_get_element_klen: param_1 --- ("CALL") --- [001242f0]-configparser_merge_data: (param_1 + 0x20)
-[001242f0]-configparser_merge_data: (param_1 + 0x20) --- ("CALL") --- [001302cf]-buffer_append_int: param_1
-[001302cf]-buffer_append_int: param_1 --- ("CALL") --- [001252d9]-yy_reduce: local_80
-[001252d9]-yy_reduce: local_80 --- ("RETURN") --- [0012f70d]-buffer_init: pvVar1
-[0012f70d]-buffer_init: pvVar1
-Enter source node: [0013d7de]-fdevent_register: *(puVar2 + 0x8) --- ("MEMALIAS") --- [0015b66e]-fdlog_files_flush: *(*(fdlog_files + local_c * 0x8) + 0x8)
+# void * 和 CAST 导致
+[0011ae92]-network_register_fdevents: *(*(*(param_1 + 0x140) + local_c * 0x8) + 0x78) --- ("MEMALIAS") --- [00112c7b]-http_response_prepare: *(param_1 + 0x78)
+
+
+# 检查为什么出现以下边，可能是全局变量表达式的设置存在问题，fdlog_files_flush: *(fdlog_files + local_c * 0x8) 应当为 Global: *(fdlog_files + local_c * 0x8)
+fdlog_files_flush: *(fdlog_files + local_c * 0x8) ---CALL---> [0015bb4b]-fdlog_free: param_1
