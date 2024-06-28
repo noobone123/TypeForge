@@ -8,3 +8,7 @@
 
 # 检查为什么出现以下边，可能是全局变量表达式的设置存在问题，fdlog_files_flush: *(fdlog_files + local_c * 0x8) 应当为 Global: *(fdlog_files + local_c * 0x8)
 fdlog_files_flush: *(fdlog_files + local_c * 0x8) ---CALL---> [0015bb4b]-fdlog_free: param_1
+
+
+# 
+[00116651]-h1_send_headers: param_1 --- and --- [001493bd]-array_get_int_ptr: param_1
