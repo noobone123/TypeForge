@@ -139,11 +139,11 @@ public class TypeAliasManager<T> {
                 for (var entryNode: graph.source) {
                     writer.write(String.format("\tSource ID: %s\n", entryNode));
                     for (var exitNode: graph.sink) {
-                        writer.write(String.format("\t\tSink ID: %s\n", exitNode));
                         var paths = graph.getAllPathsBetween(entryNode, exitNode);
                         if (paths.isPresent() && paths.get().isEmpty()) {
-                            writer.write("\t\t\tNo path found\n");
+                            continue;
                         } else if (paths.isPresent()) {
+                            writer.write(String.format("\t\tSink ID: %s\n", exitNode));
                             for (var path: paths.get()) {
                                 writer.write(String.format("\t\t\tPath: %s\n", graph.getPathRepresentation(path)));
                             }
