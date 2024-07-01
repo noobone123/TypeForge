@@ -6,6 +6,7 @@ import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
 
@@ -46,6 +47,9 @@ public class SymbolExpr {
     public boolean isGlobal = false;
     public Address globalAddr = null;
 
+    public boolean isTemp;
+    public Varnode varnode;
+
     public Set<Attribute> attributes = new HashSet<>();
     public long variableSize = 0;
 
@@ -64,6 +68,8 @@ public class SymbolExpr {
         this.isConst = builder.isConst;
         this.isGlobal = builder.isGlobal;
         this.globalAddr = builder.globalAddr;
+        this.isTemp = builder.isTemp;
+        this.varnode = builder.temp;
 
         if (this.dereference && this.nestedExpr == null) {
             throw new IllegalArgumentException("Dereference expression must have a nested expression.");
@@ -77,6 +83,8 @@ public class SymbolExpr {
             this.prefix = "[Global]";
         } else if (isConst()) {
             this.prefix = "[Constant]";
+        } else if (isTemp) {
+            this.prefix = "[Temp]";
         } else {
             var rootSymbol = getRootSymExpr().getRootSymbol();
             this.function = rootSymbol.getHighFunction().getFunction();
@@ -210,6 +218,9 @@ public class SymbolExpr {
         else if (isConst) {
             sb.append("0x").append(Long.toHexString(constant));
         }
+        else if (isTemp) {
+            sb.append(varnode.toString());
+        }
         else if (dereference) {
             sb.append(String.format("*%s", nestedExpr.getRepresentation()));
         }
@@ -250,6 +261,9 @@ public class SymbolExpr {
         if (isGlobal) {
             return Objects.hash(globalAddr, indexExpr, scaleExpr,
                     offsetExpr, constant, dereference, reference, nestedExpr);
+        }
+        else if (isTemp) {
+            return Objects.hash(varnode);
         }
         else {
             return Objects.hash(baseExpr, indexExpr, scaleExpr,

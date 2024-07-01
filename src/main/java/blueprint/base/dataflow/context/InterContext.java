@@ -478,6 +478,7 @@ public class InterContext {
     }
 
     private boolean isMergedVariableExpr(SymbolExpr expr) {
+        if (expr.isTemp) { return false; }
         var rootSym = expr.getRootHighSymbol();
         if (rootSym.isGlobal()) { return false; }
         var function = rootSym.getHighFunction().getFunction();

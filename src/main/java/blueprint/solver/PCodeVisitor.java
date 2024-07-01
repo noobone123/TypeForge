@@ -591,6 +591,24 @@ public class PCodeVisitor {
                             interCtx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeAliasGraph.EdgeType.RETURN);
                         }
                     }
+                } else {
+                    if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
+                        Logging.warn("PCodeVisitor", String.format("Receiver's %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
+                    }
+                    else {
+                        var receiverLongDescend = receiverVn.getLoneDescend();
+                        var outputVn = receiverLongDescend.getOutput();
+                        var newReceiverFacts = intraCtx.getDataFlowFacts(outputVn);
+                        if (newReceiverFacts != null) {
+                            for (var receiverExpr : newReceiverFacts) {
+                                for (var retValueExpr : retExprs) {
+                                    interCtx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeAliasGraph.EdgeType.RETURN);
+                                }
+                            }
+                        } else {
+                            Logging.warn("PCodeVisitor", "????????????????????");
+                        }
+                    }
                 }
             }
         }

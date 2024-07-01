@@ -65,7 +65,8 @@ public class FunctionNode extends NodeBase<Function> {
     public List<HighSymbol> globalVariables = new LinkedList<>();
     public Map<VariableStorage, DataType> decompilerInferredDT = new HashMap<>();
 
-    /** If a local variable is merged, these variables should not appear in TypeAliasGraph */
+    /** If a local variable is merged, these variables should not appear in TypeAliasGraph
+     merged variable's dataType should not be inferred, because there may hold different types */
     public HashSet<HighSymbol> mergedVariables = new HashSet<>();
 
     public FunctionNode(Function value, int id) {
@@ -174,7 +175,7 @@ public class FunctionNode extends NodeBase<Function> {
 
             var mergedGroups = getMergedGroup(sym);
             if (mergedGroups.size() > 1) {
-                Logging.info("FunctionNode", "Found merged local variable: " + sym.getName());
+                Logging.info("FunctionNode", String.format("Found merged local variable: %s: %s", hFunc.getFunction().getName(), sym.getName()));
                 mergedVariables.add(sym);
             }
             else {
@@ -287,12 +288,15 @@ public class FunctionNode extends NodeBase<Function> {
             this.newParams = newParams.get();
         }
 
-        var splitCandidates = checkNeedSplitVariable();
-        if (splitCandidates.isPresent()) {
-            for (var sym: splitCandidates.get()) {
+        var result = checkNeedSplitVariable();
+        if (result.isPresent()) {
+            var splitCandidates = new HashSet<HighSymbol>(result.get());
+            for (var sym : splitCandidates) {
                 splitMergedVariables(sym);
             }
-            if (!decompile()) { return false; }
+            if (!decompile()) {
+                return false;
+            }
         }
 
         var fixCandidates = checkLocalVariables();
@@ -346,6 +350,7 @@ public class FunctionNode extends NodeBase<Function> {
             }
             var mergedGroups = getMergedGroup(sym);
             if (mergedGroups.size() > 1) {
+                // We only split out parameters high variables
                 if (sym.isParameter()) {
                     // If the merged variable is a parameter, we should split it out
                     result.add(sym);

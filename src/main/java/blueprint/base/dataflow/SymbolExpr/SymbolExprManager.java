@@ -6,6 +6,7 @@ import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
 
@@ -281,6 +282,8 @@ public class SymbolExprManager {
         public boolean isConst = false;
         public boolean isGlobal = false;
         public Address globalAddr = null;
+        public boolean isTemp = false;
+        public Varnode temp = null;
 
         public Builder base(SymbolExpr base) {
             this.baseExpr = base;
@@ -348,10 +351,15 @@ public class SymbolExprManager {
 
 
             int hash;
+            // IMPORTANT: modified the equals and hashCode should be careful the cache mechanism in Builder
             if (isGlobal) {
                 hash = Objects.hash(globalAddr, indexExpr, scaleExpr,
                         offsetExpr, constant, dereference, reference, nestedExpr);
-            } else {
+            }
+            else if (isTemp) {
+                hash = Objects.hash(temp);
+            }
+            else {
                 hash = Objects.hash(baseExpr, indexExpr, scaleExpr,
                         offsetExpr, rootSym, constant,
                         dereference, reference, nestedExpr,
