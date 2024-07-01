@@ -135,15 +135,15 @@ public class TypeAliasManager<T> {
                     continue;
                 }
 
-                writer.write(String.format("Graph ID: %s\n", graph.getShortUUID()));
+                writer.write(String.format("Graph: %s\n", graph));
                 for (var entryNode: graph.source) {
-                    writer.write(String.format("\tSource ID: %s\n", entryNode));
+                    writer.write(String.format("\tSource: %s\n", entryNode));
                     for (var exitNode: graph.sink) {
                         var paths = graph.getAllPathsBetween(entryNode, exitNode);
                         if (paths.isPresent() && paths.get().isEmpty()) {
                             continue;
                         } else if (paths.isPresent()) {
-                            writer.write(String.format("\t\tSink ID: %s\n", exitNode));
+                            writer.write(String.format("\t\tSink: %s\n", exitNode));
                             for (var path: paths.get()) {
                                 writer.write(String.format("\t\t\tPath: %s\n", graph.getPathRepresentation(path)));
                             }

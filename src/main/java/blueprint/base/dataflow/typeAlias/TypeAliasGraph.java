@@ -335,10 +335,10 @@ public class TypeAliasGraph<T> {
         StringBuilder builder = new StringBuilder();
         for (var edge: path.getEdgeList()) {
             T src = graph.getEdgeSource(edge);
-            T dst = graph.getEdgeTarget(edge);
-            builder.append(src).append(" -> ").append(dst).append(" -> ");
+            builder.append(src).append(String.format(" -- %s --> ", edge.getType()));
         }
-        builder.append("END");
+        var lastEdge = path.getEdgeList().get(path.getEdgeList().size() - 1);
+        builder.append(graph.getEdgeTarget(lastEdge));
         return builder.toString();
     }
 
