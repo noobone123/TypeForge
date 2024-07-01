@@ -96,7 +96,7 @@ public class Generator {
     public void dumpResults(File outputDir) {
         // dump typeAliasManager to JSON file
         try {
-            solverCtx.typeAliasManager.dump(outputDir);
+            solverCtx.typeAliasManager.dumpGraphMeta(outputDir);
         } catch (IOException e) {
             Logging.error("Generator", "Error writing typeAliasManager info to file" + e.getMessage());
         }

@@ -52,7 +52,6 @@ public class SymbolExpr {
     public SymbolExpr(SymbolExprManager.Builder builder) {
         // Be careful, for global variables, the same global variable have different HighSymbol instances
         // in different functions.
-        // TODO: what about Global variable's complex SymbolExpr?
         this.baseExpr = builder.baseExpr;
         this.indexExpr = builder.indexExpr;
         this.scaleExpr = builder.scaleExpr;

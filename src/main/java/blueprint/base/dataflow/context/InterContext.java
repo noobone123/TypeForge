@@ -16,6 +16,7 @@ import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.PcodeOp;
 
 
+import java.io.File;
 import java.util.*;
 
 /**
@@ -103,23 +104,39 @@ public class InterContext {
             buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
-        handleMemoryAlias();
+        handlePointerTypeAmbiguity();
 
-        typeAliasManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
+//        handleMemoryAlias();
+//
+//        typeAliasManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
 
         // merging constraints according to type alias graph
-        mergeByTypeAliasGraph();
-
-        handleReference();
-        handleExprWithAttributions();
-
-        // merge constraints in same offset
-        mergeConstraints();
-
-        // Remove meaningLess constraints
-        removeRedundantConstraints();
+//        mergeByTypeAliasGraph();
+//
+//        handleReference();
+//        handleExprWithAttributions();
+//
+//        // merge constraints in same offset
+//        mergeConstraints();
+//
+//        // Remove meaningLess constraints
+//        removeRedundantConstraints();
 
         Logging.info("InterContext", "Collect constraints done.");
+    }
+
+
+    private void handlePointerTypeAmbiguity() {
+        for (var graph: typeAliasManager.getGraphs()) {
+            if (graph.getNumNodes() > 1) {
+                Logging.info("InterContext", String.format("Handing type alias graph %s", graph));
+                graph.findSources();
+                graph.findSinks();
+                graph.findAllSourceSinkPaths();
+            }
+        }
+
+        typeAliasManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
     }
 
     /**

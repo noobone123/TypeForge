@@ -4,8 +4,10 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
@@ -91,7 +93,7 @@ public class TypeAliasManager<T> {
     }
 
 
-    public void dump(File outputDir) throws IOException {
+    public void dumpGraphMeta(File outputDir) throws IOException {
         File metadataFile = new File(outputDir, "TypeAliasManager.json");
 
         ObjectMapper mapper = new ObjectMapper();
@@ -120,6 +122,40 @@ public class TypeAliasManager<T> {
             String graphName = "TypeAliasGraph_" + graph.getShortUUID();
             File graphFile = new File(outputDir, graphName + ".dot");
             Files.write(graphFile.toPath(), graph.toGraphviz().getBytes());
+        }
+    }
+
+
+    public void dumpEntryToExitPaths(File outputDir) {
+        File textFile = new File(outputDir, "EntryToExitPaths.txt");
+
+        try (FileWriter writer = new FileWriter(textFile)) {
+            for (var graph: graphs) {
+                if (!graph.hasSrcSink) {
+                    continue;
+                }
+
+                writer.write(String.format("Graph ID: %s\n", graph.getShortUUID()));
+                for (var entryNode: graph.source) {
+                    writer.write(String.format("\tSource ID: %s\n", entryNode));
+                    for (var exitNode: graph.sink) {
+                        writer.write(String.format("\t\tSink ID: %s\n", exitNode));
+                        var paths = graph.getAllPathsBetween(entryNode, exitNode);
+                        if (paths.isPresent() && paths.get().isEmpty()) {
+                            writer.write("\t\t\tNo path found\n");
+                        } else if (paths.isPresent()) {
+                            for (var path: paths.get()) {
+                                writer.write(String.format("\t\t\tPath: %s\n", graph.getPathRepresentation(path)));
+                            }
+                        }
+                    }
+                }
+                writer.write("\n");
+            }
+        } catch (Exception e) {
+            Logging.error("TypeAliasManager", "Failed to write entry to exit paths to file" + e);
+            e.printStackTrace();
+            System.exit(1);
         }
     }
 }

@@ -284,6 +284,11 @@ public class SymbolExprManager {
 
         public Builder base(SymbolExpr base) {
             this.baseExpr = base;
+            // TODO: Is this correct?
+            if (base.isGlobal) {
+                this.isGlobal = true;
+                this.globalAddr = base.globalAddr;
+            }
             return this;
         }
 
