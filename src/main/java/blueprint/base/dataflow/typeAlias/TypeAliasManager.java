@@ -92,7 +92,6 @@ public class TypeAliasManager<T> {
         }
     }
 
-
     public void dumpGraphMeta(File outputDir) throws IOException {
         File metadataFile = new File(outputDir, "TypeAliasManager.json");
 

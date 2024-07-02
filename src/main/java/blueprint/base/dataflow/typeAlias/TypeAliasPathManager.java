@@ -1,5 +1,6 @@
 package blueprint.base.dataflow.typeAlias;
 
+import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
 import java.io.FileWriter;
@@ -39,6 +40,12 @@ public class TypeAliasPathManager<T> {
         }
     }
 
+    public void tryMergeByPath(SymbolExprManager exprManager) {
+        for (var path: allSourceSinkPaths) {
+            path.tryMergeByPath(exprManager);
+        }
+    }
+
     public void findSources() {
         for (T vertex : graph.getGraph().vertexSet()) {
             if (graph.getGraph().inDegreeOf(vertex) == 0 && graph.getGraph().outDegreeOf(vertex) > 0) {
@@ -69,6 +76,10 @@ public class TypeAliasPathManager<T> {
                 }
             }
         }
+    }
+
+    public Set<TypeAliasPath<T>> getAllPathContainsNode(T node) {
+        return nodeToPathsMap.get(node);
     }
 
     public void dump(FileWriter writer) throws Exception {

@@ -18,13 +18,70 @@ public class SymbolExprManager {
     Map<SymbolExpr.Attribute, Set<SymbolExpr>> attributeToExpr;
     InterContext interCtx;
 
+    // mem alias related fields
+    Map<SymbolExpr, Set<SymbolExpr>> memAliasCache;
+
     public SymbolExprManager(InterContext interCtx) {
         exprToConstraint = new HashMap<>();
         baseToFieldsMap = new HashMap<>();
         fieldToBaseMap = new HashMap<>();
         attributeToExpr = new HashMap<>();
         this.interCtx = interCtx;
+
+        memAliasCache = new HashMap<>();
     }
+
+    public Set<SymbolExpr> getMayMemAliases(SymbolExpr expr) {
+        // get from cache first
+        if (memAliasCache.containsKey(expr)) {
+            Logging.debug("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
+            return memAliasCache.get(expr);
+        }
+
+        var parseResult = ParsedExpr.parseFieldAccessExpr(expr);
+        if (parseResult.isEmpty()) { return new HashSet<>(); }
+        var parsedExpr = parseResult.get();
+        var baseExpr = parsedExpr.base;
+        var offset = parsedExpr.offsetValue;
+
+        var mayAliasExpr = new HashSet<SymbolExpr>();
+
+        var taG = interCtx.typeAliasManager.getTypeAliasGraph(baseExpr);
+        if (taG == null) {
+            return mayAliasExpr;
+        }
+
+        var paths = taG.pathManager.getAllPathContainsNode(baseExpr);
+        if (paths == null) {
+            Logging.warn("SymbolExprManager", String.format("No paths found for %s", baseExpr));
+            return mayAliasExpr;
+        }
+        if (paths.isEmpty()) {
+            return mayAliasExpr;
+        }
+
+        Logging.info("SymbolExprManager",
+                String.format("Found %d base expr %s 's paths for finding mayMemAlias for %s", paths.size(), baseExpr, expr));
+
+        for (var path: paths) {
+            for (var node: path.nodes) {
+                // TODO: has INDIRECT relation already in getFieldExpr ?
+                var result = getFieldExprsByOffset((SymbolExpr) node, offset);
+                if (result.isPresent()) {
+                    mayAliasExpr.addAll(result.get());
+                }
+            }
+        }
+
+        // update cache
+        for (var alias: mayAliasExpr) {
+            memAliasCache.put(alias, mayAliasExpr);
+        }
+
+        Logging.info("SymbolExprManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
+        return mayAliasExpr;
+    }
+
 
     /**
      * Get the fieldAccess Expressions by given baseExpression and offset value

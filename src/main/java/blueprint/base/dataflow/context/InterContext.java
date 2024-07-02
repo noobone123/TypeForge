@@ -131,6 +131,7 @@ public class InterContext {
             if (graph.getNumNodes() > 1) {
                 Logging.info("InterContext", String.format("Handing type alias graph %s", graph));
                 graph.pathManager.build();
+                graph.pathManager.tryMergeByPath(symExprManager);
             }
         }
 

@@ -255,7 +255,6 @@ public class TypeAliasGraph<T> {
         }
     }
 
-
     public List<Set<T>> getConnectedComponents() {
         ConnectivityInspector<T, TypeAliasEdge> inspector = new ConnectivityInspector<>(graph);
         var result = inspector.connectedSets();
