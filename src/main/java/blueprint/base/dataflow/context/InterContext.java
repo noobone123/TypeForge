@@ -130,9 +130,7 @@ public class InterContext {
         for (var graph: typeAliasManager.getGraphs()) {
             if (graph.getNumNodes() > 1) {
                 Logging.info("InterContext", String.format("Handing type alias graph %s", graph));
-                graph.findSources();
-                graph.findSinks();
-                graph.findAllSourceSinkPaths();
+                graph.pathManager.build();
             }
         }
 

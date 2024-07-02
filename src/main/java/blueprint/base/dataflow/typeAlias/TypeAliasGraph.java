@@ -44,20 +44,16 @@ public class TypeAliasGraph<T> {
     private final Graph<T, TypeAliasEdge> graph;
     private final UUID uuid;
     private final String shortUUID;
-    public final Set<T> source;
-    public final Set<T> sink;
-    private final Set<GraphPath<T, TypeAliasEdge>> allSourceSinkPaths;
-    public final Map<T, Set<GraphPath<T, TypeAliasEdge>>> nodeToPathsMap;
-    public boolean hasSrcSink = true;
+
+    public TypeAliasPathManager<T> pathManager;
 
     public TypeAliasGraph() {
         graph = new DefaultDirectedGraph<>(TypeAliasEdge.class);
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
-        source = new HashSet<>();
-        sink = new HashSet<>();
-        allSourceSinkPaths = new HashSet<>();
-        nodeToPathsMap = new HashMap<>();
+
+        pathManager = new TypeAliasPathManager<T>(this);
+
         Logging.debug("TypeAliasGraph", String.format("Create TypeAliasGraph_%s", shortUUID));
     }
 
@@ -269,88 +265,6 @@ public class TypeAliasGraph<T> {
         }
 
         return result;
-    }
-
-
-    public void findSources() {
-        for (T vertex : graph.vertexSet()) {
-            if (graph.inDegreeOf(vertex) == 0 && graph.outDegreeOf(vertex) > 0) {
-                source.add(vertex);
-            }
-        }
-    }
-
-    public void findSinks() {
-        for (T vertex : graph.vertexSet()) {
-            if (graph.inDegreeOf(vertex) > 0 && graph.outDegreeOf(vertex) == 0) {
-                sink.add(vertex);
-            }
-        }
-    }
-
-    public void findAllSourceSinkPaths() {
-        if (!checkHasSrcSink()) {
-            return;
-        }
-
-        for (var entry: source) {
-            for (var exit: sink) {
-                AllDirectedPaths<T, TypeAliasEdge> paths = new AllDirectedPaths<>(graph);
-                allSourceSinkPaths.addAll(paths.getAllPaths(entry, exit, true, null));
-            }
-        }
-
-        for (var path: allSourceSinkPaths) {
-            for (var edge: path.getEdgeList()) {
-                T src = graph.getEdgeSource(edge);
-                T dst = graph.getEdgeTarget(edge);
-                nodeToPathsMap.computeIfAbsent(src, k -> new HashSet<>()).add(path);
-                nodeToPathsMap.computeIfAbsent(dst, k -> new HashSet<>()).add(path);
-            }
-        }
-    }
-
-    public Optional<Set<GraphPath<T, TypeAliasEdge>>> getAllPathsBetween(T src, T dst) {
-        if (!hasSrcSink) {
-            return Optional.empty();
-        }
-
-        var srcPaths = nodeToPathsMap.get(src);
-        var dstPaths = nodeToPathsMap.get(dst);
-
-        if (srcPaths == null) {
-            Logging.warn("TypeAliasGraph", String.format("No path found for %s", src));
-            return Optional.empty();
-        } else if (dstPaths == null) {
-            Logging.warn("TypeAliasGraph", String.format("No path found for %s", dst));
-            return Optional.empty();
-        }
-
-        var paths = new HashSet<>(srcPaths);
-        paths.retainAll(dstPaths);
-        return Optional.of(paths);
-    }
-
-    public String getPathRepresentation(GraphPath<T, TypeAliasEdge> path) {
-        StringBuilder builder = new StringBuilder();
-        for (var edge: path.getEdgeList()) {
-            T src = graph.getEdgeSource(edge);
-            builder.append(src).append(String.format(" -- %s --> ", edge.getType()));
-        }
-        var lastEdge = path.getEdgeList().get(path.getEdgeList().size() - 1);
-        builder.append(graph.getEdgeTarget(lastEdge));
-        return builder.toString();
-    }
-
-    public boolean checkHasSrcSink() {
-        if (source.isEmpty() || sink.isEmpty()) {
-            Logging.warn("TypeAliasGraph", String.format("%s No source or sink found", this));
-            Logging.warn("TypeAliasGraph", getNodes().toString());
-            hasSrcSink = false;
-            return false;
-        }
-        hasSrcSink = true;
-        return true;
     }
 
     public String toGraphviz() {

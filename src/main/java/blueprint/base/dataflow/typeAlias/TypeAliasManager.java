@@ -131,26 +131,8 @@ public class TypeAliasManager<T> {
 
         try (FileWriter writer = new FileWriter(textFile)) {
             for (var graph: graphs) {
-                if (!graph.hasSrcSink) {
-                    continue;
-                }
-
-                writer.write(String.format("Graph: %s\n", graph));
-                for (var entryNode: graph.source) {
-                    writer.write(String.format("\tSource: %s\n", entryNode));
-                    for (var exitNode: graph.sink) {
-                        var paths = graph.getAllPathsBetween(entryNode, exitNode);
-                        if (paths.isPresent() && paths.get().isEmpty()) {
-                            continue;
-                        } else if (paths.isPresent()) {
-                            writer.write(String.format("\t\tSink: %s\n", exitNode));
-                            for (var path: paths.get()) {
-                                writer.write(String.format("\t\t\tPath: %s\n", graph.getPathRepresentation(path)));
-                            }
-                        }
-                    }
-                }
-                writer.write("\n");
+                graph.pathManager.dump(writer);
+                writer.write("\n ----------------------------------------------------------- \n");
             }
         } catch (Exception e) {
             Logging.error("TypeAliasManager", "Failed to write entry to exit paths to file" + e);
