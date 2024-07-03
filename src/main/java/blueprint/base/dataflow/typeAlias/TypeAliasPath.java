@@ -5,16 +5,14 @@ import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.utils.Logging;
 import org.jgrapht.GraphPath;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class TypeAliasPath<T> {
     public GraphPath<T, TypeAliasGraph.TypeAliasEdge> path;
     public List<T> nodes;
+    public List<TypeConstraint> backwardMergedConstraints;
+    public List<TypeConstraint> forwardMergedConstraints;
     public List<TypeAliasGraph.TypeAliasEdge> edges;
-    public Map<T, TypeConstraint> backwardConstraints;
-    public Map<T, TypeConstraint> forwardConstraints;
     public TypeConstraint finalConstraint;
 
     public TypeAliasPath(GraphPath<T, TypeAliasGraph.TypeAliasEdge> path) {
@@ -24,41 +22,66 @@ public class TypeAliasPath<T> {
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
 
-        this.backwardConstraints = new HashMap<>();
-        this.forwardConstraints = new HashMap<>();
+        this.backwardMergedConstraints = new ArrayList<>();
+        this.forwardMergedConstraints = new ArrayList<>();
     }
 
     public void tryMergeByPath(SymbolExprManager exprManager) {
-        for (int i = 0; i < nodes.size() - 1; i++) {
+        for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get(i);
-            SymbolExpr expr = (SymbolExpr) node;
-            TypeConstraint constraint = exprManager.getConstraint(expr);
-            if (constraint == null) {
+            TypeConstraint curMergedCon;
+            SymbolExpr curExpr = (SymbolExpr) node;
+            TypeConstraint curExprCon = exprManager.getConstraint(curExpr);
+
+            if (curExprCon == null) {
                 Logging.warn("TypeAliasPath", String.format("Cannot find constraint for %s in path", node));
-                continue;
+                curMergedCon = new TypeConstraint();
+            } else {
+                curMergedCon = new TypeConstraint(curExprCon);
+                // If Current Expr is fieldAccessExpr, try to merge its memAliasExpr's TypeConstraint
+                if (curExpr.isDereference()) {
+                    var mayMemAliases = exprManager.getMayMemAliases(curExpr);
+                    for (var alias: mayMemAliases) {
+                        if (alias == curExpr) {
+                            continue;
+                        }
+                        var aliasCon = exprManager.getConstraint(alias);
+                        if (aliasCon == null) {
+                            continue;
+                        }
+                        var noConflict = curMergedCon.tryMerge(aliasCon);
+                        if (!noConflict) {
+                            Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in memAlias for %s and %s", curExpr, alias));
+                            continue;
+                        }
+                    }
+                }
             }
 
-            if (expr.isDereference()) {
-                var mayMemAliases = exprManager.getMayMemAliases(expr);
-                // TODO: merge all TypeConstraints within 1 path, and then dump TypeConstraints into file ...
-//                for (var alias: mayMemAliases) {
-//                    var aliasCon = exprManager.getConstraint(alias);
-//                    var conflict = constraint.tryMerge(aliasCon);
-//                    if (conflict) {
-//                        continue;
-//                    }
-//                }
+            // Merge backward constraints in the path
+            if (i > 0) {
+                var prevMergedCon = backwardMergedConstraints.get(i - 1);
+                if (prevMergedCon.isEmpty()) {
+                    backwardMergedConstraints.add(curMergedCon);
+                    continue;
+                } else if (curMergedCon.isEmpty()) {
+                    backwardMergedConstraints.add(prevMergedCon);
+                    continue;
+                } else {
+                    var noConflict = curMergedCon.tryMerge(prevMergedCon);
+                    if (noConflict) {
+                        backwardMergedConstraints.add(curMergedCon);
+                        continue;
+                    }
+                    // Important, if there is a conflict when merging along the path, we should mark the node and split the path
+                    else {
+                        Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in path for %s", curExpr));
+                        return;
+                    }
+                }
+            } else {
+                backwardMergedConstraints.add(curMergedCon);
             }
-
-//            if (i > 0) {
-//                var prevNode = nodes.get(i - 1);
-//                var prevCon = backwardConstraints.get(prevNode);
-//                var conflict = prevCon.tryMerge(constraint);
-//                if (conflict) {
-//                    continue;
-//                }
-//            }
-            backwardConstraints.put(node, constraint);
         }
     }
 

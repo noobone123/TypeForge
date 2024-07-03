@@ -12,76 +12,27 @@ import java.util.*;
 
 public class SymbolExprManager {
 
-    Map<SymbolExpr, TypeConstraint> exprToConstraint;
+    Map<SymbolExpr, TypeConstraint> exprToConstraintBeforeMerge;
+    Map<SymbolExpr, TypeConstraint> exprToConstraintAfterMerge;
     Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap;
     Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
     Map<SymbolExpr.Attribute, Set<SymbolExpr>> attributeToExpr;
     InterContext interCtx;
 
     // mem alias related fields
-    Map<SymbolExpr, Set<SymbolExpr>> memAliasCache;
+    Map<SymbolExpr, Set<SymbolExpr>> mayMemAliasCache;
 
     public SymbolExprManager(InterContext interCtx) {
-        exprToConstraint = new HashMap<>();
+        exprToConstraintBeforeMerge = new HashMap<>();
+        exprToConstraintAfterMerge = new HashMap<>();
+
         baseToFieldsMap = new HashMap<>();
         fieldToBaseMap = new HashMap<>();
         attributeToExpr = new HashMap<>();
         this.interCtx = interCtx;
 
-        memAliasCache = new HashMap<>();
+        mayMemAliasCache = new HashMap<>();
     }
-
-    public Set<SymbolExpr> getMayMemAliases(SymbolExpr expr) {
-        // get from cache first
-        if (memAliasCache.containsKey(expr)) {
-            Logging.debug("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
-            return memAliasCache.get(expr);
-        }
-
-        var parseResult = ParsedExpr.parseFieldAccessExpr(expr);
-        if (parseResult.isEmpty()) { return new HashSet<>(); }
-        var parsedExpr = parseResult.get();
-        var baseExpr = parsedExpr.base;
-        var offset = parsedExpr.offsetValue;
-
-        var mayAliasExpr = new HashSet<SymbolExpr>();
-
-        var taG = interCtx.typeAliasManager.getTypeAliasGraph(baseExpr);
-        if (taG == null) {
-            return mayAliasExpr;
-        }
-
-        var paths = taG.pathManager.getAllPathContainsNode(baseExpr);
-        if (paths == null) {
-            Logging.warn("SymbolExprManager", String.format("No paths found for %s", baseExpr));
-            return mayAliasExpr;
-        }
-        if (paths.isEmpty()) {
-            return mayAliasExpr;
-        }
-
-        Logging.info("SymbolExprManager",
-                String.format("Found %d base expr %s 's paths for finding mayMemAlias for %s", paths.size(), baseExpr, expr));
-
-        for (var path: paths) {
-            for (var node: path.nodes) {
-                // TODO: has INDIRECT relation already in getFieldExpr ?
-                var result = getFieldExprsByOffset((SymbolExpr) node, offset);
-                if (result.isPresent()) {
-                    mayAliasExpr.addAll(result.get());
-                }
-            }
-        }
-
-        // update cache
-        for (var alias: mayAliasExpr) {
-            memAliasCache.put(alias, mayAliasExpr);
-        }
-
-        Logging.info("SymbolExprManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
-        return mayAliasExpr;
-    }
-
 
     /**
      * Get the fieldAccess Expressions by given baseExpression and offset value
@@ -128,7 +79,7 @@ public class SymbolExprManager {
      */
     public TypeConstraint createConstraint(SymbolExpr expr) {
         TypeConstraint constraint = new TypeConstraint();
-        exprToConstraint.put(expr, constraint);
+        exprToConstraintBeforeMerge.put(expr, constraint);
         constraint.addAssociatedExpr(expr);
         Logging.debug("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
         return constraint;
@@ -140,9 +91,9 @@ public class SymbolExprManager {
      * @return the TypeConstraint for the given expression
      */
     public TypeConstraint getConstraint(SymbolExpr expr) {
-        if (exprToConstraint.containsKey(expr)) {
-            Logging.debug("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr.getRepresentation(), exprToConstraint.get(expr)));
-            return exprToConstraint.get(expr);
+        if (exprToConstraintBeforeMerge.containsKey(expr)) {
+            Logging.debug("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr.getRepresentation(), exprToConstraintBeforeMerge.get(expr)));
+            return exprToConstraintBeforeMerge.get(expr);
         } else {
             Logging.debug("SymbolExprManager", String.format("No TypeConstraint found for %s", expr.getRepresentation()));
             return null;
@@ -161,18 +112,13 @@ public class SymbolExprManager {
         return result;
     }
 
-
-    public Map<SymbolExpr, TypeConstraint> getExprToConstraintMapCopy() {
-        return new HashMap<>(exprToConstraint);
-    }
-
     public void updateAllExprToConstraintMap(Map<SymbolExpr, TypeConstraint> newMap) {
-        exprToConstraint.clear();
-        exprToConstraint.putAll(newMap);
+        exprToConstraintBeforeMerge.clear();
+        exprToConstraintBeforeMerge.putAll(newMap);
     }
 
     public Map<SymbolExpr, TypeConstraint> getExprToConstraintMap() {
-        return exprToConstraint;
+        return exprToConstraintBeforeMerge;
     }
 
     public Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> getBaseToFieldsMap() {
@@ -184,7 +130,7 @@ public class SymbolExprManager {
     }
 
     public Set<TypeConstraint> getAllConstraints() {
-        return new HashSet<>(exprToConstraint.values());
+        return new HashSet<>(exprToConstraintBeforeMerge.values());
     }
 
     public TreeMap<Long, Set<SymbolExpr>> getFieldInfo(SymbolExpr base) {
@@ -192,8 +138,64 @@ public class SymbolExprManager {
     }
 
     public void updateExprToConstraintMap(SymbolExpr expr, TypeConstraint constraint) {
-        exprToConstraint.put(expr, constraint);
+        exprToConstraintBeforeMerge.put(expr, constraint);
         constraint.addAssociatedExpr(expr);
+    }
+
+    /**
+     * Get the mayMemAliases of the given expression
+     * @param expr the expression to get mayMemAliases for
+     * @return the mayMemAliases of the given expression
+     */
+    public Set<SymbolExpr> getMayMemAliases(SymbolExpr expr) {
+        // get from cache first
+        if (mayMemAliasCache.containsKey(expr)) {
+            Logging.debug("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
+            return mayMemAliasCache.get(expr);
+        }
+
+        var parseResult = ParsedExpr.parseFieldAccessExpr(expr);
+        if (parseResult.isEmpty()) { return new HashSet<>(); }
+        var parsedExpr = parseResult.get();
+        var baseExpr = parsedExpr.base;
+        var offset = parsedExpr.offsetValue;
+
+        var mayAliasExpr = new HashSet<SymbolExpr>();
+
+        var taG = interCtx.typeAliasManager.getTypeAliasGraph(baseExpr);
+        if (taG == null) {
+            return mayAliasExpr;
+        }
+
+        var paths = taG.pathManager.getAllPathContainsNode(baseExpr);
+        if (paths == null) {
+            Logging.warn("SymbolExprManager", String.format("No paths found for %s", baseExpr));
+            return mayAliasExpr;
+        }
+        if (paths.isEmpty()) {
+            return mayAliasExpr;
+        }
+
+        Logging.info("SymbolExprManager",
+                String.format("Found %d base expr %s 's paths for finding mayMemAlias for %s", paths.size(), baseExpr, expr));
+
+        for (var path: paths) {
+            for (var node: path.nodes) {
+                // TODO: has INDIRECT relation already in getFieldExpr ?
+                var result = getFieldExprsByOffset((SymbolExpr) node, offset);
+                if (result.isPresent()) {
+                    mayAliasExpr.addAll(result.get());
+                }
+            }
+        }
+
+        // update cache
+        for (var alias: mayAliasExpr) {
+            mayMemAliasCache.put(alias, mayAliasExpr);
+        }
+
+        Logging.info("SymbolExprManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
+        return mayAliasExpr;
     }
 
 

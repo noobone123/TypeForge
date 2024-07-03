@@ -1,6 +1,7 @@
 package blueprint.base.dataflow.typeAlias;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
+import blueprint.utils.Logging;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
 import java.io.FileWriter;
@@ -42,6 +43,7 @@ public class TypeAliasPathManager<T> {
 
     public void tryMergeByPath(SymbolExprManager exprManager) {
         for (var path: allSourceSinkPaths) {
+            Logging.info("TypeAliasPathManager", String.format("Try merge by path: %s", path));
             path.tryMergeByPath(exprManager);
         }
     }
