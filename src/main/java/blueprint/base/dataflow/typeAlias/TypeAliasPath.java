@@ -76,6 +76,8 @@ public class TypeAliasPath<T> {
                     // Important, if there is a conflict when merging along the path, we should mark the node and split the path
                     else {
                         Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in path for %s", curExpr));
+                        Logging.warn("TypeAliasPath", prevMergedCon.dumpLayout());
+                        Logging.warn("TypeAliasPath", curMergedCon.dumpLayout());
                         return;
                     }
                 }

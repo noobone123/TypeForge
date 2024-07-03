@@ -7,6 +7,7 @@ import blueprint.utils.Logging;
 
 import java.util.*;
 
+import blueprint.utils.TCHelper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -330,7 +331,7 @@ public class TypeConstraint {
      * @return false if there is a conflict, true otherwise
      */
     public boolean tryMerge(TypeConstraint other) {
-        if (checkFieldOverlap(other)) {
+        if (TCHelper.checkFieldOverlap(this, other)) {
             return false;
         }
         mergeOther(other);
@@ -379,94 +380,6 @@ public class TypeConstraint {
 
         // Merging polymorphicTypes
         this.polymorphicTypes.addAll(other.polymorphicTypes);
-    }
-
-
-    /**
-     * Check whether the current TypeConstraint overlaps with another TypeConstraint.
-     * Overlap means this fields' layout is not compatible with the other fields' layout.
-     *
-     * @param other The TypeConstraint to check against.
-     * @return true if there is an overlap, false otherwise.
-     */
-    public boolean checkFieldOverlap(TypeConstraint other) {
-
-        class Interval {
-            final long start;
-            final long end;
-
-            Interval(long start, long end) {
-                this.start = start;
-                this.end = end;
-            }
-
-            @Override
-            public boolean equals(Object obj) {
-                if (obj instanceof Interval) {
-                    return this.start == ((Interval) obj).start && this.end == ((Interval) obj).end;
-                }
-                return false;
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hash(start, end);
-            }
-        }
-
-        if (this == other) {
-            return false;
-        }
-
-        Set<Interval> thisIntervals = new HashSet<>();
-        for (var offset : this.fieldAccess.keySet()) {
-            long endOffset = this.calcFieldEndOffset(offset);
-            thisIntervals.add(new Interval(offset, endOffset));
-        }
-
-        Set<Interval> otherIntervals = new HashSet<>();
-        for (var offset : other.fieldAccess.keySet()) {
-            long endOffset = other.calcFieldEndOffset(offset);
-            otherIntervals.add(new Interval(offset, endOffset));
-        }
-
-        Set<Interval> commonIntervals = new HashSet<>(thisIntervals);
-        commonIntervals.retainAll(otherIntervals);
-
-        thisIntervals.removeAll(commonIntervals);
-        otherIntervals.removeAll(commonIntervals);
-
-        if (thisIntervals.isEmpty() || otherIntervals.isEmpty()) {
-            return false;
-        }
-
-        List<Interval> mergedIntervals = new ArrayList<>(thisIntervals);
-        mergedIntervals.addAll(otherIntervals);
-        mergedIntervals.sort(Comparator.comparingLong(interval -> interval.start));
-        for (int i = 0; i < mergedIntervals.size() - 1; i++) {
-            Interval current = mergedIntervals.get(i);
-            Interval next = mergedIntervals.get(i + 1);
-            if (current.end > next.start) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    public Long calcFieldEndOffset(Long offset) {
-        Long endOffset = offset;
-        var fields = fieldAccess.get(offset);
-        if (fields == null) {
-            return endOffset;
-        }
-
-        for (var ap : fields) {
-            if (ap.dataType != null) {
-                endOffset = Math.max(endOffset, offset + ap.dataType.getLength());
-            }
-        }
-        return endOffset;
     }
 
     public String getName() {
@@ -525,6 +438,22 @@ public class TypeConstraint {
     public Set<TypeDescriptor> getPolymorphicTypes() {
         return polymorphicTypes;
     }
+
+    /** Dump current TypeConstraint's layout */
+    public String dumpLayout() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Constraint_").append(shortUUID).append(":\n");
+        sb.append("PolyTypes: ").append(polymorphicTypes).append("\n");
+        fieldAccess.forEach((offset, aps) -> {
+            sb.append("\t");
+            sb.append(String.format("0x%x: ", offset));
+            sb.append("\t");
+            aps.forEach(ap -> sb.append(ap.dataType.getName()).append(", "));
+            sb.append("\n");
+        });
+        return sb.toString();
+    }
+
 
     public JsonNode getJsonObj(ObjectMapper mapper) {
         var rootNode = mapper.createObjectNode();
