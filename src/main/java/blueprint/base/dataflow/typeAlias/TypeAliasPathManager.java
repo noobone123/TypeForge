@@ -39,8 +39,11 @@ public class TypeAliasPathManager<T> {
         if (hasSrcSink) {
             findAllPathFromSrcToSink();
         }
+
+        buildNodeToPathsMap();
     }
 
+    /** This Function should be called after all Graph's pathManager built */
     public void tryMergeByPath(SymbolExprManager exprManager) {
         for (var path: allSourceSinkPaths) {
             Logging.info("TypeAliasPathManager", String.format("Try merge by path: %s", path));
@@ -72,10 +75,16 @@ public class TypeAliasPathManager<T> {
                     TypeAliasPath<T> typeAliasPath = new TypeAliasPath<>(path);
                     allSourceSinkPaths.add(typeAliasPath);
                     srcSinkToPathsMap.computeIfAbsent(src, k -> new HashMap<>()).computeIfAbsent(sk, k -> new HashSet<>()).add(typeAliasPath);
-                    for (T node: typeAliasPath.nodes) {
-                        nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(typeAliasPath);
-                    }
                 }
+            }
+        }
+        Logging.info("TypeAliasPathManager", String.format("Found %d paths from sources to sinks", allSourceSinkPaths.size()));
+    }
+
+    public void buildNodeToPathsMap() {
+        for (var path: allSourceSinkPaths) {
+            for (var node: path.nodes) {
+                nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
             }
         }
     }

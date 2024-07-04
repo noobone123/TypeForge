@@ -64,6 +64,15 @@ public class TypeAliasManager<T> {
         return graphs;
     }
 
+    public void buildAllPathManagers() {
+        for (var graph: graphs) {
+            if (graph.getNumNodes() > 1) {
+                Logging.info("InterContext", String.format("Handing type alias graph %s", graph));
+                graph.pathManager.build();
+            }
+        }
+    }
+
     /**
      * If a graph has no nodes with fields, it is redundant and should be removed.
      * @param baseToFieldsMap A map from base to its fields

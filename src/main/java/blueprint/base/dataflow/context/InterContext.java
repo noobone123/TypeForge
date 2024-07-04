@@ -126,12 +126,11 @@ public class InterContext {
 
     private void mergeTypeConstraints() {
         Logging.info("InterContext", "========================= Start to merge type constraints =========================");
+        Logging.info("InterContext", "Total Graph Number: " + typeAliasManager.getGraphs().size());
+        typeAliasManager.buildAllPathManagers();
+
         for (var graph: typeAliasManager.getGraphs()) {
-            if (graph.getNumNodes() > 1) {
-                Logging.info("InterContext", String.format("Handing type alias graph %s", graph));
-                graph.pathManager.build();
-                graph.pathManager.tryMergeByPath(symExprManager);
-            }
+            graph.pathManager.tryMergeByPath(symExprManager);
         }
 
         typeAliasManager.dumpEntryToExitPaths(new File(Global.outputDirectory));

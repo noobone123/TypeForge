@@ -92,10 +92,10 @@ public class SymbolExprManager {
      */
     public TypeConstraint getConstraint(SymbolExpr expr) {
         if (exprToConstraintBeforeMerge.containsKey(expr)) {
-            Logging.debug("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr.getRepresentation(), exprToConstraintBeforeMerge.get(expr)));
+            Logging.debug("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr, exprToConstraintBeforeMerge.get(expr)));
             return exprToConstraintBeforeMerge.get(expr);
         } else {
-            Logging.debug("SymbolExprManager", String.format("No TypeConstraint found for %s", expr.getRepresentation()));
+            Logging.debug("SymbolExprManager", String.format("No TypeConstraint found for %s", expr));
             return null;
         }
     }
@@ -169,7 +169,7 @@ public class SymbolExprManager {
 
         var paths = taG.pathManager.getAllPathContainsNode(baseExpr);
         if (paths == null) {
-            Logging.warn("SymbolExprManager", String.format("No paths found for %s", baseExpr));
+            Logging.warn("SymbolExprManager", String.format("No paths found for baseExpr %s in %s", baseExpr, taG));
             return mayAliasExpr;
         }
         if (paths.isEmpty()) {
