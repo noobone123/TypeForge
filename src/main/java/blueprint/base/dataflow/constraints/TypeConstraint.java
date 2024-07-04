@@ -423,28 +423,6 @@ public class TypeConstraint {
         return false;
     }
 
-    /**
-     * This function is used to check whether current TypeConstraint is related to Composite DataType
-     * For detailed information, we determine by:
-     * 1. Whether constraints maybe a Structure, Array or Union
-     * 2. Whether constraints maybe a Pointer which points to a Structure, Array or Union
-     * @return if the TypeConstraint is related to Composite DataType
-     */
-    public boolean isInterested() {
-        if (!getPolymorphicTypes().isEmpty()) {
-            return true;
-        }
-
-        for (var aps : fieldAccess.values()) {
-            for (AccessPoints.AP ap : aps) {
-                if (ap.dataType != null) {
-                    return true;
-                }
-            }
-        }
-        return !totalSize.isEmpty() || !elementSize.isEmpty();
-    }
-
     public boolean isEmpty() {
         return fieldAccess.isEmpty() && fieldAttrs.isEmpty() && polymorphicTypes.isEmpty() && totalSize.isEmpty() && elementSize.isEmpty();
     }
@@ -459,12 +437,13 @@ public class TypeConstraint {
     }
 
     /** Dump current TypeConstraint's layout */
-    public String dumpLayout() {
+    public String dumpLayout(int prefixTabCnt) {
         StringBuilder sb = new StringBuilder();
-        sb.append("Constraint_").append(shortUUID).append(":\n");
-        sb.append("PolyTypes: ").append(polymorphicTypes).append("\n");
+        String prefixTab = "\t".repeat(prefixTabCnt);
+        sb.append(prefixTab).append("Constraint_").append(shortUUID).append(":\n");
+        sb.append(prefixTab).append("PolyTypes: ").append(polymorphicTypes).append("\n");
         fieldAccess.forEach((offset, aps) -> {
-            sb.append("\t");
+            sb.append(prefixTab).append("\t");
             sb.append(String.format("0x%x: ", offset));
             sb.append("\t");
             aps.forEach(ap -> sb.append(ap.dataType.getName()).append(", "));

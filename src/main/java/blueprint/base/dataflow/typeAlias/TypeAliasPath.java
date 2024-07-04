@@ -14,6 +14,7 @@ public class TypeAliasPath<T> {
     public List<TypeConstraint> forwardMergedConstraints;
     public TypeConstraint finalConstraint = null;
     public boolean hasConflict = false;
+    public boolean noComposite = false;
     public T start;
     public T end;
 
@@ -89,8 +90,8 @@ public class TypeAliasPath<T> {
             if (i > 0) {
                 var prevMergedCon = backwardMergedConstraints.get(i - 1);
                 Logging.info("TypeAliasPath", String.format("Try to merge previous into current: %s -> %s", prevMergedCon, curMergedCon));
-                Logging.info("TypeAliasPath", prevMergedCon.dumpLayout());
-                Logging.info("TypeAliasPath", curMergedCon.dumpLayout());
+                Logging.info("TypeAliasPath", prevMergedCon.dumpLayout(0));
+                Logging.info("TypeAliasPath", curMergedCon.dumpLayout(0));
                 if (prevMergedCon.isEmpty()) {
                     backwardMergedConstraints.add(curMergedCon);
                     continue;

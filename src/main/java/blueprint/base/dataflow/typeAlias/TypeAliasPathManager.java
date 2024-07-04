@@ -72,8 +72,17 @@ public class TypeAliasPathManager<T> {
             }
             Logging.info("TypeAliasPathManager", "============================================== end ==============================================\n");
         }
-        // TODO: dump finalConstraint into paths
-        // TODO: remove redundant Paths (finalTypeConstraint is Empty)
+
+
+        // Post handle
+        for (var path: allPaths) {
+            if (path.hasConflict) {
+                continue;
+            }
+            if (path.finalConstraint.isEmpty()) {
+                path.noComposite = true;
+            }
+        }
     }
 
     public void findSources() {
@@ -141,6 +150,14 @@ public class TypeAliasPathManager<T> {
                 writer.write(String.format("\t\tSink: %s\n", sk));
                 for (var path: paths) {
                     writer.write(String.format("\t\t\tPath: %s\n", path));
+                    if (path.hasConflict) {
+                        writer.write("\t\t\t\tConflict\n");
+                    } else if (path.noComposite) {
+                        writer.write("\t\t\t\tNo Composite\n");
+                    } else {
+                        writer.write(path.finalConstraint.dumpLayout(4));
+                    }
+                    writer.write("\t\t\t\t======================================================\n");
                 }
             }
         }
