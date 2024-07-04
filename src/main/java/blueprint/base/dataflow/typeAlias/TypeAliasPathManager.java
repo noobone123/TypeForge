@@ -46,8 +46,10 @@ public class TypeAliasPathManager<T> {
     /** This Function should be called after all Graph's pathManager built */
     public void tryMergeByPath(SymbolExprManager exprManager) {
         for (var path: allSourceSinkPaths) {
+            Logging.info("TypeAliasPathManager", "\n============================================== start ==============================================\n");
             Logging.info("TypeAliasPathManager", String.format("Try merge by path: %s", path));
             path.tryMergeByPath(exprManager);
+            Logging.info("TypeAliasPathManager", "\n============================================== end ==============================================\n");
         }
     }
 

@@ -70,18 +70,37 @@ public class TypeConstraint {
     }
 
     public TypeConstraint(TypeConstraint other) {
-        this.uuid = other.uuid;
-        this.shortUUID = other.shortUUID;
+        this.uuid = UUID.randomUUID();
+        this.shortUUID = uuid.toString().substring(0, 8);
 
-        this.fieldAccess = new TreeMap<>(other.fieldAccess);
-        this.fieldExprMap = new TreeMap<>(other.fieldExprMap);
+        this.fieldAccess = new TreeMap<>();
+        for (Map.Entry<Long, HashSet<AccessPoints.AP>> entry : other.fieldAccess.entrySet()) {
+            this.fieldAccess.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
 
-        this.fieldAttrs = new TreeMap<>(other.fieldAttrs);
+        this.fieldExprMap = new TreeMap<>();
+        for (Map.Entry<Long, HashSet<SymbolExpr>> entry : other.fieldExprMap.entrySet()) {
+            this.fieldExprMap.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
+        this.fieldAttrs = new TreeMap<>();
+        for (Map.Entry<Long, HashSet<Attribute>> entry : other.fieldAttrs.entrySet()) {
+            this.fieldAttrs.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
         this.globalAttrs = new HashSet<>(other.globalAttrs);
-        this.accessOffsets = new HashMap<>(other.accessOffsets);
+
+        this.accessOffsets = new HashMap<>();
+        for (Map.Entry<AccessPoints.AP, HashSet<Long>> entry : other.accessOffsets.entrySet()) {
+            this.accessOffsets.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        }
+
         this.polymorphicTypes = new HashSet<>(other.polymorphicTypes);
+
         this.associatedExpr = new HashSet<>(other.associatedExpr);
+
         this.totalSize = new HashSet<>(other.totalSize);
+
         this.elementSize = new HashSet<>(other.elementSize);
 
         this.relations = new HashSet<>(other.relations);

@@ -36,10 +36,13 @@ public class TypeAliasPath<T> {
             if (curExprCon == null) {
                 Logging.warn("TypeAliasPath", String.format("Cannot find constraint for %s in path", node));
                 curMergedCon = new TypeConstraint();
+                Logging.info("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
             } else {
                 curMergedCon = new TypeConstraint(curExprCon);
+                Logging.info("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
                 // If Current Expr is fieldAccessExpr, try to merge its memAliasExpr's TypeConstraint
                 if (curExpr.isDereference()) {
+                    Logging.info("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
                     var mayMemAliases = exprManager.getMayMemAliases(curExpr);
                     for (var alias: mayMemAliases) {
                         if (alias == curExpr) {
@@ -61,6 +64,9 @@ public class TypeAliasPath<T> {
             // Merge backward constraints in the path
             if (i > 0) {
                 var prevMergedCon = backwardMergedConstraints.get(i - 1);
+                Logging.info("TypeAliasPath", String.format("Try to merge previous into current: %s -> %s", prevMergedCon, curMergedCon));
+                Logging.info("TypeAliasPath", prevMergedCon.dumpLayout());
+                Logging.info("TypeAliasPath", curMergedCon.dumpLayout());
                 if (prevMergedCon.isEmpty()) {
                     backwardMergedConstraints.add(curMergedCon);
                     continue;
@@ -73,11 +79,9 @@ public class TypeAliasPath<T> {
                         backwardMergedConstraints.add(curMergedCon);
                         continue;
                     }
-                    // Important, if there is a conflict when merging along the path, we should mark the node and split the path
+                    // TODO: Important, if there is a conflict when merging along the path, we should mark the node and split the path
                     else {
                         Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in path for %s", curExpr));
-                        Logging.warn("TypeAliasPath", prevMergedCon.dumpLayout());
-                        Logging.warn("TypeAliasPath", curMergedCon.dumpLayout());
                         return;
                     }
                 }
