@@ -5,10 +5,7 @@ import blueprint.utils.Logging;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
 import java.io.FileWriter;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class TypeAliasPathManager<T> {
     public TypeAliasGraph<T> graph;
@@ -16,17 +13,17 @@ public class TypeAliasPathManager<T> {
     public final Set<T> source;
     public final Set<T> sink;
 
-    public final Set<TypeAliasPath<T>> allSourceSinkPaths;
-    public final Map<T, Map<T, Set<TypeAliasPath<T>>>> srcSinkToPathsMap;
+    public final Set<TypeAliasPath<T>> allPaths;
     public final Map<T, Set<TypeAliasPath<T>>> nodeToPathsMap;
+    public final Map<T, Map<T, Set<TypeAliasPath<T>>>> srcSinkToPathsMap;
 
     public TypeAliasPathManager(TypeAliasGraph<T> graph) {
         this.graph = graph;
         this.source = new HashSet<>();
         this.sink = new HashSet<>();
-        this.allSourceSinkPaths = new HashSet<>();
-        this.srcSinkToPathsMap = new HashMap<>();
+        this.allPaths = new HashSet<>();
         this.nodeToPathsMap = new HashMap<>();
+        this.srcSinkToPathsMap = new HashMap<>();
     }
 
     public void build() {
@@ -34,23 +31,49 @@ public class TypeAliasPathManager<T> {
         findSinks();
         if (source.isEmpty() || sink.isEmpty()) {
             hasSrcSink = false;
+            return;
         }
 
         if (hasSrcSink) {
             findAllPathFromSrcToSink();
         }
 
-        buildNodeToPathsMap();
+        for (var path: allPaths) {
+            updateNodeToPathsMap(path);
+        }
     }
 
     /** This Function should be called after all Graph's pathManager built */
     public void tryMergeByPath(SymbolExprManager exprManager) {
-        for (var path: allSourceSinkPaths) {
-            Logging.info("TypeAliasPathManager", "\n============================================== start ==============================================\n");
+        var workList = new LinkedList<>(allPaths);
+
+        while (!workList.isEmpty()) {
+            var path = workList.poll();
+            Logging.info("TypeAliasPathManager", "============================================== start ==============================================\n");
             Logging.info("TypeAliasPathManager", String.format("Try merge by path: %s", path));
-            path.tryMergeByPath(exprManager);
-            Logging.info("TypeAliasPathManager", "\n============================================== end ==============================================\n");
+            var hasConflict = path.tryMergeByPath(exprManager);
+            if (hasConflict.isPresent()) {
+                var conflictNode = hasConflict.get();
+                // Split Path
+                var splitPaths = path.splitPathFromNode(conflictNode);
+                var firstPath = splitPaths.getKey();
+                var secondPath = splitPaths.getValue();
+
+                Logging.info("TypeAliasPathManager", String.format("Split new path: %s", firstPath));
+                Logging.info("TypeAliasPathManager", String.format("Split new path: %s", secondPath));
+
+                // Update related data structures
+                updateNewPath(firstPath);
+                updateNewPath(secondPath);
+
+                // Add new paths into workList
+                workList.add(firstPath);
+                workList.add(secondPath);
+            }
+            Logging.info("TypeAliasPathManager", "============================================== end ==============================================\n");
         }
+        // TODO: dump finalConstraint into paths
+        // TODO: remove redundant Paths (finalTypeConstraint is Empty)
     }
 
     public void findSources() {
@@ -75,19 +98,27 @@ public class TypeAliasPathManager<T> {
                 var allPaths = new AllDirectedPaths<>(graph.getGraph()).getAllPaths(src, sk, true, Integer.MAX_VALUE);
                 for (var path: allPaths) {
                     TypeAliasPath<T> typeAliasPath = new TypeAliasPath<>(path);
-                    allSourceSinkPaths.add(typeAliasPath);
+                    this.allPaths.add(typeAliasPath);
                     srcSinkToPathsMap.computeIfAbsent(src, k -> new HashMap<>()).computeIfAbsent(sk, k -> new HashSet<>()).add(typeAliasPath);
                 }
             }
         }
-        Logging.info("TypeAliasPathManager", String.format("Found %d paths from sources to sinks", allSourceSinkPaths.size()));
+        Logging.info("TypeAliasPathManager", String.format("Found %d paths from sources to sinks", allPaths.size()));
     }
 
-    public void buildNodeToPathsMap() {
-        for (var path: allSourceSinkPaths) {
-            for (var node: path.nodes) {
-                nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
-            }
+
+    public void updateNewPath(TypeAliasPath<T> path) {
+        allPaths.add(path);
+        srcSinkToPathsMap.computeIfAbsent(path.start, k -> new HashMap<>())
+                .computeIfAbsent(path.end, k -> new HashSet<>())
+                .add(path);
+        updateNodeToPathsMap(path);
+    }
+
+
+    public void updateNodeToPathsMap(TypeAliasPath<T> path) {
+        for (var node: path.nodes) {
+            nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
         }
     }
 

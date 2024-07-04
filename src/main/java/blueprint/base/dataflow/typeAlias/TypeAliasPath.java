@@ -8,25 +8,50 @@ import org.jgrapht.GraphPath;
 import java.util.*;
 
 public class TypeAliasPath<T> {
-    public GraphPath<T, TypeAliasGraph.TypeAliasEdge> path;
     public List<T> nodes;
+    public List<TypeAliasGraph.TypeAliasEdge> edges;
     public List<TypeConstraint> backwardMergedConstraints;
     public List<TypeConstraint> forwardMergedConstraints;
-    public List<TypeAliasGraph.TypeAliasEdge> edges;
-    public TypeConstraint finalConstraint;
+    public TypeConstraint finalConstraint = null;
+    public boolean hasConflict = false;
+    public T start;
+    public T end;
 
     public TypeAliasPath(GraphPath<T, TypeAliasGraph.TypeAliasEdge> path) {
-        this.path = path;
-
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
 
         this.backwardMergedConstraints = new ArrayList<>();
         this.forwardMergedConstraints = new ArrayList<>();
+
+        this.start = nodes.get(0);
+        this.end = nodes.get(nodes.size() - 1);
     }
 
-    public void tryMergeByPath(SymbolExprManager exprManager) {
+    public TypeAliasPath(List<T> nodes, List<TypeAliasGraph.TypeAliasEdge> edges) {
+        this.nodes = nodes;
+        this.edges = edges;
+        this.backwardMergedConstraints = new ArrayList<>();
+        this.forwardMergedConstraints = new ArrayList<>();
+
+        this.start = nodes.get(0);
+        this.end = nodes.get(nodes.size() - 1);
+    }
+
+    public Map.Entry<TypeAliasPath<T>, TypeAliasPath<T>> splitPathFromNode(T conflictNode) {
+        int startIndex = nodes.indexOf(conflictNode);
+        var firstPathNodes = nodes.subList(0, startIndex);
+        // TODO: first split path has last edge from last node ...
+        var firstPathEdges = edges.subList(0, startIndex);
+        var firstPath = new TypeAliasPath<>(firstPathNodes, firstPathEdges);
+        var secondPathNodes = nodes.subList(startIndex, nodes.size());
+        var secondPathEdges = edges.subList(startIndex, edges.size());
+        var secondPath = new TypeAliasPath<>(secondPathNodes, secondPathEdges);
+        return new AbstractMap.SimpleEntry<>(firstPath, secondPath);
+    }
+
+    public Optional<T> tryMergeByPath(SymbolExprManager exprManager) {
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get(i);
             TypeConstraint curMergedCon;
@@ -55,7 +80,6 @@ public class TypeAliasPath<T> {
                         var noConflict = curMergedCon.tryMerge(aliasCon);
                         if (!noConflict) {
                             Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in memAlias for %s and %s", curExpr, alias));
-                            continue;
                         }
                     }
                 }
@@ -79,16 +103,21 @@ public class TypeAliasPath<T> {
                         backwardMergedConstraints.add(curMergedCon);
                         continue;
                     }
-                    // TODO: Important, if there is a conflict when merging along the path, we should mark the node and split the path
                     else {
                         Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in path for %s", curExpr));
-                        return;
+                        hasConflict = true;
+                        // If conflict happens, we should return the conflict node
+                        return Optional.of(node);
                     }
                 }
             } else {
                 backwardMergedConstraints.add(curMergedCon);
             }
         }
+
+        // update finalConstraint
+        finalConstraint = backwardMergedConstraints.get(backwardMergedConstraints.size() - 1);
+        return Optional.empty();
     }
 
 

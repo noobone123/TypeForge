@@ -130,7 +130,9 @@ public class InterContext {
         typeAliasManager.buildAllPathManagers();
 
         for (var graph: typeAliasManager.getGraphs()) {
-            graph.pathManager.tryMergeByPath(symExprManager);
+            if (graph.pathManager.hasSrcSink) {
+                graph.pathManager.tryMergeByPath(symExprManager);
+            }
         }
 
         typeAliasManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
