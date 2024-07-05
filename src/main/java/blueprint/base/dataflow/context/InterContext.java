@@ -133,8 +133,7 @@ public class InterContext {
             if (graph.pathManager.hasSrcSink) {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
                 graph.pathManager.tryMergeByPath(symExprManager);
-                graph.pathManager.collectNodesConstraintsByPath();
-                graph.pathManager.mergeNodeConstraints();
+                graph.pathManager.tryMergePathsFromSameSource();
             }
         }
 

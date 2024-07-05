@@ -92,6 +92,32 @@ public class TypeAliasPathManager<T> {
         }
     }
 
+    // Try merge paths from same source, them propagate TypeConstraints to each node start from this source
+    // Because there may have some node with paths from different source, we then handle them in next step
+    public void tryMergePathsFromSameSource() {
+        for (var src: source) {
+            var mergedConstraints = new TypeConstraint();
+            var pathsFromSource = getAllPathsFromSource(src);
+            for (var path: pathsFromSource) {
+                if (path.hasConflict || path.noComposite) {
+                    continue;
+                }
+                var noConflict = mergedConstraints.tryMerge(path.finalConstraint);
+                if (!noConflict) {
+                    Logging.warn("TypeAliasPathManager", "Conflict when merging path's final Constraint: %s");
+                    for (var p: pathsFromSource) {
+                        if (p.hasConflict || p.noComposite) {
+                            continue;
+                        }
+                        Logging.info("TypeAliasPathManager", p.toString());
+                        Logging.info("TypeAliasPathManager", p.finalConstraint.dumpLayout(0));
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
 
     public void collectNodesConstraintsByPath() {
         for (var node: nodeToPathsMap.keySet()) {
@@ -182,6 +208,16 @@ public class TypeAliasPathManager<T> {
             nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
         }
     }
+
+
+    public Set<TypeAliasPath<T>> getAllPathsFromSource(T source) {
+        var result = new HashSet<TypeAliasPath<T>>();
+        for (var sk: srcSinkToPathsMap.get(source).keySet()) {
+            result.addAll(srcSinkToPathsMap.get(source).get(sk));
+        }
+        return result;
+    }
+
 
     public Set<TypeAliasPath<T>> getAllPathContainsNode(T node) {
         return nodeToPathsMap.get(node);
