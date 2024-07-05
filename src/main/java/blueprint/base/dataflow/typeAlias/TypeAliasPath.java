@@ -8,6 +8,8 @@ import org.jgrapht.GraphPath;
 import java.util.*;
 
 public class TypeAliasPath<T> {
+    public final UUID uuid = UUID.randomUUID();
+    public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
     public List<TypeAliasGraph.TypeAliasEdge> edges;
     public List<TypeConstraint> backwardMergedConstraints;
@@ -124,6 +126,7 @@ public class TypeAliasPath<T> {
 
     public String toString() {
         StringBuilder builder = new StringBuilder();
+        builder.append(String.format("Path-%s: ", shortUUID));
         builder.append(nodes.get(0));
         for (int i = 0; i < edges.size(); i++) {
             builder.append(String.format(" --- %s ---> ", edges.get(i).getType()));

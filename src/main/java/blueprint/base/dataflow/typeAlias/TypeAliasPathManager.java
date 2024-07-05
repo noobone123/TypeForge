@@ -1,6 +1,7 @@
 package blueprint.base.dataflow.typeAlias;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
+import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.utils.Logging;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
@@ -17,6 +18,8 @@ public class TypeAliasPathManager<T> {
     public final Map<T, Set<TypeAliasPath<T>>> nodeToPathsMap;
     public final Map<T, Map<T, Set<TypeAliasPath<T>>>> srcSinkToPathsMap;
 
+    public final Map<T, Set<TypeConstraint>> nodeToConstraints;
+
     public TypeAliasPathManager(TypeAliasGraph<T> graph) {
         this.graph = graph;
         this.source = new HashSet<>();
@@ -24,6 +27,7 @@ public class TypeAliasPathManager<T> {
         this.allPaths = new HashSet<>();
         this.nodeToPathsMap = new HashMap<>();
         this.srcSinkToPathsMap = new HashMap<>();
+        this.nodeToConstraints = new HashMap<>();
     }
 
     public void build() {
@@ -43,7 +47,10 @@ public class TypeAliasPathManager<T> {
         }
     }
 
-    /** This Function should be called after all Graph's pathManager built */
+    /**
+     * Try merge TypeConstraints using nodes in one path
+     * IMPORTANT: This Function should be called after all Graph's pathManager built
+     */
     public void tryMergeByPath(SymbolExprManager exprManager) {
         var workList = new LinkedList<>(allPaths);
 
@@ -84,6 +91,51 @@ public class TypeAliasPathManager<T> {
             }
         }
     }
+
+
+    public void collectNodesConstraintsByPath() {
+        for (var node: nodeToPathsMap.keySet()) {
+            var constraints = new HashSet<TypeConstraint>();
+            for (var path: nodeToPathsMap.get(node)) {
+                if (path.hasConflict) {
+                    continue;
+                }
+                if (path.noComposite) {
+                    continue;
+                }
+                constraints.add(path.finalConstraint);
+            }
+            nodeToConstraints.put(node, constraints);
+            Logging.info("TypeAliasPathManager", String.format("Node's TypeConstraint Count: %s -> %d\n", node, constraints.size()));
+        }
+    }
+
+
+    public void mergeNodeConstraints() {
+        for (var node: nodeToConstraints.keySet()) {
+            var constraints = nodeToConstraints.get(node);
+            if (constraints.size() > 1) {
+                var mergedConstraint = new TypeConstraint();
+                for (var con: constraints) {
+                    // TODO: besides checkOverlap, we should first check if layout's every different.
+                    var noConflict = mergedConstraint.tryMerge(con);
+                    if (!noConflict) {
+                        Logging.warn("TypeAliasPathManager", String.format("Conflict when merging TypeConstraints in node for %s", node));
+                        for (var c: constraints) {
+                            // TODO: also print path
+                            Logging.info("TypeAliasPathManager", c.dumpLayout(0));
+                        }
+                        break;
+                    }
+                }
+            }
+            // TODO: ...
+            else {
+                continue;
+            }
+        }
+    }
+
 
     public void findSources() {
         for (T vertex : graph.getGraph().vertexSet()) {
