@@ -19,6 +19,7 @@ public class TypeAliasPathManager<T> {
     public final Map<T, Map<T, Set<TypeAliasPath<T>>>> srcSinkToPathsMap;
 
     public final Map<T, Set<TypeConstraint>> nodeToConstraints;
+    public final Set<T> conflictNodes = new HashSet<>();
 
     public TypeAliasPathManager(TypeAliasGraph<T> graph) {
         this.graph = graph;
@@ -107,7 +108,8 @@ public class TypeAliasPathManager<T> {
                 var noConflict = mergedConstraints.tryMerge(path.finalConstraint);
                 if (!noConflict) {
                     // If there has conflict when merging different paths from same source, we do not try to
-                    // merge them but set TypeConstraints to each node in their path.
+                    // merge them, and see these paths are from `different sources` and propagate TypeConstraints
+                    // to each node in their path.
                     hasConflict = true;
                     Logging.warn("TypeAliasPathManager", String.format("Paths from source %s has conflict when merging path's final Constraint", src));
                     for (var p: pathsFromSource) {
@@ -135,45 +137,41 @@ public class TypeAliasPathManager<T> {
     }
 
 
-    public void collectNodesConstraintsByPath() {
-        for (var node: nodeToPathsMap.keySet()) {
-            var constraints = new HashSet<TypeConstraint>();
-            for (var path: nodeToPathsMap.get(node)) {
-                if (path.hasConflict) {
-                    continue;
-                }
-                if (path.noComposite) {
-                    continue;
-                }
-                constraints.add(path.finalConstraint);
-            }
-            nodeToConstraints.put(node, constraints);
-            Logging.info("TypeAliasPathManager", String.format("Node's TypeConstraint Count: %s -> %d\n", node, constraints.size()));
-        }
-    }
-
-
-    public void mergeNodeConstraints() {
+    /**
+     * If there has multiple TypeConstraints in one node, means there has TypeConstraints
+     * from different sources, we should handle them and try to merge them.
+     */
+    public void handleNodeConstraints() {
         for (var node: nodeToConstraints.keySet()) {
             var constraints = nodeToConstraints.get(node);
             if (constraints.size() > 1) {
-                var mergedConstraint = new TypeConstraint();
+                // Two Problem to solve:
+                // 1. How to find which nodes need to remove edge
+                // 2. which edge to remove: all edge? backward edges? forward edges?
+                // 3. which type of edge to remove? CALL? DATAFLOW? or ...
+                var mergedConstraints = new TypeConstraint();
+                Logging.info("TypeAliasPathManager", String.format("Node has multiple TypeConstraints: %s: %d", node, constraints.size()));
+                for (var path: nodeToPathsMap.get(node)) {
+                    if (path.hasConflict || path.noComposite) {
+                        continue;
+                    }
+                    Logging.info("TypeAliasPathManager", path.toString());
+                }
+
                 for (var con: constraints) {
-                    // TODO: besides checkOverlap, we should first check if layout's every different.
-                    var noConflict = mergedConstraint.tryMerge(con);
+                    var noConflict = mergedConstraints.tryMerge(con);
                     if (!noConflict) {
-                        Logging.warn("TypeAliasPathManager", String.format("Conflict when merging TypeConstraints in node for %s", node));
+                        // TODO: mark edges to remove
+                        conflictNodes.add(node);
+                        Logging.warn("TypeAliasPathManager", String.format("Conflict when merging TypeConstraints in node %s", node));
                         for (var c: constraints) {
-                            // TODO: also print path
                             Logging.info("TypeAliasPathManager", c.dumpLayout(0));
                         }
                         break;
                     }
                 }
-            }
-            // TODO: ...
-            else {
-                continue;
+            } else {
+                Logging.info("TypeAliasPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
             }
         }
     }

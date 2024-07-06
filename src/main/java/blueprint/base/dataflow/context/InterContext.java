@@ -17,6 +17,7 @@ import ghidra.program.model.pcode.PcodeOp;
 
 
 import java.io.File;
+import java.lang.reflect.Type;
 import java.util.*;
 
 /**
@@ -134,6 +135,24 @@ public class InterContext {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
                 graph.pathManager.tryMergeByPath(symExprManager);
                 graph.pathManager.tryMergePathsFromSameSource();
+                graph.pathManager.handleNodeConstraints();
+
+                for (var node: graph.pathManager.conflictNodes) {
+                    graph.removeAllEdgesOfNode(node);
+                }
+
+                var components = graph.getConnectedComponents();
+                for (var component: components) {
+                    if (component.size() > 5) {
+                        // TODO: check Connected components correctness
+                        Logging.info("InterContext", "Connected components: ");
+                        for (var node: component) {
+                            if (node.isVariable()) {
+                                Logging.info("InterContext", node.toString());
+                            }
+                        }
+                    }
+                }
             }
         }
 
