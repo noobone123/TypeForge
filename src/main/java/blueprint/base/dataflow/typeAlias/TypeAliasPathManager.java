@@ -95,24 +95,40 @@ public class TypeAliasPathManager<T> {
     // Try merge paths from same source, them propagate TypeConstraints to each node start from this source
     // Because there may have some node with paths from different source, we then handle them in next step
     public void tryMergePathsFromSameSource() {
+        // TODO: handle path's hasConflict
         for (var src: source) {
             var mergedConstraints = new TypeConstraint();
             var pathsFromSource = getAllPathsFromSource(src);
+            var hasConflict = false;
             for (var path: pathsFromSource) {
                 if (path.hasConflict || path.noComposite) {
                     continue;
                 }
                 var noConflict = mergedConstraints.tryMerge(path.finalConstraint);
                 if (!noConflict) {
-                    Logging.warn("TypeAliasPathManager", "Conflict when merging path's final Constraint: %s");
+                    // If there has conflict when merging different paths from same source, we do not try to
+                    // merge them but set TypeConstraints to each node in their path.
+                    hasConflict = true;
+                    Logging.warn("TypeAliasPathManager", String.format("Paths from source %s has conflict when merging path's final Constraint", src));
                     for (var p: pathsFromSource) {
                         if (p.hasConflict || p.noComposite) {
                             continue;
                         }
-                        Logging.info("TypeAliasPathManager", p.toString());
-                        Logging.info("TypeAliasPathManager", p.finalConstraint.dumpLayout(0));
+                        propagateConstraintByPath(p.finalConstraint, p);
                     }
                     break;
+                }
+            }
+
+            if (!hasConflict) {
+                // If there has no conflict when merging different paths from same source, we propagate the merged Constraints
+                // to each node start from this source
+                Logging.info("TypeAliasPathManager", String.format("Paths from source %s has no conflict when merging path's final Constraint", src));
+                for (var path: pathsFromSource) {
+                    if (path.hasConflict || path.noComposite) {
+                        continue;
+                    }
+                    propagateConstraintByPath(mergedConstraints, path);
                 }
             }
         }
@@ -218,6 +234,11 @@ public class TypeAliasPathManager<T> {
         return result;
     }
 
+    public void propagateConstraintByPath(TypeConstraint constraint, TypeAliasPath<T> path) {
+        for (var node: path.nodes) {
+            nodeToConstraints.computeIfAbsent(node, k -> new HashSet<>()).add(constraint);
+        }
+    }
 
     public Set<TypeAliasPath<T>> getAllPathContainsNode(T node) {
         return nodeToPathsMap.get(node);

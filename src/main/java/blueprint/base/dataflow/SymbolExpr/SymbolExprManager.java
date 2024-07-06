@@ -80,7 +80,6 @@ public class SymbolExprManager {
     public TypeConstraint createConstraint(SymbolExpr expr) {
         TypeConstraint constraint = new TypeConstraint();
         exprToConstraintBeforeMerge.put(expr, constraint);
-        constraint.addAssociatedExpr(expr);
         Logging.debug("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
         return constraint;
     }
@@ -135,11 +134,6 @@ public class SymbolExprManager {
 
     public TreeMap<Long, Set<SymbolExpr>> getFieldInfo(SymbolExpr base) {
         return baseToFieldsMap.get(base);
-    }
-
-    public void updateExprToConstraintMap(SymbolExpr expr, TypeConstraint constraint) {
-        exprToConstraintBeforeMerge.put(expr, constraint);
-        constraint.addAssociatedExpr(expr);
     }
 
     /**
