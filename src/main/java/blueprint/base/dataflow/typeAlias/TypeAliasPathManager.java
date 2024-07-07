@@ -1,5 +1,6 @@
 package blueprint.base.dataflow.typeAlias;
 
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.utils.Logging;
@@ -19,7 +20,12 @@ public class TypeAliasPathManager<T> {
     public final Map<T, Map<T, Set<TypeAliasPath<T>>>> srcSinkToPathsMap;
 
     public final Map<T, Set<TypeConstraint>> nodeToConstraints;
+
+    /** fields for conflict nodes */
     public final Set<T> conflictNodes = new HashSet<>();
+    public final Set<List<T>> conflictNodesCommonPaths = new HashSet<>();
+    public final Map<T, Set<T>> excludeEdges = new HashMap<>();
+    public final Set<TypeAliasGraph.TypeAliasEdge> removedEdges = new HashSet<>();
 
     public TypeAliasPathManager(TypeAliasGraph<T> graph) {
         this.graph = graph;
@@ -161,9 +167,11 @@ public class TypeAliasPathManager<T> {
                 for (var con: constraints) {
                     var noConflict = mergedConstraints.tryMerge(con);
                     if (!noConflict) {
-                        // TODO: mark edges to remove
-                        conflictNodes.add(node);
                         Logging.warn("TypeAliasPathManager", String.format("Conflict when merging TypeConstraints in node %s", node));
+
+                        conflictNodes.add(node);
+                        conflictNodesCommonPaths.addAll(getLongestCommonPath(nodeToPathsMap.get(node)));
+
                         for (var c: constraints) {
                             Logging.info("TypeAliasPathManager", c.dumpLayout(0));
                         }
@@ -174,6 +182,28 @@ public class TypeAliasPathManager<T> {
                 Logging.info("TypeAliasPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
             }
         }
+    }
+
+    /**
+     * Get the edges need to remove in TypeAliasGraph, these edges are related to conflict nodes
+     * @return Set of edges need to remove
+     */
+    public Set<TypeAliasGraph.TypeAliasEdge> getEdgesToRemove() {
+        buildExcludeEdges();
+
+        for (var node: conflictNodes) {
+            for (var edge: graph.getGraph().edgesOf(node)) {
+                var src = graph.getGraph().getEdgeSource(edge);
+                var dst = graph.getGraph().getEdgeTarget(edge);
+                var excludeNodes = excludeEdges.get(node);
+                if (excludeNodes != null && excludeNodes.contains(src) && excludeNodes.contains(dst)) {
+                    continue;
+                }
+                removedEdges.add(edge);
+                Logging.info("TypeAliasPathManager", String.format("Mark Edge to remove in TypeAliasGraph: %s ---> %s", src, dst));
+            }
+        }
+        return removedEdges;
     }
 
 
@@ -205,6 +235,95 @@ public class TypeAliasPathManager<T> {
             }
         }
         Logging.info("TypeAliasPathManager", String.format("Found %d paths from sources to sinks", allPaths.size()));
+    }
+
+    /**
+     * Get the longest common path in given paths using binary search and sub-path's hash ...
+     * @param paths Set of given paths
+     * @return Set of sub-paths
+     */
+    public Set<List<T>> getLongestCommonPath(Set<TypeAliasPath<T>> paths) {
+        int lowBound = 1;
+        int highBound = Integer.MAX_VALUE;
+        Map<Integer, Set<Integer>> lengthToPathHash = new HashMap<>();
+        for (var path: paths) {
+            highBound = Math.min(highBound, path.nodes.size());
+        }
+
+        while (lowBound <= highBound) {
+            int length = (lowBound + highBound) / 2;
+
+            // get all sub-paths with length
+            for (var path: paths) {
+                path.createSubPathsOfLength(length);
+            }
+
+            // check all paths if there has common sub-path by intersecting their sub-paths hash
+            var firstPath = paths.iterator().next();
+            var firstPathHashes = firstPath.subPathsOfLengthWithHash.get(length).keySet();
+            for (var p: paths) {
+                var pathHashes = p.subPathsOfLengthWithHash.get(length).keySet();
+                firstPathHashes.retainAll(pathHashes);
+            }
+
+            if (firstPathHashes.isEmpty()) {
+                highBound = length - 1;
+            } else {
+                lowBound = length + 1;
+                lengthToPathHash.put(length, firstPathHashes);
+            }
+        }
+
+        // get the longest common path in lengthToPathHash
+        int maxLength = 0;
+        for (var length: lengthToPathHash.keySet()) {
+            if (length > maxLength) {
+                maxLength = length;
+            }
+        }
+
+        var maxLengthsHashes = lengthToPathHash.get(maxLength);
+        var firstPath = paths.iterator().next();
+
+
+        var result = new HashSet<List<T>>();
+        for (var hash: maxLengthsHashes) {
+            var subPathNodes = firstPath.subPathsOfLengthWithHash.get(maxLength).get(hash);
+            if (subPathNodes != null) {
+                result.add(subPathNodes);
+            }
+        }
+
+        return result;
+    }
+
+
+    /**
+     * The soundest strategy is to remove all edges of the conflict node, but it may be too aggressive.
+     * By finding the longest common path of the conflict node, we found that some edges are not necessary to remove.
+     * So we need to find these edges (marked as tuples like (node_1, node2))
+     */
+    public void buildExcludeEdges() {
+        for (var path: conflictNodesCommonPaths) {
+            if (path.size() < 2) {
+                continue;
+            }
+
+            for (int i = 0; i < path.size(); i++) {
+                if (conflictNodes.contains(path.get(i))) {
+                    if (i > 0) {
+                        excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i - 1));
+                    }
+                    if (i < path.size() - 1) {
+                        excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i + 1));
+                    }
+                }
+            }
+        }
+
+        for (var node: excludeEdges.keySet()) {
+            Logging.info("TypeAliasPathManager", String.format("Built Exclude edges: %s: %s", node, excludeEdges.get(node)));
+        }
     }
 
 

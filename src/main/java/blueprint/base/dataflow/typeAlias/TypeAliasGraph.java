@@ -113,15 +113,6 @@ public class TypeAliasGraph<T> {
     }
 
 
-    public void removeAllEdgesOfNode(T node) {
-        Set<TypeAliasEdge> edges = graph.edgesOf(node);
-        for (TypeAliasEdge edge: edges) {
-            T src = graph.getEdgeSource(edge);
-            T dst = graph.getEdgeTarget(edge);
-            graph.removeEdge(src, dst);
-        }
-    }
-
     public List<Set<T>> getConnectedComponents() {
         ConnectivityInspector<T, TypeAliasEdge> inspector = new ConnectivityInspector<>(graph);
         var result = inspector.connectedSets();

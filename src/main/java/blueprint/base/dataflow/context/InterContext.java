@@ -136,9 +136,10 @@ public class InterContext {
                 graph.pathManager.tryMergeByPath(symExprManager);
                 graph.pathManager.tryMergePathsFromSameSource();
                 graph.pathManager.handleNodeConstraints();
+                var edges = graph.pathManager.getEdgesToRemove();
 
-                for (var node: graph.pathManager.conflictNodes) {
-                    graph.removeAllEdgesOfNode(node);
+                for (var edge: edges) {
+                    graph.getGraph().removeEdge(edge);
                 }
 
                 var components = graph.getConnectedComponents();
@@ -158,101 +159,6 @@ public class InterContext {
 
         typeAliasManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
     }
-
-    /**
-     * Current memory alias graph is not complete, it only contains the alias relationship with explicit data-flow relations.
-     * And alias relations introduced by memory alias is not handled yet.
-     * For example: if `a` and `b` is alias, then `*(a + 0x10)` and `*(b + 0x10)` should be alias too.
-     * In this method, we consider fields as type alias only if their bases are alias and offsets are the same.
-     */
-    private void handleMemoryAlias() {
-        var workList = new LinkedList<SimpleEntry>();
-        var visited = new HashSet<SimpleEntry>();
-        var allBaseExprs = symExprManager.getAllBaseExprs();
-
-        Logging.info("InterContext", "Start to handle memory alias.");
-        for (var baseExpr: allBaseExprs) {
-            var fieldExprs = symExprManager.getFieldInfo(baseExpr);
-            for (var fieldInfo : fieldExprs.entrySet()) {
-                var entry = new SimpleEntry(baseExpr, fieldInfo.getKey());
-                workList.add(entry);
-                Logging.debug("InterContext", String.format("Add baseExpr %s with offset 0x%x", baseExpr, fieldInfo.getKey()));
-            }
-        }
-
-        while (!workList.isEmpty()) {
-            var entry = workList.poll();
-            var baseExpr = entry.baseExpr;
-            var offset = entry.offset;
-
-            if (visited.contains(entry)) {
-                continue;
-            }
-            Logging.debug("InterContext", String.format("Processing baseExpr %s with offset 0x%x", baseExpr, offset));
-            visited.add(entry);
-            var currentFieldExprs = symExprManager.getFieldExprsByOffset(baseExpr, offset);
-            var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset, visited);
-
-            if (currentFieldExprs.isEmpty()) { continue; }
-            for (var currentFieldExpr: currentFieldExprs.get()) {
-                for (var otherFieldExpr : otherFieldExprsWithSameOffset) {
-                    if (addMemoryAliasRelation(currentFieldExpr, otherFieldExpr)) {
-                        // If a new memory alias relation is added, and new added otherFieldExpr still has fields, we need to add them into workList
-                        var newFieldExprs = symExprManager.getFieldInfo(otherFieldExpr);
-                        if (newFieldExprs == null) {
-                            Logging.debug("InterContext", String.format("Other field expr %s has no fields.", otherFieldExpr));
-                        }
-                        else {
-                            for (var newFieldInfo : newFieldExprs.entrySet()) {
-                                workList.add(new SimpleEntry(otherFieldExpr, newFieldInfo.getKey()));
-                                Logging.debug("InterContext", String.format("Add otherFieldExpr %s with offset 0x%x", otherFieldExpr, newFieldInfo.getKey()));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
-//    private void mergeByTypeAliasGraph() {
-//        for (var graph: typeAliasManager.getGraphs()) {
-//            if (graph.getNumNodes() > 1) {
-////                var mayTypeAgnosticParams = graph.findMayTypeAgnosticParams();
-////                if (!mayTypeAgnosticParams.isEmpty()) {
-////                    var confirmedTypeAgnositicParams = graph.checkTypeAgnosticParams(mayTypeAgnosticParams, symExprManager.getExprToConstraintMapCopy());
-////                    if (!confirmedTypeAgnositicParams.isEmpty()) {
-////                        Logging.info("InterContext", "Confirmed type agnostic params found: " + confirmedTypeAgnositicParams);
-////                        graph.removeTypeAgnosticCallEdgesAndMerge(confirmedTypeAgnositicParams, symExprManager.getExprToConstraintMap(), true);
-////                    } else {
-////                        Logging.info("InterContext", "No confirmed type agnostic params found.");
-////                        graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
-////                    }
-////                } else {
-////                    graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
-////                }
-//                graph.mergeNodesConstraints(graph.getNodes(), symExprManager.getExprToConstraintMap(), true);
-//            }
-//        }
-//    }
-
-
-//    // TODO: checking FieldConflict before merging ...
-//    private void mergeConstraints() {
-//        var workList = new LinkedList<TypeConstraint>();
-//        var allConstraints = symExprManager.getAllConstraints();
-//        for (var constraint : allConstraints) {
-//            if (hasMultiReferenceField(constraint)) {
-//                Logging.info("InterContext", String.format("%s has multi reference fields", constraint));
-//                workList.add(constraint);
-//            }
-//        }
-//
-//        while (!workList.isEmpty()) {
-//            var cur = workList.poll();
-//            mergeMultiReference(cur, workList);
-//        }
-//    }
 
 
 //    /**
@@ -434,6 +340,63 @@ public class InterContext {
 //            }
 //        }
 //    }
+
+
+    /**
+     * Current memory alias graph is not complete, it only contains the alias relationship with explicit data-flow relations.
+     * And alias relations introduced by memory alias is not handled yet.
+     * For example: if `a` and `b` is alias, then `*(a + 0x10)` and `*(b + 0x10)` should be alias too.
+     * In this method, we consider fields as type alias only if their bases are alias and offsets are the same.
+     */
+    // DEPRECATED
+    private void handleMemoryAlias() {
+        var workList = new LinkedList<SimpleEntry>();
+        var visited = new HashSet<SimpleEntry>();
+        var allBaseExprs = symExprManager.getAllBaseExprs();
+
+        Logging.info("InterContext", "Start to handle memory alias.");
+        for (var baseExpr: allBaseExprs) {
+            var fieldExprs = symExprManager.getFieldInfo(baseExpr);
+            for (var fieldInfo : fieldExprs.entrySet()) {
+                var entry = new SimpleEntry(baseExpr, fieldInfo.getKey());
+                workList.add(entry);
+                Logging.debug("InterContext", String.format("Add baseExpr %s with offset 0x%x", baseExpr, fieldInfo.getKey()));
+            }
+        }
+
+        while (!workList.isEmpty()) {
+            var entry = workList.poll();
+            var baseExpr = entry.baseExpr;
+            var offset = entry.offset;
+
+            if (visited.contains(entry)) {
+                continue;
+            }
+            Logging.debug("InterContext", String.format("Processing baseExpr %s with offset 0x%x", baseExpr, offset));
+            visited.add(entry);
+            var currentFieldExprs = symExprManager.getFieldExprsByOffset(baseExpr, offset);
+            var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset, visited);
+
+            if (currentFieldExprs.isEmpty()) { continue; }
+            for (var currentFieldExpr: currentFieldExprs.get()) {
+                for (var otherFieldExpr : otherFieldExprsWithSameOffset) {
+                    if (addMemoryAliasRelation(currentFieldExpr, otherFieldExpr)) {
+                        // If a new memory alias relation is added, and new added otherFieldExpr still has fields, we need to add them into workList
+                        var newFieldExprs = symExprManager.getFieldInfo(otherFieldExpr);
+                        if (newFieldExprs == null) {
+                            Logging.debug("InterContext", String.format("Other field expr %s has no fields.", otherFieldExpr));
+                        }
+                        else {
+                            for (var newFieldInfo : newFieldExprs.entrySet()) {
+                                workList.add(new SimpleEntry(otherFieldExpr, newFieldInfo.getKey()));
+                                Logging.debug("InterContext", String.format("Add otherFieldExpr %s with offset 0x%x", otherFieldExpr, newFieldInfo.getKey()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
 
     private Set<SymbolExpr> getOtherFieldExprsWithSameOffset(SymbolExpr baseExpr, long offset, Set<SimpleEntry> visited) {

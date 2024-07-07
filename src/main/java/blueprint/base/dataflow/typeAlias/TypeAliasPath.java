@@ -2,6 +2,7 @@ package blueprint.base.dataflow.typeAlias;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.context.InterContext;
 import blueprint.utils.Logging;
 import org.jgrapht.GraphPath;
 
@@ -19,6 +20,11 @@ public class TypeAliasPath<T> {
     public boolean noComposite = false;
     public T start;
     public T end;
+
+    /**
+     * Map[SUB_PATH_LENGTH, Map[HASH_CODE, SUB_PATH_NODES]]
+     */
+    public Map<Integer, Map<Integer, List<T>>> subPathsOfLengthWithHash = new HashMap<>();
 
     public TypeAliasPath(GraphPath<T, TypeAliasGraph.TypeAliasEdge> path) {
         // update nodes;
@@ -123,6 +129,31 @@ public class TypeAliasPath<T> {
         return Optional.empty();
     }
 
+
+    public void createSubPathsOfLength(int length) {
+        if (length < 1) {
+            return;
+        }
+
+        for (int i = 0; i < nodes.size() - length + 1; i++) {
+            var subPathNodes = nodes.subList(i, i + length);
+            var hash = getPathsHashCode(subPathNodes);
+            if (!subPathsOfLengthWithHash.containsKey(length)) {
+                subPathsOfLengthWithHash.put(length, new HashMap<>());
+            }
+            if (!subPathsOfLengthWithHash.get(length).containsKey(hash)) {
+                subPathsOfLengthWithHash.get(length).put(hash, subPathNodes);
+            }
+        }
+    }
+
+    public int getPathsHashCode(List<T> path) {
+        int hash = 0;
+        for (var t : path) {
+            hash = 31 * hash + t.hashCode();
+        }
+        return hash;
+    }
 
     public String toString() {
         StringBuilder builder = new StringBuilder();
