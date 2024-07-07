@@ -146,6 +146,7 @@ public class InterContext {
                 for (var component: components) {
                     if (component.size() > 5) {
                         // TODO: check Connected components correctness
+                        // TODO: check unexpected edges in chunkqueue* and chunk* in GraphExplorer, GraphExplorer's loaded graph is updated (remove edge...)
                         Logging.info("InterContext", "Connected components: ");
                         for (var node: component) {
                             if (node.isVariable()) {
