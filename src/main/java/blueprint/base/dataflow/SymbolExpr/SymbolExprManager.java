@@ -152,7 +152,11 @@ public class SymbolExprManager {
         if (parseResult.isEmpty()) { return new HashSet<>(); }
         var parsedExpr = parseResult.get();
         var baseExpr = parsedExpr.base;
+        var indexExpr = parsedExpr.index;
+        var scaleExpr = parsedExpr.scale;
         var offset = parsedExpr.offsetValue;
+
+        // TODO:  If baseExpr is also a fieldAccess, parse it first ...
 
         var mayAliasExpr = new HashSet<SymbolExpr>();
 

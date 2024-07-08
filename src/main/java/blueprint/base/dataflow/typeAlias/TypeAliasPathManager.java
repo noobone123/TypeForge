@@ -154,6 +154,7 @@ public class TypeAliasPathManager<T> {
                 // 1. How to find which nodes need to remove edge
                 // 2. which edge to remove: all edge? backward edges? forward edges?
                 // 3. which type of edge to remove? CALL? DATAFLOW? or ...
+                // TODO: if 40/50% path's constraint's layout are same, we see the constraint is this and mark all edges in these path not to remove.
                 var mergedConstraints = new TypeConstraint();
                 Logging.info("TypeAliasPathManager", String.format("Node has multiple TypeConstraints: %s: %d", node, constraints.size()));
                 for (var path: nodeToPathsMap.get(node)) {
