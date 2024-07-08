@@ -1,6 +1,5 @@
 package blueprint.base.dataflow.typeAlias;
 
-import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.utils.Logging;
@@ -65,7 +64,7 @@ public class TypeAliasPathManager<T> {
             var path = workList.poll();
             Logging.info("TypeAliasPathManager", "============================================== start ==============================================\n");
             Logging.info("TypeAliasPathManager", String.format("Try merge by path: %s", path));
-            var hasConflict = path.tryMergeByPath(exprManager);
+            var hasConflict = path.tryMergeOnPath(exprManager);
             if (hasConflict.isPresent()) {
                 var conflictNode = hasConflict.get();
                 // Split Path

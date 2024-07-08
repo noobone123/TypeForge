@@ -55,7 +55,6 @@ public class InterSolver {
         ctx.collectConstraints();
 
         var generator = new Generator(ctx);
-        // generator.buildSkeletonOfVariable();
         generator.dumpResults(new File(Global.outputDirectory));
     }
 

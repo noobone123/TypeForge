@@ -2,7 +2,6 @@ package blueprint.base.dataflow.typeAlias;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
-import blueprint.base.dataflow.context.InterContext;
 import blueprint.utils.Logging;
 import org.jgrapht.GraphPath;
 
@@ -60,7 +59,7 @@ public class TypeAliasPath<T> {
         return new AbstractMap.SimpleEntry<>(firstPath, secondPath);
     }
 
-    public Optional<T> tryMergeByPath(SymbolExprManager exprManager) {
+    public Optional<T> tryMergeOnPath(SymbolExprManager exprManager) {
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get(i);
             TypeConstraint curMergedCon;
@@ -113,7 +112,7 @@ public class TypeAliasPath<T> {
                         continue;
                     }
                     else {
-                        Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in path for %s", curExpr));
+                        Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints on path for %s", curExpr));
                         hasConflict = true;
                         // If conflict happens, we should return the conflict node
                         return Optional.of(node);

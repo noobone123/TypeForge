@@ -130,28 +130,38 @@ public class InterContext {
         Logging.info("InterContext", "Total Graph Number: " + typeAliasManager.getGraphs().size());
         typeAliasManager.buildAllPathManagers();
 
+        // Remove some redundant edges in the graph
         for (var graph: typeAliasManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
                 graph.pathManager.tryMergeByPath(symExprManager);
                 graph.pathManager.tryMergePathsFromSameSource();
                 graph.pathManager.handleNodeConstraints();
-                var edges = graph.pathManager.getEdgesToRemove();
 
+                var edges = graph.pathManager.getEdgesToRemove();
                 for (var edge: edges) {
                     graph.getGraph().removeEdge(edge);
                 }
+            }
+        }
 
-                var components = graph.getConnectedComponents();
-                for (var component: components) {
-                    if (component.size() > 5) {
-                        // TODO: check Connected components correctness
-                        // TODO: check unexpected edges in chunkqueue* and chunk* in GraphExplorer, GraphExplorer's loaded graph is updated (remove edge...)
-                        Logging.info("InterContext", "Connected components: ");
-                        for (var node: component) {
-                            if (node.isVariable()) {
-                                Logging.info("InterContext", node.toString());
-                            }
+        // update memory alias relation
+        for (var expr: symExprManager.mayMemAliasCache.keySet()) {
+            for (var alias: symExprManager.mayMemAliasCache.get(expr)) {
+                typeAliasManager.addEdge(expr, alias, TypeAliasGraph.EdgeType.MEMALIAS);
+            }
+        }
+
+        // merge constraints according to connected components
+        for (var graph: typeAliasManager.getGraphs()) {
+            var components = graph.getConnectedComponents();
+            for (var component: components) {
+                if (component.size() > 5) {
+                    // TODO: check Connected components correctness
+                    Logging.info("InterContext", "Connected components: ");
+                    for (var node: component) {
+                        if (node.isVariable()) {
+                            Logging.info("InterContext", node.toString());
                         }
                     }
                 }

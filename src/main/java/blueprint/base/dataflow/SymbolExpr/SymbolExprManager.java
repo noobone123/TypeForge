@@ -20,7 +20,7 @@ public class SymbolExprManager {
     InterContext interCtx;
 
     // mem alias related fields
-    Map<SymbolExpr, Set<SymbolExpr>> mayMemAliasCache;
+    public Map<SymbolExpr, Set<SymbolExpr>> mayMemAliasCache;
 
     public SymbolExprManager(InterContext interCtx) {
         exprToConstraintBeforeMerge = new HashMap<>();
