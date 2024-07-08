@@ -146,6 +146,18 @@ public class InterContext {
         }
 
         // update memory alias relation
+        // TODO: enhance mayMemAliasCache
+        /**
+         * Fix following cases:
+         * Enter source node: [0011a135]-network_close: *(*(param_1 + 0x150) + local_10 * 0x8)
+         * Enter destination node: [0010f2db]-server_sockets_restore: *(*(param_1 + 0x150) + local_10 * 0x8)
+         * No path found.
+         * Enter source node: [0011a135]-network_close: param_1
+         * Enter destination node: [0010f2db]-server_sockets_restore: param_1
+         * [0011a135]-network_close: param_1 --- ("CALL") --- [00112116]-main: lVar2
+         * [00112116]-main: lVar2 --- ("CALL") --- [0010f2db]-server_sockets_restore: param_1
+         * [0010f2db]-server_sockets_restore: param_1
+         */
         for (var expr: symExprManager.mayMemAliasCache.keySet()) {
             for (var alias: symExprManager.mayMemAliasCache.get(expr)) {
                 typeAliasManager.addEdge(expr, alias, TypeAliasGraph.EdgeType.MEMALIAS);
@@ -156,15 +168,33 @@ public class InterContext {
         for (var graph: typeAliasManager.getGraphs()) {
             var components = graph.getConnectedComponents();
             for (var component: components) {
-                if (component.size() > 5) {
-                    // TODO: check Connected components correctness
-                    Logging.info("InterContext", "Connected components: ");
-                    for (var node: component) {
-                        if (node.isVariable()) {
-                            Logging.info("InterContext", node.toString());
+                var mergedConstraint = new TypeConstraint();
+                for (var node: component) {
+                    var nodeConstraint = symExprManager.getConstraint(node);
+                    if (nodeConstraint != null) {
+                        var noConflict = mergedConstraint.tryMerge(nodeConstraint);
+                        // TODO: handle cases: why conflict solve ...
+                        if (!noConflict) {
+                            Logging.warn("InterContext", String.format("Conflict when merging TypeConstraints in connected component for %s", node));
+                            continue;
                         }
                     }
+                    symExprManager.exprToConstraintAfterMerge.put(node, mergedConstraint);
                 }
+
+                if (mergedConstraint.isEmpty()) {
+                    continue;
+                }
+                // TODO: check unexpected layout
+                // TODO: add field with fieldAccessExpr to check unexpected layout
+                Logging.info("InterContext", "Connected components: ");
+                Logging.info("InterContext", mergedConstraint.dumpLayout(0));
+                for (var node: component) {
+                    if (node.isVariable()) {
+                        Logging.info("InterContext", node.toString());
+                    }
+                }
+                Logging.info("InterContext", "======================================================================================");
             }
         }
 
