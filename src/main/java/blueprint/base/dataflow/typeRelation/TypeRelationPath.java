@@ -1,4 +1,4 @@
-package blueprint.base.dataflow.typeAlias;
+package blueprint.base.dataflow.typeRelation;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
@@ -7,11 +7,11 @@ import org.jgrapht.GraphPath;
 
 import java.util.*;
 
-public class TypeAliasPath<T> {
+public class TypeRelationPath<T> {
     public final UUID uuid = UUID.randomUUID();
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
-    public List<TypeAliasGraph.TypeAliasEdge> edges;
+    public List<TypeRelationGraph.TypeAliasEdge> edges;
     public List<TypeConstraint> backwardMergedConstraints;
     public List<TypeConstraint> forwardMergedConstraints;
     public TypeConstraint finalConstraint = null;
@@ -25,7 +25,7 @@ public class TypeAliasPath<T> {
      */
     public Map<Integer, Map<Integer, List<T>>> subPathsOfLengthWithHash = new HashMap<>();
 
-    public TypeAliasPath(GraphPath<T, TypeAliasGraph.TypeAliasEdge> path) {
+    public TypeRelationPath(GraphPath<T, TypeRelationGraph.TypeAliasEdge> path) {
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
@@ -37,7 +37,7 @@ public class TypeAliasPath<T> {
         this.end = nodes.get(nodes.size() - 1);
     }
 
-    public TypeAliasPath(List<T> nodes, List<TypeAliasGraph.TypeAliasEdge> edges) {
+    public TypeRelationPath(List<T> nodes, List<TypeRelationGraph.TypeAliasEdge> edges) {
         this.nodes = nodes;
         this.edges = edges;
         this.backwardMergedConstraints = new ArrayList<>();
@@ -47,15 +47,15 @@ public class TypeAliasPath<T> {
         this.end = nodes.get(nodes.size() - 1);
     }
 
-    public Map.Entry<TypeAliasPath<T>, TypeAliasPath<T>> splitPathFromNode(T conflictNode) {
+    public Map.Entry<TypeRelationPath<T>, TypeRelationPath<T>> splitPathFromNode(T conflictNode) {
         int startIndex = nodes.indexOf(conflictNode);
         var firstPathNodes = nodes.subList(0, startIndex);
         // TODO: first split path has last edge from last node ...
         var firstPathEdges = edges.subList(0, startIndex);
-        var firstPath = new TypeAliasPath<>(firstPathNodes, firstPathEdges);
+        var firstPath = new TypeRelationPath<>(firstPathNodes, firstPathEdges);
         var secondPathNodes = nodes.subList(startIndex, nodes.size());
         var secondPathEdges = edges.subList(startIndex, edges.size());
-        var secondPath = new TypeAliasPath<>(secondPathNodes, secondPathEdges);
+        var secondPath = new TypeRelationPath<>(secondPathNodes, secondPathEdges);
         return new AbstractMap.SimpleEntry<>(firstPath, secondPath);
     }
 
@@ -73,10 +73,11 @@ public class TypeAliasPath<T> {
             } else {
                 curMergedCon = new TypeConstraint(curExprCon);
                 Logging.info("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
+
                 // If Current Expr is fieldAccessExpr, try to merge its memAliasExpr's TypeConstraint
                 if (curExpr.isDereference()) {
                     Logging.info("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
-                    var mayMemAliases = exprManager.getMayMemAliases(curExpr);
+                    var mayMemAliases = exprManager.fastGetMayMemAliases(curExpr);
                     for (var alias: mayMemAliases) {
                         if (alias == curExpr) {
                             continue;

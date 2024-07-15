@@ -3,10 +3,11 @@ package blueprint.base.dataflow.context;
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.ParsedExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
+import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
-import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
-import blueprint.base.dataflow.typeAlias.TypeAliasManager;
+import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
+import blueprint.base.dataflow.typeRelation.TypeRelationManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.Global;
@@ -17,7 +18,6 @@ import ghidra.program.model.pcode.PcodeOp;
 
 
 import java.io.File;
-import java.lang.reflect.Type;
 import java.util.*;
 
 /**
@@ -34,7 +34,7 @@ public class InterContext {
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
 
     public AccessPoints APs;
-    public TypeAliasManager<SymbolExpr> typeAliasManager;
+    public TypeRelationManager<SymbolExpr> typeRelationManager;
     public Set<SymbolExpr> fieldExprCandidates;
     public SymbolExprManager symExprManager;
 
@@ -44,7 +44,7 @@ public class InterContext {
         this.solvedFunc = new HashSet<>();
         this.intraCtxMap = new HashMap<>();
         this.APs = new AccessPoints();
-        this.typeAliasManager = new TypeAliasManager<>();
+        this.typeRelationManager = new TypeRelationManager<>();
         this.fieldExprCandidates = new HashSet<>();
         this.symExprManager = new SymbolExprManager(this);
     }
@@ -63,7 +63,7 @@ public class InterContext {
         APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType);
     }
 
-    public void addTypeAliasRelation(SymbolExpr from, SymbolExpr to, TypeAliasGraph.EdgeType edgeType) {
+    public void addTypeAliasRelation(SymbolExpr from, SymbolExpr to, TypeRelationGraph.EdgeType edgeType) {
         if (from.equals(to)) {
             return;
         }
@@ -73,7 +73,7 @@ public class InterContext {
             return;
         }
 
-        typeAliasManager.addEdge(from, to, edgeType);
+        typeRelationManager.addEdge(from, to, edgeType);
     }
 
     public boolean addMemoryAliasRelation(SymbolExpr from, SymbolExpr to) {
@@ -81,7 +81,7 @@ public class InterContext {
             return false;
         }
         // If there is already an existing edge between from and to, we don't need to add a new one.
-        if (typeAliasManager.hasEdge(from, to)) {
+        if (typeRelationManager.hasEdge(from, to)) {
             Logging.debug("InterContext", String.format("There is already an existing edge between %s and %s", from, to));
             return false;
         }
@@ -90,7 +90,7 @@ public class InterContext {
             return false;
         }
 
-        typeAliasManager.addEdge(from, to, TypeAliasGraph.EdgeType.MEMALIAS);
+        typeRelationManager.addEdge(from, to, TypeRelationGraph.EdgeType.MEMALIAS);
         return true;
     }
 
@@ -107,7 +107,7 @@ public class InterContext {
 
         mergeTypeConstraints();
 //
-//        typeAliasManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
+//        typeRelationManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
 
         // merging constraints according to type alias graph
 //        mergeByTypeAliasGraph();
@@ -127,14 +127,14 @@ public class InterContext {
 
     private void mergeTypeConstraints() {
         Logging.info("InterContext", "========================= Start to merge type constraints =========================");
-        Logging.info("InterContext", "Total Graph Number: " + typeAliasManager.getGraphs().size());
-        typeAliasManager.buildAllPathManagers();
+        Logging.info("InterContext", "Total Graph Number: " + typeRelationManager.getGraphs().size());
+        typeRelationManager.buildAllPathManagers();
 
         // Remove some redundant edges in the graph
-        for (var graph: typeAliasManager.getGraphs()) {
+        for (var graph: typeRelationManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
-                graph.pathManager.tryMergeByPath(symExprManager);
+                graph.pathManager.tryMergeOnPath(symExprManager);
                 graph.pathManager.tryMergePathsFromSameSource();
                 graph.pathManager.handleNodeConstraints();
 
@@ -158,14 +158,14 @@ public class InterContext {
          * [00112116]-main: lVar2 --- ("CALL") --- [0010f2db]-server_sockets_restore: param_1
          * [0010f2db]-server_sockets_restore: param_1
          */
-        for (var expr: symExprManager.mayMemAliasCache.keySet()) {
-            for (var alias: symExprManager.mayMemAliasCache.get(expr)) {
-                typeAliasManager.addEdge(expr, alias, TypeAliasGraph.EdgeType.MEMALIAS);
+        for (var expr: symExprManager.fastMayMemAliasCache.keySet()) {
+            for (var alias: symExprManager.fastMayMemAliasCache.get(expr)) {
+                typeRelationManager.addEdge(expr, alias, TypeRelationGraph.EdgeType.MEMALIAS);
             }
         }
 
         // merge constraints according to connected components
-        for (var graph: typeAliasManager.getGraphs()) {
+        for (var graph: typeRelationManager.getGraphs()) {
             var components = graph.getConnectedComponents();
             for (var component: components) {
                 var mergedConstraint = new TypeConstraint();
@@ -198,7 +198,7 @@ public class InterContext {
             }
         }
 
-        typeAliasManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
+        typeRelationManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
     }
 
 
@@ -442,7 +442,7 @@ public class InterContext {
 
     private Set<SymbolExpr> getOtherFieldExprsWithSameOffset(SymbolExpr baseExpr, long offset, Set<SimpleEntry> visited) {
         var result = new HashSet<SymbolExpr>();
-        var typeAliasGraph = typeAliasManager.getTypeAliasGraph(baseExpr);
+        var typeAliasGraph = typeRelationManager.getTypeRelationGraph(baseExpr);
         if (typeAliasGraph == null) {
             return result;
         }

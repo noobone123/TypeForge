@@ -1,18 +1,16 @@
-package blueprint.base.dataflow.typeAlias;
+package blueprint.base.dataflow.typeRelation;
 
-import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.Graphs;
 
-import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.utils.Logging;
 
 import java.util.*;
 
-public class TypeAliasGraph<T> {
+public class TypeRelationGraph<T> {
     public enum EdgeType {
         CALL,
         RETURN,
@@ -43,16 +41,16 @@ public class TypeAliasGraph<T> {
     private final UUID uuid;
     private final String shortUUID;
 
-    public TypeAliasPathManager<T> pathManager;
+    public TypeRelationPathManager<T> pathManager;
 
-    public TypeAliasGraph() {
+    public TypeRelationGraph() {
         graph = new DefaultDirectedGraph<>(TypeAliasEdge.class);
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
 
-        pathManager = new TypeAliasPathManager<T>(this);
+        pathManager = new TypeRelationPathManager<T>(this);
 
-        Logging.debug("TypeAliasGraph", String.format("Create TypeAliasGraph_%s", shortUUID));
+        Logging.debug("TypeRelationGraph", String.format("Create TypeRelationGraph_%s", shortUUID));
     }
 
     public String getShortUUID() {
@@ -63,17 +61,17 @@ public class TypeAliasGraph<T> {
         graph.addVertex(src);
         graph.addVertex(dst);
         graph.addEdge(src, dst, new TypeAliasEdge(edgeType));
-        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
+        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
     }
 
     public void removeEdge(T src, T dst) {
         graph.removeEdge(src, dst);
-        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
+        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
     }
 
     public void removeNode(T node) {
         graph.removeVertex(node);
-        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Remove node: %s", shortUUID, node));
+        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove node: %s", shortUUID, node));
     }
 
     public int getNumNodes() {
@@ -88,7 +86,7 @@ public class TypeAliasGraph<T> {
         return graph;
     }
 
-    public void mergeGraph(TypeAliasGraph<T> other) {
+    public void mergeGraph(TypeRelationGraph<T> other) {
         for (T vertex: other.getNodes()) {
             graph.addVertex(vertex);
         }
@@ -103,13 +101,13 @@ public class TypeAliasGraph<T> {
             if (existingEdge == null) {
                 graph.addEdge(src, dst, new TypeAliasEdge(EdgeType));
             } else if (existingEdge.getType() != EdgeType) {
-                Logging.warn("TypeAliasGraph", String.format("%s Merge conflict: %s ---> %s", other, src, dst));
+                Logging.warn("TypeRelationGraph", String.format("%s Merge conflict: %s ---> %s", other, src, dst));
             } else {
                 continue;
             }
         }
 
-        Logging.debug("TypeAliasGraph", String.format("TypeAliasGraph_%s Merge with %s", shortUUID, other));
+        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Merge with %s", shortUUID, other));
     }
 
 
@@ -122,7 +120,7 @@ public class TypeAliasGraph<T> {
 
     public String toGraphviz() {
         StringBuilder builder = new StringBuilder();
-        builder.append("digraph TypeAliasGraph_").append(shortUUID).append(" {\n");
+        builder.append("digraph TypeRelationGraph_").append(shortUUID).append(" {\n");
         for (TypeAliasEdge edge : graph.edgeSet()) {
             T src = graph.getEdgeSource(edge);
             T dst = graph.getEdgeTarget(edge);
@@ -133,15 +131,15 @@ public class TypeAliasGraph<T> {
         return builder.toString();
     }
 
-    public TypeAliasGraph<T> createCopy() {
-        Logging.debug("TypeAliasGraph", "Create copy of " + this);
-        TypeAliasGraph<T> copy = new TypeAliasGraph<>();
+    public TypeRelationGraph<T> createCopy() {
+        Logging.debug("TypeRelationGraph", "Create copy of " + this);
+        TypeRelationGraph<T> copy = new TypeRelationGraph<>();
         Graphs.addGraph(copy.graph, this.graph);
         return copy;
     }
 
     @Override
     public String toString() {
-        return "TypeAliasGraph_" + shortUUID;
+        return "TypeRelationGraph_" + shortUUID;
     }
 }

@@ -1,4 +1,4 @@
-package blueprint.base.dataflow.typeAlias;
+package blueprint.base.dataflow.typeRelation;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
@@ -8,25 +8,26 @@ import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 import java.io.FileWriter;
 import java.util.*;
 
-public class TypeAliasPathManager<T> {
-    public TypeAliasGraph<T> graph;
+public class TypeRelationPathManager<T> {
+    public TypeRelationGraph<T> graph;
     public boolean hasSrcSink = true;
     public final Set<T> source;
     public final Set<T> sink;
 
-    public final Set<TypeAliasPath<T>> allPaths;
-    public final Map<T, Set<TypeAliasPath<T>>> nodeToPathsMap;
-    public final Map<T, Map<T, Set<TypeAliasPath<T>>>> srcSinkToPathsMap;
+    public final Set<TypeRelationPath<T>> allPaths;
+    public final Map<T, Set<TypeRelationPath<T>>> nodeToPathsMap;
+    public final Map<T, Map<T, Set<TypeRelationPath<T>>>> srcSinkToPathsMap;
 
     public final Map<T, Set<TypeConstraint>> nodeToConstraints;
+    public final Map<TypeConstraint, Set<TypeRelationPath<T>>> constraintToPaths = new HashMap<>();
 
     /** fields for conflict nodes */
     public final Set<T> conflictNodes = new HashSet<>();
     public final Set<List<T>> conflictNodesCommonPaths = new HashSet<>();
     public final Map<T, Set<T>> excludeEdges = new HashMap<>();
-    public final Set<TypeAliasGraph.TypeAliasEdge> removedEdges = new HashSet<>();
+    public final Set<TypeRelationGraph.TypeAliasEdge> removedEdges = new HashSet<>();
 
-    public TypeAliasPathManager(TypeAliasGraph<T> graph) {
+    public TypeRelationPathManager(TypeRelationGraph<T> graph) {
         this.graph = graph;
         this.source = new HashSet<>();
         this.sink = new HashSet<>();
@@ -57,13 +58,13 @@ public class TypeAliasPathManager<T> {
      * Try merge TypeConstraints using nodes in one path
      * IMPORTANT: This Function should be called after all Graph's pathManager built
      */
-    public void tryMergeByPath(SymbolExprManager exprManager) {
+    public void tryMergeOnPath(SymbolExprManager exprManager) {
         var workList = new LinkedList<>(allPaths);
 
         while (!workList.isEmpty()) {
             var path = workList.poll();
-            Logging.info("TypeAliasPathManager", "============================================== start ==============================================\n");
-            Logging.info("TypeAliasPathManager", String.format("Try merge by path: %s", path));
+            Logging.info("TypeRelationPathManager", "============================================== start ==============================================\n");
+            Logging.info("TypeRelationPathManager", String.format("Try merge by path: %s", path));
             var hasConflict = path.tryMergeOnPath(exprManager);
             if (hasConflict.isPresent()) {
                 var conflictNode = hasConflict.get();
@@ -72,8 +73,8 @@ public class TypeAliasPathManager<T> {
                 var firstPath = splitPaths.getKey();
                 var secondPath = splitPaths.getValue();
 
-                Logging.info("TypeAliasPathManager", String.format("Split new path: %s", firstPath));
-                Logging.info("TypeAliasPathManager", String.format("Split new path: %s", secondPath));
+                Logging.info("TypeRelationPathManager", String.format("Split new path: %s", firstPath));
+                Logging.info("TypeRelationPathManager", String.format("Split new path: %s", secondPath));
 
                 // Update related data structures
                 updateNewPath(firstPath);
@@ -83,7 +84,7 @@ public class TypeAliasPathManager<T> {
                 workList.add(firstPath);
                 workList.add(secondPath);
             }
-            Logging.info("TypeAliasPathManager", "============================================== end ==============================================\n");
+            Logging.info("TypeRelationPathManager", "============================================== end ==============================================\n");
         }
 
 
@@ -94,6 +95,10 @@ public class TypeAliasPathManager<T> {
             }
             if (path.finalConstraint.isEmpty()) {
                 path.noComposite = true;
+            }
+
+            if (!path.noComposite && !path.hasConflict) {
+                constraintToPaths.computeIfAbsent(path.finalConstraint, k -> new HashSet<>()).add(path);
             }
         }
     }
@@ -116,12 +121,12 @@ public class TypeAliasPathManager<T> {
                     // merge them, and see these paths are from `different sources` and propagate TypeConstraints
                     // to each node in their path.
                     hasConflict = true;
-                    Logging.warn("TypeAliasPathManager", String.format("Paths from source %s has conflict when merging path's final Constraint", src));
+                    Logging.warn("TypeRelationPathManager", String.format("Paths from source %s has conflict when merging path's final Constraint", src));
                     for (var p: pathsFromSource) {
                         if (p.hasConflict || p.noComposite) {
                             continue;
                         }
-                        propagateConstraintByPath(p.finalConstraint, p);
+                        propagateConstraintOnPath(p.finalConstraint, p);
                     }
                     break;
                 }
@@ -130,12 +135,13 @@ public class TypeAliasPathManager<T> {
             if (!hasConflict) {
                 // If there has no conflict when merging different paths from same source, we propagate the merged Constraints
                 // to each node start from this source
-                Logging.info("TypeAliasPathManager", String.format("Paths from source %s has no conflict when merging path's final Constraint", src));
+                Logging.info("TypeRelationPathManager", String.format("Paths from source %s has no conflict when merging path's final Constraint", src));
                 for (var path: pathsFromSource) {
                     if (path.hasConflict || path.noComposite) {
                         continue;
                     }
-                    propagateConstraintByPath(mergedConstraints, path);
+                    propagateConstraintOnPath(mergedConstraints, path);
+                    constraintToPaths.computeIfAbsent(mergedConstraints, k -> new HashSet<>()).add(path);
                 }
             }
         }
@@ -156,39 +162,39 @@ public class TypeAliasPathManager<T> {
                 // 3. which type of edge to remove? CALL? DATAFLOW? or ...
                 // TODO: if 40/50% path's constraint's layout are same, we see the constraint is this and mark all edges in these path not to remove.
                 var mergedConstraints = new TypeConstraint();
-                Logging.info("TypeAliasPathManager", String.format("Node has multiple TypeConstraints: %s: %d", node, constraints.size()));
+                Logging.info("TypeRelationPathManager", String.format("Node has multiple TypeConstraints: %s: %d", node, constraints.size()));
                 for (var path: nodeToPathsMap.get(node)) {
                     if (path.hasConflict || path.noComposite) {
                         continue;
                     }
-                    Logging.info("TypeAliasPathManager", path.toString());
+                    Logging.info("TypeRelationPathManager", path.toString());
                 }
 
                 for (var con: constraints) {
                     var noConflict = mergedConstraints.tryMerge(con);
                     if (!noConflict) {
-                        Logging.warn("TypeAliasPathManager", String.format("Conflict when merging TypeConstraints in node %s", node));
+                        Logging.warn("TypeRelationPathManager", String.format("Conflict when merging TypeConstraints in node %s", node));
 
                         conflictNodes.add(node);
                         conflictNodesCommonPaths.addAll(getLongestCommonPath(nodeToPathsMap.get(node)));
 
                         for (var c: constraints) {
-                            Logging.info("TypeAliasPathManager", c.dumpLayout(0));
+                            Logging.info("TypeRelationPathManager", c.dumpLayout(0));
                         }
                         break;
                     }
                 }
             } else {
-                Logging.info("TypeAliasPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
+                Logging.info("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
             }
         }
     }
 
     /**
-     * Get the edges need to remove in TypeAliasGraph, these edges are related to conflict nodes
+     * Get the edges need to remove in TypeRelationGraph, these edges are related to conflict nodes
      * @return Set of edges need to remove
      */
-    public Set<TypeAliasGraph.TypeAliasEdge> getEdgesToRemove() {
+    public Set<TypeRelationGraph.TypeAliasEdge> getEdgesToRemove() {
         buildExcludeEdges();
 
         for (var node: conflictNodes) {
@@ -200,7 +206,7 @@ public class TypeAliasPathManager<T> {
                     continue;
                 }
                 removedEdges.add(edge);
-                Logging.info("TypeAliasPathManager", String.format("Mark Edge to remove in TypeAliasGraph: %s ---> %s", src, dst));
+                Logging.info("TypeRelationPathManager", String.format("Mark Edge to remove in TypeRelationGraph: %s ---> %s", src, dst));
             }
         }
         return removedEdges;
@@ -228,13 +234,13 @@ public class TypeAliasPathManager<T> {
             for (T sk: sink) {
                 var allPaths = new AllDirectedPaths<>(graph.getGraph()).getAllPaths(src, sk, true, Integer.MAX_VALUE);
                 for (var path: allPaths) {
-                    TypeAliasPath<T> typeAliasPath = new TypeAliasPath<>(path);
-                    this.allPaths.add(typeAliasPath);
-                    srcSinkToPathsMap.computeIfAbsent(src, k -> new HashMap<>()).computeIfAbsent(sk, k -> new HashSet<>()).add(typeAliasPath);
+                    TypeRelationPath<T> typeRelationPath = new TypeRelationPath<>(path);
+                    this.allPaths.add(typeRelationPath);
+                    srcSinkToPathsMap.computeIfAbsent(src, k -> new HashMap<>()).computeIfAbsent(sk, k -> new HashSet<>()).add(typeRelationPath);
                 }
             }
         }
-        Logging.info("TypeAliasPathManager", String.format("Found %d paths from sources to sinks", allPaths.size()));
+        Logging.info("TypeRelationPathManager", String.format("Found %d paths from sources to sinks", allPaths.size()));
     }
 
     /**
@@ -242,7 +248,7 @@ public class TypeAliasPathManager<T> {
      * @param paths Set of given paths
      * @return Set of sub-paths
      */
-    public Set<List<T>> getLongestCommonPath(Set<TypeAliasPath<T>> paths) {
+    public Set<List<T>> getLongestCommonPath(Set<TypeRelationPath<T>> paths) {
         int lowBound = 1;
         int highBound = Integer.MAX_VALUE;
         Map<Integer, Set<Integer>> lengthToPathHash = new HashMap<>();
@@ -322,12 +328,12 @@ public class TypeAliasPathManager<T> {
         }
 
         for (var node: excludeEdges.keySet()) {
-            Logging.info("TypeAliasPathManager", String.format("Built Exclude edges: %s: %s", node, excludeEdges.get(node)));
+            Logging.info("TypeRelationPathManager", String.format("Built Exclude edges: %s: %s", node, excludeEdges.get(node)));
         }
     }
 
 
-    public void updateNewPath(TypeAliasPath<T> path) {
+    public void updateNewPath(TypeRelationPath<T> path) {
         allPaths.add(path);
         srcSinkToPathsMap.computeIfAbsent(path.start, k -> new HashMap<>())
                 .computeIfAbsent(path.end, k -> new HashSet<>())
@@ -336,28 +342,28 @@ public class TypeAliasPathManager<T> {
     }
 
 
-    public void updateNodeToPathsMap(TypeAliasPath<T> path) {
+    public void updateNodeToPathsMap(TypeRelationPath<T> path) {
         for (var node: path.nodes) {
             nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
         }
     }
 
 
-    public Set<TypeAliasPath<T>> getAllPathsFromSource(T source) {
-        var result = new HashSet<TypeAliasPath<T>>();
+    public Set<TypeRelationPath<T>> getAllPathsFromSource(T source) {
+        var result = new HashSet<TypeRelationPath<T>>();
         for (var sk: srcSinkToPathsMap.get(source).keySet()) {
             result.addAll(srcSinkToPathsMap.get(source).get(sk));
         }
         return result;
     }
 
-    public void propagateConstraintByPath(TypeConstraint constraint, TypeAliasPath<T> path) {
+    public void propagateConstraintOnPath(TypeConstraint constraint, TypeRelationPath<T> path) {
         for (var node: path.nodes) {
             nodeToConstraints.computeIfAbsent(node, k -> new HashSet<>()).add(constraint);
         }
     }
 
-    public Set<TypeAliasPath<T>> getAllPathContainsNode(T node) {
+    public Set<TypeRelationPath<T>> getAllPathContainsNode(T node) {
         return nodeToPathsMap.get(node);
     }
 

@@ -1,10 +1,9 @@
-package blueprint.base.dataflow.typeAlias;
+package blueprint.base.dataflow.typeRelation;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
-import com.fasterxml.jackson.databind.module.SimpleModule;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -12,20 +11,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 
-public class TypeAliasManager<T> {
-    private final Set<TypeAliasGraph<T>> graphs;
-    private final Map<T, TypeAliasGraph<T>> exprToGraph;
+public class TypeRelationManager<T> {
+    private final Set<TypeRelationGraph<T>> graphs;
+    private final Map<T, TypeRelationGraph<T>> exprToGraph;
 
-    public TypeAliasManager() {
+    public TypeRelationManager() {
         this.graphs = new HashSet<>();
         this.exprToGraph = new HashMap<>();
     }
 
-    public void addEdge(T from, T to, TypeAliasGraph.EdgeType type) {
-        TypeAliasGraph<T> fromGraph = exprToGraph.get(from);
-        TypeAliasGraph<T> toGraph = exprToGraph.get(to);
+    public void addEdge(T from, T to, TypeRelationGraph.EdgeType type) {
+        TypeRelationGraph<T> fromGraph = exprToGraph.get(from);
+        TypeRelationGraph<T> toGraph = exprToGraph.get(to);
         if (fromGraph == null && toGraph == null) {
-            TypeAliasGraph<T> newGraph = new TypeAliasGraph<T>();
+            TypeRelationGraph<T> newGraph = new TypeRelationGraph<T>();
             newGraph.addEdge(from, to, type);
             graphs.add(newGraph);
             exprToGraph.put(from, newGraph);
@@ -50,17 +49,17 @@ public class TypeAliasManager<T> {
     }
 
     public boolean hasEdge(T from, T to) {
-        TypeAliasGraph<T> fromGraph = exprToGraph.get(from);
-        TypeAliasGraph<T> toGraph = exprToGraph.get(to);
+        TypeRelationGraph<T> fromGraph = exprToGraph.get(from);
+        TypeRelationGraph<T> toGraph = exprToGraph.get(to);
         return fromGraph != null && fromGraph == toGraph;
     }
 
 
-    public TypeAliasGraph<T> getTypeAliasGraph(T node) {
+    public TypeRelationGraph<T> getTypeRelationGraph(T node) {
         return exprToGraph.get(node);
     }
 
-    public Set<TypeAliasGraph<T>> getGraphs() {
+    public Set<TypeRelationGraph<T>> getGraphs() {
         return graphs;
     }
 
@@ -78,7 +77,7 @@ public class TypeAliasManager<T> {
      * @param baseToFieldsMap A map from base to its fields
      */
     public void removeRedundantGraphs(Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap) {
-        Set<TypeAliasGraph<T>> toRemove = new HashSet<>();
+        Set<TypeRelationGraph<T>> toRemove = new HashSet<>();
         for (var graph: graphs) {
             boolean hasInterestedNode = false;
             for (var node: graph.getNodes()) {
@@ -88,7 +87,7 @@ public class TypeAliasManager<T> {
                 }
             }
             if (!hasInterestedNode) {
-                Logging.debug("TypeAliasManager", String.format("Remove redundant graph %s", graph));
+                Logging.debug("TypeRelationManager", String.format("Remove redundant graph %s", graph));
                 toRemove.add(graph);
             }
         }
@@ -102,7 +101,7 @@ public class TypeAliasManager<T> {
     }
 
     public void dumpGraphMeta(File outputDir) throws IOException {
-        File metadataFile = new File(outputDir, "TypeAliasManager.json");
+        File metadataFile = new File(outputDir, "TypeRelationManager.json");
 
         ObjectMapper mapper = new ObjectMapper();
         mapper.enable(SerializationFeature.INDENT_OUTPUT);
@@ -115,19 +114,19 @@ public class TypeAliasManager<T> {
             exprToGraphID.put(entry.getKey().toString(), entry.getValue().toString());
         }
         for (var graph: graphs) {
-            graphIDs.add("TypeAliasGraph_" + graph.getShortUUID());
+            graphIDs.add("TypeRelationGraph_" + graph.getShortUUID());
         }
         metadata.put("graphs", graphIDs);
         metadata.put("exprToGraph", exprToGraphID);
         mapper.writeValue(metadataFile, metadata);
 
         if (graphs.size() != exprToGraph.values().stream().distinct().count()) {
-            Logging.error("TypeAliasManager", "Graphs and exprToGraph are inconsistent");
+            Logging.error("TypeRelationManager", "Graphs and exprToGraph are inconsistent");
             System.exit(1);
         }
 
         for (var graph: graphs) {
-            String graphName = "TypeAliasGraph_" + graph.getShortUUID();
+            String graphName = "TypeRelationGraph_" + graph.getShortUUID();
             File graphFile = new File(outputDir, graphName + ".dot");
             Files.write(graphFile.toPath(), graph.toGraphviz().getBytes());
         }
@@ -143,7 +142,7 @@ public class TypeAliasManager<T> {
                 writer.write("\n ----------------------------------------------------------- \n");
             }
         } catch (Exception e) {
-            Logging.error("TypeAliasManager", "Failed to write entry to exit paths to file" + e);
+            Logging.error("TypeRelationManager", "Failed to write entry to exit paths to file" + e);
             e.printStackTrace();
             System.exit(1);
         }

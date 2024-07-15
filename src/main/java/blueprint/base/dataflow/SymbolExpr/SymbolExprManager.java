@@ -2,7 +2,7 @@ package blueprint.base.dataflow.SymbolExpr;
 
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.context.InterContext;
-import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
+import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.pcode.HighSymbol;
@@ -20,7 +20,7 @@ public class SymbolExprManager {
     InterContext interCtx;
 
     // mem alias related fields
-    public Map<SymbolExpr, Set<SymbolExpr>> mayMemAliasCache;
+    public Map<SymbolExpr, Set<SymbolExpr>> fastMayMemAliasCache;
 
     public SymbolExprManager(InterContext interCtx) {
         exprToConstraintBeforeMerge = new HashMap<>();
@@ -31,7 +31,7 @@ public class SymbolExprManager {
         attributeToExpr = new HashMap<>();
         this.interCtx = interCtx;
 
-        mayMemAliasCache = new HashMap<>();
+        fastMayMemAliasCache = new HashMap<>();
     }
 
     /**
@@ -141,11 +141,11 @@ public class SymbolExprManager {
      * @param expr the expression to get mayMemAliases for
      * @return the mayMemAliases of the given expression
      */
-    public Set<SymbolExpr> getMayMemAliases(SymbolExpr expr) {
+    public Set<SymbolExpr> fastGetMayMemAliases(SymbolExpr expr) {
         // get from cache first
-        if (mayMemAliasCache.containsKey(expr)) {
+        if (fastMayMemAliasCache.containsKey(expr)) {
             Logging.debug("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
-            return mayMemAliasCache.get(expr);
+            return fastMayMemAliasCache.get(expr);
         }
 
         var parseResult = ParsedExpr.parseFieldAccessExpr(expr);
@@ -156,11 +156,9 @@ public class SymbolExprManager {
         var scaleExpr = parsedExpr.scale;
         var offset = parsedExpr.offsetValue;
 
-        // TODO:  If baseExpr is also a fieldAccess, parse it first ...
-
         var mayAliasExpr = new HashSet<SymbolExpr>();
 
-        var taG = interCtx.typeAliasManager.getTypeAliasGraph(baseExpr);
+        var taG = interCtx.typeRelationManager.getTypeRelationGraph(baseExpr);
         if (taG == null) {
             return mayAliasExpr;
         }
@@ -179,7 +177,6 @@ public class SymbolExprManager {
 
         for (var path: paths) {
             for (var node: path.nodes) {
-                // TODO: has INDIRECT relation already in getFieldExpr ?
                 var result = getFieldExprsByOffset((SymbolExpr) node, offset);
                 if (result.isPresent()) {
                     mayAliasExpr.addAll(result.get());
@@ -189,7 +186,7 @@ public class SymbolExprManager {
 
         // update cache
         for (var alias: mayAliasExpr) {
-            mayMemAliasCache.put(alias, mayAliasExpr);
+            fastMayMemAliasCache.put(alias, mayAliasExpr);
         }
 
         Logging.info("SymbolExprManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
@@ -225,7 +222,7 @@ public class SymbolExprManager {
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
-                interCtx.addTypeAliasRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeAliasGraph.EdgeType.INDIRECT);
+                interCtx.addTypeAliasRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeRelationGraph.EdgeType.INDIRECT);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
                 addExprAttribute(a, SymbolExpr.Attribute.MAY_ARRAY_PTR);
             } else {
@@ -304,7 +301,7 @@ public class SymbolExprManager {
         }
         var newExpr = new Builder().dereference(a).build();
         if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            interCtx.addTypeAliasRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeAliasGraph.EdgeType.INDIRECT);
+            interCtx.addTypeAliasRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeRelationGraph.EdgeType.INDIRECT);
         }
         return newExpr;
     }

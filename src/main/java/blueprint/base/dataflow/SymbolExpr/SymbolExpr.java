@@ -1,7 +1,6 @@
 package blueprint.base.dataflow.SymbolExpr;
 
-import blueprint.base.dataflow.typeAlias.TypeAliasGraph;
-import blueprint.base.dataflow.context.InterContext;
+import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;

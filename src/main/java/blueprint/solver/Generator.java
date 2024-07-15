@@ -94,11 +94,11 @@ public class Generator {
 
 
     public void dumpResults(File outputDir) {
-        // dump typeAliasManager to JSON file
+        // dump typeRelationManager to JSON file
         try {
-            solverCtx.typeAliasManager.dumpGraphMeta(outputDir);
+            solverCtx.typeRelationManager.dumpGraphMeta(outputDir);
         } catch (IOException e) {
-            Logging.error("Generator", "Error writing typeAliasManager info to file" + e.getMessage());
+            Logging.error("Generator", "Error writing typeRelationManager info to file" + e.getMessage());
         }
 
         // dump constraints to JSON file
