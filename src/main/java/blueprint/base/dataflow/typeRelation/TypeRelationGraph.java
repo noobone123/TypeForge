@@ -20,10 +20,10 @@ public class TypeRelationGraph<T> {
         MEMALIAS,
     }
 
-    public static class TypeAliasEdge extends DefaultEdge {
+    public static class TypeRelationEdge extends DefaultEdge {
         private final EdgeType type;
 
-        public TypeAliasEdge(EdgeType type) {
+        public TypeRelationEdge(EdgeType type) {
             this.type = type;
         }
 
@@ -37,14 +37,14 @@ public class TypeRelationGraph<T> {
         }
     }
 
-    private final Graph<T, TypeAliasEdge> graph;
+    private final Graph<T, TypeRelationEdge> graph;
     private final UUID uuid;
     private final String shortUUID;
 
     public TypeRelationPathManager<T> pathManager;
 
     public TypeRelationGraph() {
-        graph = new DefaultDirectedGraph<>(TypeAliasEdge.class);
+        graph = new DefaultDirectedGraph<>(TypeRelationEdge.class);
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
 
@@ -60,7 +60,7 @@ public class TypeRelationGraph<T> {
     public void addEdge(T src, T dst, EdgeType edgeType) {
         graph.addVertex(src);
         graph.addVertex(dst);
-        graph.addEdge(src, dst, new TypeAliasEdge(edgeType));
+        graph.addEdge(src, dst, new TypeRelationEdge(edgeType));
         Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
     }
 
@@ -82,7 +82,7 @@ public class TypeRelationGraph<T> {
         return graph.vertexSet();
     }
 
-    public Graph<T, TypeAliasEdge> getGraph() {
+    public Graph<T, TypeRelationEdge> getGraph() {
         return graph;
     }
 
@@ -91,15 +91,15 @@ public class TypeRelationGraph<T> {
             graph.addVertex(vertex);
         }
 
-        Set<TypeAliasEdge> edges = other.getGraph().edgeSet();
-        for (TypeAliasEdge edge: edges) {
+        Set<TypeRelationEdge> edges = other.getGraph().edgeSet();
+        for (TypeRelationEdge edge: edges) {
             T src = other.getGraph().getEdgeSource(edge);
             T dst = other.getGraph().getEdgeTarget(edge);
             var EdgeType = edge.getType();
 
-            TypeAliasEdge existingEdge = graph.getEdge(src, dst);
+            TypeRelationEdge existingEdge = graph.getEdge(src, dst);
             if (existingEdge == null) {
-                graph.addEdge(src, dst, new TypeAliasEdge(EdgeType));
+                graph.addEdge(src, dst, new TypeRelationEdge(EdgeType));
             } else if (existingEdge.getType() != EdgeType) {
                 Logging.warn("TypeRelationGraph", String.format("%s Merge conflict: %s ---> %s", other, src, dst));
             } else {
@@ -112,7 +112,7 @@ public class TypeRelationGraph<T> {
 
 
     public List<Set<T>> getConnectedComponents() {
-        ConnectivityInspector<T, TypeAliasEdge> inspector = new ConnectivityInspector<>(graph);
+        ConnectivityInspector<T, TypeRelationEdge> inspector = new ConnectivityInspector<>(graph);
         var result = inspector.connectedSets();
 
         return result;
@@ -121,7 +121,7 @@ public class TypeRelationGraph<T> {
     public String toGraphviz() {
         StringBuilder builder = new StringBuilder();
         builder.append("digraph TypeRelationGraph_").append(shortUUID).append(" {\n");
-        for (TypeAliasEdge edge : graph.edgeSet()) {
+        for (TypeRelationEdge edge : graph.edgeSet()) {
             T src = graph.getEdgeSource(edge);
             T dst = graph.getEdgeTarget(edge);
             builder.append("  \"").append(src).append("\" -> \"").append(dst)

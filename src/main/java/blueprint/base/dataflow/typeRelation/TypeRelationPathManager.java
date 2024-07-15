@@ -2,6 +2,7 @@ package blueprint.base.dataflow.typeRelation;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.types.Layout;
 import blueprint.utils.Logging;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
@@ -23,9 +24,9 @@ public class TypeRelationPathManager<T> {
 
     /** fields for conflict nodes */
     public final Set<T> conflictNodes = new HashSet<>();
-    public final Set<List<T>> conflictNodesCommonPaths = new HashSet<>();
+    public final Set<List<T>> excludedPaths = new HashSet<>();
     public final Map<T, Set<T>> excludeEdges = new HashMap<>();
-    public final Set<TypeRelationGraph.TypeAliasEdge> removedEdges = new HashSet<>();
+    public final Set<TypeRelationGraph.TypeRelationEdge> removedEdges = new HashSet<>();
 
     public TypeRelationPathManager(TypeRelationGraph<T> graph) {
         this.graph = graph;
@@ -160,31 +161,65 @@ public class TypeRelationPathManager<T> {
                 // 1. How to find which nodes need to remove edge
                 // 2. which edge to remove: all edge? backward edges? forward edges?
                 // 3. which type of edge to remove? CALL? DATAFLOW? or ...
-                // TODO: if 40/50% path's constraint's layout are same, we see the constraint is this and mark all edges in these path not to remove.
-                var mergedConstraints = new TypeConstraint();
-                Logging.info("TypeRelationPathManager", String.format("Node has multiple TypeConstraints: %s: %d", node, constraints.size()));
-                for (var path: nodeToPathsMap.get(node)) {
-                    if (path.hasConflict || path.noComposite) {
-                        continue;
-                    }
-                    Logging.info("TypeRelationPathManager", path.toString());
-                }
-
+                // TODO: if 60% path's constraint's layout are same, we see the constraint is this and mark all edges in these path not to remove.
+                var layoutToConstraints = new LinkedHashMap<Layout, Set<TypeConstraint>>();
                 for (var con: constraints) {
-                    var noConflict = mergedConstraints.tryMerge(con);
+                    var layout = new Layout(con);
+                    layoutToConstraints.computeIfAbsent(layout, k -> new HashSet<>()).add(con);
+                }
+                // Ranking the layoutToConstraints by Set<TypeConstraint>.size()
+                layoutToConstraints = layoutToConstraints.entrySet().stream()
+                        .sorted((e1, e2) -> e2.getValue().size() - e1.getValue().size())
+                        .collect(LinkedHashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), Map::putAll);
+
+                if (layoutToConstraints.size() > 1) {
+                    Logging.info("TypeRelationPathManager", String.format("Node has multiple Layouts: %s: %d", node, layoutToConstraints.size()));
+
+                    var noConflict = true;
+                    var mergedConstraints = new TypeConstraint();
+                    for (var con: constraints) {
+                        noConflict = mergedConstraints.tryMerge(con);
+                        if (!noConflict) { break; }
+                    }
+
                     if (!noConflict) {
                         Logging.warn("TypeRelationPathManager", String.format("Conflict when merging TypeConstraints in node %s", node));
+                        for (var layout: layoutToConstraints.keySet()) {
+                            Logging.info("TypeRelationPathManager", String.format("Layout count: %d", layoutToConstraints.get(layout).size()));
+                            Logging.info("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
+                        }
+
+                        for (var path: nodeToPathsMap.get(node)) {
+                            if (path.hasConflict || path.noComposite) {
+                                continue;
+                            }
+                            Logging.info("TypeRelationPathManager", path.toString());
+                        }
+
+                        var mostCommonLayout = layoutToConstraints.keySet().iterator().next();
+                        if (((double) layoutToConstraints.get(mostCommonLayout).size() / constraints.size() > 0.6) && constraints.size() > 10) {
+                            Logging.info("TypeRelationPathManager", "Most common layout is more than 60%, adding excluded paths ...");
+                            var layoutConstraints = layoutToConstraints.get(mostCommonLayout);
+                            for (var con: layoutConstraints) {
+                                for (var path: constraintToPaths.get(con)) {
+                                    excludedPaths.add(path.nodes);
+                                    Logging.info("TypeRelationPathManager", String.format("Add excluded path: %s", path));
+                                }
+                            }
+                        }
 
                         conflictNodes.add(node);
-                        conflictNodesCommonPaths.addAll(getLongestCommonPath(nodeToPathsMap.get(node)));
-
-                        for (var c: constraints) {
-                            Logging.info("TypeRelationPathManager", c.dumpLayout(0));
-                        }
-                        break;
+                        excludedPaths.addAll(getLongestCommonPath(nodeToPathsMap.get(node)));
                     }
                 }
-            } else {
+                else if (layoutToConstraints.size() == 1) {
+                    Logging.warn("TypeRelationPathManager", "Only one layout found in node's constraints, no conflict confirmed");
+                }
+                else {
+                    Logging.warn("TypeRelationPathManager", "No layout found in node's constraints");
+                }
+            }
+            else {
                 Logging.info("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
             }
         }
@@ -194,7 +229,7 @@ public class TypeRelationPathManager<T> {
      * Get the edges need to remove in TypeRelationGraph, these edges are related to conflict nodes
      * @return Set of edges need to remove
      */
-    public Set<TypeRelationGraph.TypeAliasEdge> getEdgesToRemove() {
+    public Set<TypeRelationGraph.TypeRelationEdge> getEdgesToRemove() {
         buildExcludeEdges();
 
         for (var node: conflictNodes) {
@@ -202,9 +237,17 @@ public class TypeRelationPathManager<T> {
                 var src = graph.getGraph().getEdgeSource(edge);
                 var dst = graph.getGraph().getEdgeTarget(edge);
                 var excludeNodes = excludeEdges.get(node);
-                if (excludeNodes != null && excludeNodes.contains(src) && excludeNodes.contains(dst)) {
-                    continue;
+                if (src.equals(node)) {
+                    if (excludeNodes != null && excludeNodes.contains(dst)) {
+                        continue;
+                    }
                 }
+                else if (dst.equals(node)) {
+                    if (excludeNodes != null && excludeNodes.contains(src)) {
+                        continue;
+                    }
+                }
+
                 removedEdges.add(edge);
                 Logging.info("TypeRelationPathManager", String.format("Mark Edge to remove in TypeRelationGraph: %s ---> %s", src, dst));
             }
@@ -297,6 +340,7 @@ public class TypeRelationPathManager<T> {
             var subPathNodes = firstPath.subPathsOfLengthWithHash.get(maxLength).get(hash);
             if (subPathNodes != null) {
                 result.add(subPathNodes);
+                Logging.info("TypeRelationPathManager", String.format("Found common path: %s", subPathNodes));
             }
         }
 
@@ -310,19 +354,17 @@ public class TypeRelationPathManager<T> {
      * So we need to find these edges (marked as tuples like (node_1, node2))
      */
     public void buildExcludeEdges() {
-        for (var path: conflictNodesCommonPaths) {
+        for (var path: excludedPaths) {
             if (path.size() < 2) {
                 continue;
             }
 
             for (int i = 0; i < path.size(); i++) {
-                if (conflictNodes.contains(path.get(i))) {
-                    if (i > 0) {
-                        excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i - 1));
-                    }
-                    if (i < path.size() - 1) {
-                        excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i + 1));
-                    }
+                if (i > 0) {
+                    excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i - 1));
+                }
+                if (i < path.size() - 1) {
+                    excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i + 1));
                 }
             }
         }

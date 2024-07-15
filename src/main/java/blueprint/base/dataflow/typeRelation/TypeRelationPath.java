@@ -11,7 +11,7 @@ public class TypeRelationPath<T> {
     public final UUID uuid = UUID.randomUUID();
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
-    public List<TypeRelationGraph.TypeAliasEdge> edges;
+    public List<TypeRelationGraph.TypeRelationEdge> edges;
     public List<TypeConstraint> backwardMergedConstraints;
     public List<TypeConstraint> forwardMergedConstraints;
     public TypeConstraint finalConstraint = null;
@@ -25,7 +25,7 @@ public class TypeRelationPath<T> {
      */
     public Map<Integer, Map<Integer, List<T>>> subPathsOfLengthWithHash = new HashMap<>();
 
-    public TypeRelationPath(GraphPath<T, TypeRelationGraph.TypeAliasEdge> path) {
+    public TypeRelationPath(GraphPath<T, TypeRelationGraph.TypeRelationEdge> path) {
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
@@ -37,7 +37,7 @@ public class TypeRelationPath<T> {
         this.end = nodes.get(nodes.size() - 1);
     }
 
-    public TypeRelationPath(List<T> nodes, List<TypeRelationGraph.TypeAliasEdge> edges) {
+    public TypeRelationPath(List<T> nodes, List<TypeRelationGraph.TypeRelationEdge> edges) {
         this.nodes = nodes;
         this.edges = edges;
         this.backwardMergedConstraints = new ArrayList<>();

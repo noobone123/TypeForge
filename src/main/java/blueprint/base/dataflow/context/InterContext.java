@@ -6,7 +6,6 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
-import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.typeRelation.TypeRelationManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
@@ -63,7 +62,7 @@ public class InterContext {
         APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType);
     }
 
-    public void addTypeAliasRelation(SymbolExpr from, SymbolExpr to, TypeRelationGraph.EdgeType edgeType) {
+    public void addTypeRelation(SymbolExpr from, SymbolExpr to, TypeRelationGraph.EdgeType edgeType) {
         if (from.equals(to)) {
             return;
         }

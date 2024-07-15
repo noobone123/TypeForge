@@ -2,6 +2,7 @@ package blueprint.base.dataflow.constraints;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.base.dataflow.types.Layout;
 import blueprint.base.dataflow.types.TypeDescriptor;
 import blueprint.utils.Logging;
 
@@ -48,6 +49,8 @@ public class TypeConstraint {
     public Set<SymbolExpr> associatedExpr;
     public Set<Long> totalSize;
     public Set<Long> elementSize;
+
+    public Layout layout = null;
 
     public Set<TCRelation> relations;
 

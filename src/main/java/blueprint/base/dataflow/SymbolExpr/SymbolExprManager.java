@@ -222,7 +222,7 @@ public class SymbolExprManager {
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
-                interCtx.addTypeAliasRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeRelationGraph.EdgeType.INDIRECT);
+                interCtx.addTypeRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeRelationGraph.EdgeType.INDIRECT);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
                 addExprAttribute(a, SymbolExpr.Attribute.MAY_ARRAY_PTR);
             } else {
@@ -301,7 +301,7 @@ public class SymbolExprManager {
         }
         var newExpr = new Builder().dereference(a).build();
         if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            interCtx.addTypeAliasRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeRelationGraph.EdgeType.INDIRECT);
+            interCtx.addTypeRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeRelationGraph.EdgeType.INDIRECT);
         }
         return newExpr;
     }

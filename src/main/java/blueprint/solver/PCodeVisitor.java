@@ -7,7 +7,6 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.context.InterContext;
 import blueprint.base.dataflow.context.IntraContext;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
-import blueprint.base.dataflow.typeRelation.TypeRelationManager;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DecompilerHelper;
 import blueprint.utils.Global;
@@ -191,7 +190,7 @@ public class PCodeVisitor {
         for (var inputSymExpr: inputFact) {
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    interCtx.addTypeAliasRelation(inputSymExpr, outputSymExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(inputSymExpr, outputSymExpr, TypeRelationGraph.EdgeType.DATAFLOW);
                 }
             }
             intraCtx.updateDataFlowFacts(outputVn, inputSymExpr);
@@ -320,7 +319,7 @@ public class PCodeVisitor {
             var leftExprs = intraCtx.getDataFlowFacts(pcodeOp.getOutput());
             if (leftExprs != null) {
                 for (var leftExpr : leftExprs) {
-                    interCtx.addTypeAliasRelation(outputExpr, leftExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(outputExpr, leftExpr, TypeRelationGraph.EdgeType.DATAFLOW);
                 }
             }
             intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), outputExpr);
@@ -461,7 +460,7 @@ public class PCodeVisitor {
             if (leftValueExprs != null) {
                 for (var leftValueExpr : leftValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Loaded varnode has already held %s, set type alias of %s and %s", leftValueExpr, loadedValueExpr, leftValueExpr));
-                    interCtx.addTypeAliasRelation(loadedValueExpr, leftValueExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(loadedValueExpr, leftValueExpr, TypeRelationGraph.EdgeType.DATAFLOW);
                 }
             }
 
@@ -492,7 +491,7 @@ public class PCodeVisitor {
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));
-                    interCtx.addTypeAliasRelation(rightValueExpr, storedValueExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(rightValueExpr, storedValueExpr, TypeRelationGraph.EdgeType.DATAFLOW);
                 }
             }
         }
@@ -567,7 +566,7 @@ public class PCodeVisitor {
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(argIdx);
                     var paramExpr = new SymbolExprManager.Builder().rootSymbol(param).build();
-                    interCtx.addTypeAliasRelation(argExpr, paramExpr, TypeRelationGraph.EdgeType.CALL);
+                    interCtx.addTypeRelation(argExpr, paramExpr, TypeRelationGraph.EdgeType.CALL);
                 }
             }
         }
@@ -589,7 +588,7 @@ public class PCodeVisitor {
                 if (receiverFacts != null) {
                     for (var receiverExpr : receiverFacts) {
                         for (var retValueExpr : retExprs) {
-                            interCtx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeRelationGraph.EdgeType.RETURN);
+                            interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeRelationGraph.EdgeType.RETURN);
                         }
                     }
                 } else {
@@ -603,7 +602,7 @@ public class PCodeVisitor {
                         if (newReceiverFacts != null) {
                             for (var receiverExpr : newReceiverFacts) {
                                 for (var retValueExpr : retExprs) {
-                                    interCtx.addTypeAliasRelation(retValueExpr, receiverExpr, TypeRelationGraph.EdgeType.RETURN);
+                                    interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeRelationGraph.EdgeType.RETURN);
                                 }
                             }
                         } else {
@@ -645,7 +644,7 @@ public class PCodeVisitor {
                 var srcExprs = intraCtx.getDataFlowFacts(srcVn);
                 for (var dstExpr : dstExprs) {
                     for (var srcExpr : srcExprs) {
-                        interCtx.addTypeAliasRelation(srcExpr, dstExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                        interCtx.addTypeRelation(srcExpr, dstExpr, TypeRelationGraph.EdgeType.DATAFLOW);
                         Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
                             symExprManager.getOrCreateConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
