@@ -133,6 +133,7 @@ public class InterContext {
         for (var graph: typeRelationManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
+                // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
                 graph.pathManager.tryMergeOnPath(symExprManager);
                 graph.pathManager.tryMergePathsFromSameSource();
                 graph.pathManager.handleNodeConstraints();
@@ -157,48 +158,60 @@ public class InterContext {
          * [00112116]-main: lVar2 --- ("CALL") --- [0010f2db]-server_sockets_restore: param_1
          * [0010f2db]-server_sockets_restore: param_1
          */
-        // merge constraints according to connected components
+
         for (var graph: typeRelationManager.getGraphs()) {
-            var components = graph.getConnectedComponents();
-            for (var component: components) {
-                var mergedConstraint = new TypeConstraint();
-                for (var node: component) {
-                    var nodeConstraint = symExprManager.getConstraint(node);
-                    if (nodeConstraint != null) {
-                        var noConflict = mergedConstraint.tryMerge(nodeConstraint);
-                        // TODO: handle cases: why conflict solve ...
-                        if (!noConflict) {
-                            Logging.warn("InterContext", String.format("Conflict when merging TypeConstraints in connected component for %s : %d", node, component.size()));
-                            for (var n: component) {
-                                var c = symExprManager.getConstraint(n);
-                                if (c == null || c.isEmpty()) { continue; }
-                                Logging.info("InterContext", String.format("Constraint for %s: %s", n, c));
-                                Logging.info("InterContext", c.dumpLayout(0));
-                            }
-
-                            break;
-                        }
-                    }
-                    symExprManager.exprToConstraintAfterMerge.put(node, mergedConstraint);
-                }
-
-                if (mergedConstraint.isEmpty()) {
-                    continue;
-                }
-                // TODO: check unexpected layout
-                // TODO: add field with fieldAccessExpr to check unexpected layout
-                Logging.info("InterContext", "Connected components: ");
-                Logging.info("InterContext", mergedConstraint.dumpLayout(0));
-                for (var node: component) {
-                    if (node.isVariable()) {
-                        Logging.info("InterContext", node.toString());
-                    }
-                }
-                Logging.info("InterContext", "======================================================================================");
+            if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
+                continue;
             }
+            // This time, try MergeOnPath will not appear conflicts because we have already removed these evil edges.
+            graph.pathManager.tryMergeOnPath(symExprManager);
+            graph.pathManager.mergePathsFromSameSource();
         }
 
-        typeRelationManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
+
+
+        // merge constraints according to connected components
+////        for (var graph: typeRelationManager.getGraphs()) {
+////            var components = graph.getConnectedComponents();
+////            for (var component: components) {
+////                var mergedConstraint = new TypeConstraint();
+////                for (var node: component) {
+////                    var nodeConstraint = symExprManager.getConstraint(node);
+////                    if (nodeConstraint != null) {
+////                        var noConflict = mergedConstraint.tryMerge(nodeConstraint);
+////                        // TODO: handle cases: why conflict solve ...
+////                        if (!noConflict) {
+////                            Logging.warn("InterContext", String.format("Conflict when merging TypeConstraints in connected component for %s : %d", node, component.size()));
+////                            for (var n: component) {
+////                                var c = symExprManager.getConstraint(n);
+////                                if (c == null || c.isEmpty()) { continue; }
+////                                Logging.info("InterContext", String.format("Constraint for %s: %s", n, c));
+////                                Logging.info("InterContext", c.dumpLayout(0));
+////                            }
+////
+////                            break;
+////                        }
+////                    }
+////                    symExprManager.exprToConstraintAfterMerge.put(node, mergedConstraint);
+////                }
+////
+////                if (mergedConstraint.isEmpty()) {
+////                    continue;
+////                }
+////                // TODO: check unexpected layout
+////                // TODO: add field with fieldAccessExpr to check unexpected layout
+////                Logging.info("InterContext", "Connected components: ");
+////                Logging.info("InterContext", mergedConstraint.dumpLayout(0));
+////                for (var node: component) {
+////                    if (node.isVariable()) {
+////                        Logging.info("InterContext", node.toString());
+////                    }
+////                }
+////                Logging.info("InterContext", "======================================================================================");
+////            }
+//        }
+
+        // typeRelationManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
     }
 
 

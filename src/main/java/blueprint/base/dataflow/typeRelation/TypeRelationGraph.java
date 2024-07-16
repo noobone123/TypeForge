@@ -118,6 +118,15 @@ public class TypeRelationGraph<T> {
         return result;
     }
 
+    public boolean rebuildPathManager() {
+        if (getNumNodes() <= 1) {
+            return false;
+        }
+        this.pathManager = new TypeRelationPathManager<T>(this);
+        this.pathManager.build();
+        return true;
+    }
+
     public String toGraphviz() {
         StringBuilder builder = new StringBuilder();
         builder.append("digraph TypeRelationGraph_").append(shortUUID).append(" {\n");

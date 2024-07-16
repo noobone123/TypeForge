@@ -1,5 +1,6 @@
 package blueprint.base.dataflow.typeRelation;
 
+import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.types.Layout;
@@ -70,7 +71,7 @@ public class TypeRelationPathManager<T> {
             // If Conflict occurs when merging TypeConstraints on path, we just mark all nodes in this path as evil nodes
             if (hasConflict.isPresent()) {
                 path.hasConflict = true;
-                evilNodes.addAll(path.nodes);
+                removeCandidates.addAll(path.edges);
             }
             Logging.info("TypeRelationPathManager", "============================================== end ==============================================\n");
         }
@@ -122,6 +123,43 @@ public class TypeRelationPathManager<T> {
                     }
                     propagateConstraintOnPath(mergedConstraints, path);
                     constraintToPaths.computeIfAbsent(mergedConstraints, k -> new HashSet<>()).add(path);
+                }
+            }
+        }
+    }
+
+    /**
+     * Merge paths from same source, and propagate TypeConstraints to each node start from this source.
+     * This method should be called in rebuilt path manager.
+     */
+    public void mergePathsFromSameSource() {
+        for (var src: source) {
+            var mergedConstraints = new TypeConstraint();
+            var pathsFromSource = getAllValidPathsFromSource(src);
+            var noConflict = true;
+            for (var path: pathsFromSource) {
+                if (path.noComposite || path.hasConflict) {
+                    continue;
+                }
+                noConflict = mergedConstraints.tryMerge(path.finalConstraint);
+                if (!noConflict) {
+                    break;
+                }
+            }
+
+            if (noConflict) {
+                Logging.info("TypeRelationPathManager", "TTTTTTTTTTTTTTTTTTTTTTTTTTTTT");
+                for (var path: pathsFromSource) {
+                    if (path.hasConflict || path.noComposite) {
+                        continue;
+                    }
+                    propagateConstraintOnPath(mergedConstraints, path);
+                }
+            } else {
+                Logging.info("TypeRelationPathManager", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
+                for (var path: pathsFromSource) {
+                    Logging.info("TypeRelationPathManager", path.toString());
+                    Logging.info("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));
                 }
             }
         }
@@ -179,6 +217,7 @@ public class TypeRelationPathManager<T> {
                         var mostCommonLayout = layoutToConstraints.keySet().iterator().next();
                         if (((double) layoutToConstraints.get(mostCommonLayout).size() / constraints.size() > 0.6) && constraints.size() > 10) {
                             Logging.info("TypeRelationPathManager", "Most common layout is more than 70%, adding excluded paths ...");
+                            /* DEPRECATED Feature
                             var layoutConstraints = layoutToConstraints.get(mostCommonLayout);
                             for (var con: layoutConstraints) {
                                 for (var path: constraintToPaths.get(con)) {
@@ -186,6 +225,7 @@ public class TypeRelationPathManager<T> {
                                     Logging.info("TypeRelationPathManager", String.format("Add excluded path: %s", path));
                                 }
                             }
+                            */
                         }
 
                         excludedPaths.addAll(getLongestCommonPath(nodeToPathsMap.get(node)));
@@ -262,7 +302,7 @@ public class TypeRelationPathManager<T> {
                 }
             }
         }
-        Logging.info("TypeRelationPathManager", String.format("Found %d paths from sources to sinks", allPaths.size()));
+        Logging.info("TypeRelationPathManager", String.format("%s: Found %d paths from sources to sinks", graph.toString(), allPaths.size()));
     }
 
     /**
