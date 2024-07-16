@@ -157,12 +157,6 @@ public class InterContext {
          * [00112116]-main: lVar2 --- ("CALL") --- [0010f2db]-server_sockets_restore: param_1
          * [0010f2db]-server_sockets_restore: param_1
          */
-        for (var expr: symExprManager.fastMayMemAliasCache.keySet()) {
-            for (var alias: symExprManager.fastMayMemAliasCache.get(expr)) {
-                typeRelationManager.addEdge(expr, alias, TypeRelationGraph.EdgeType.MEMALIAS);
-            }
-        }
-
         // merge constraints according to connected components
         for (var graph: typeRelationManager.getGraphs()) {
             var components = graph.getConnectedComponents();
@@ -174,8 +168,15 @@ public class InterContext {
                         var noConflict = mergedConstraint.tryMerge(nodeConstraint);
                         // TODO: handle cases: why conflict solve ...
                         if (!noConflict) {
-                            Logging.warn("InterContext", String.format("Conflict when merging TypeConstraints in connected component for %s", node));
-                            continue;
+                            Logging.warn("InterContext", String.format("Conflict when merging TypeConstraints in connected component for %s : %d", node, component.size()));
+                            for (var n: component) {
+                                var c = symExprManager.getConstraint(n);
+                                if (c == null || c.isEmpty()) { continue; }
+                                Logging.info("InterContext", String.format("Constraint for %s: %s", n, c));
+                                Logging.info("InterContext", c.dumpLayout(0));
+                            }
+
+                            break;
                         }
                     }
                     symExprManager.exprToConstraintAfterMerge.put(node, mergedConstraint);

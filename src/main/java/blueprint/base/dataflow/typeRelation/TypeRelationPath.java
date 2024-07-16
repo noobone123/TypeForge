@@ -114,7 +114,6 @@ public class TypeRelationPath<T> {
                     }
                     else {
                         Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints on path for %s", curExpr));
-                        hasConflict = true;
                         // If conflict happens, we should return the conflict node
                         return Optional.of(node);
                     }
