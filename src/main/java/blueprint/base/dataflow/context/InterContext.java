@@ -107,13 +107,8 @@ public class InterContext {
         buildSkeletons(skeletonCollectior);
 
         skeletonCollectior.mergeSkeletons();
+        // skeletonCollectior.handleTypeAlias();
 
-//
-//        typeRelationManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
-
-        // merging constraints according to type alias graph
-//        mergeByTypeAliasGraph();
-//
 //        handleReference();
 //        handleExprWithAttributions();
 //
@@ -130,6 +125,7 @@ public class InterContext {
         Logging.info("InterContext", "Total Graph Number: " + typeRelationManager.getGraphs().size());
         typeRelationManager.buildAllPathManagers();
 
+        // TODO: add evil nodes information into SkeletonCollector
         // Remove some redundant edges in the graph
         for (var graph: typeRelationManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
@@ -271,48 +267,6 @@ public class InterContext {
             baseConstraint.addFieldAccess(offsetValue, ap);
         }
     }
-
-//    private boolean hasMultiReferenceField(TypeConstraint constraint) {
-//        for (var entry : constraint.referenceTo.entrySet()) {
-//            if (entry.getValue().size() > 1) {
-//                return true;
-//            }
-//        }
-//        return false;
-//    }
-//
-//    private void mergeMultiReference(TypeConstraint constraint, LinkedList<TypeConstraint> workList) {
-//        var entrySetCopy = new HashSet<>(constraint.referenceTo.entrySet());
-//        for (var entry : entrySetCopy) {
-//            if (entry.getValue().size() > 1) {
-//                Logging.info("Context", String.format("%s has multiple referenceTo at 0x%x", constraint.toString(), entry.getKey()));
-//                boolean shouldMerge = checkOffsetSize(constraint, entry.getKey(), Global.currentProgram.getDefaultPointerSize());
-//                if (!shouldMerge) {
-//                    Logging.warn("Context", String.format("%s has different size at 0x%x when handling multiReference.", constraint, entry.getKey()));
-//                    continue;
-//                }
-//
-//                TypeConstraint newMergedConstraint = new TypeConstraint();
-//                Logging.debug("Context", String.format("Created new merged constraint: %s", newMergedConstraint));
-//                var toMerge = new HashSet<>(entry.getValue());
-//                for (var ref : toMerge) {
-//                    Logging.debug("Context", String.format("Merging %s to %s", ref, newMergedConstraint));
-//                    newMergedConstraint.fullMerge(ref);
-//                }
-//
-//                if (hasMultiReferenceField(newMergedConstraint)) {
-//                    workList.add(newMergedConstraint);
-//                }
-//
-//                // add the new merged constraint in the symExprToConstraints
-//                for (var symExpr: newMergedConstraint.getAssociatedExpr()) {
-//                    symExprManager.updateExprToConstraintMap(symExpr, newMergedConstraint);
-//                    Logging.info("Context", String.format("Set expr %s -> %s", symExpr, newMergedConstraint));
-//                }
-//            }
-//        }
-//    }
-
 
     /**
      * Current memory alias graph is not complete, it only contains the alias relationship with explicit data-flow relations.

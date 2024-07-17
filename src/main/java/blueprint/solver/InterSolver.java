@@ -23,6 +23,8 @@ public class InterSolver {
         var addr = FunctionHelper.getAddress(Global.startAddress);
         var startFunc = cg.getNodebyAddr(addr);
         buildWorkList(startFunc);
+        // TODO: compare the results with and without setTypeAgnosticFunctions
+        // TODO: if needed, complete the heuristic to determine the type-agnostic functions
         setTypeAgnosticFunctions();
     }
 
@@ -55,7 +57,6 @@ public class InterSolver {
         ctx.collectSkeletons();
 
         var generator = new Generator(ctx);
-        generator.dumpResults(new File(Global.outputDirectory));
     }
 
     public void checkCallSitesInconsistency() {

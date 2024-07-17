@@ -1,6 +1,8 @@
 package blueprint.base.dataflow.skeleton;
 
+import blueprint.base.dataflow.SymbolExpr.ParsedExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.base.dataflow.UnionFind;
 import blueprint.utils.Logging;
 
 import java.util.HashMap;
@@ -25,6 +27,9 @@ public class SkeletonCollector {
         this.multiSkeletonExprs = new HashSet<>();
     }
 
+    /**
+     * Merge and rebuild Skeletons, generate `exprToSkeletonMap`
+     */
     public void mergeSkeletons() {
         // Generate expr To Skeletons
         for (var skt: skeletons) {
@@ -87,16 +92,14 @@ public class SkeletonCollector {
         }
 
         // Checking Consistency
-        Set<Skeleton> visited = new HashSet<>();
-        for (var entry: exprToSkeletonMap.entrySet()) {
-            var expr = entry.getKey();
-            var skt = entry.getValue();
-
-            if (visited.contains(skt)) continue;
-
-            if (!skt.exprs.contains(expr)) {
-                Logging.error("SkeletonCollector", String.format("exprToSkeletonMap is inconsistent: %s -> %s", expr, skt));
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            for (var e: skt.exprs) {
+                if (exprToSkeletonMap.get(e) != skt) {
+                    Logging.error("SkeletonCollector", String.format("Inconsistent Detected! %s", e));
+                    System.exit(1);
+                }
             }
+
             if (!skt.hasMultiConstraints) {
                 assert skt.constraints.size() == 1;
                 Logging.info("SkeletonCollector", String.format("Skeleton with single Constraint has Exprs: \n%s", skt.exprs));
@@ -108,8 +111,47 @@ public class SkeletonCollector {
                     Logging.info("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
                 }
             }
-            visited.add(skt);
         }
+
+        // update skeletons
+        skeletons.clear();
+        skeletons.addAll(new HashSet<>(exprToSkeletonMap.values()));
+    }
+
+
+    /**
+     * Similar to `handleMemoryAlias`, if `*(a+0x8)` and `*(b+0x8)` has different Skeleton but `a` and `b` has same Skeleton.
+     * We Consider `*(a+0x8)` and `*(b+0x8)` has same Skeleton and merge them.
+     */
+    public void handleTypeAlias() {
+        /* initialize aliasMap using Skeleton's expressions */
+        var aliasMap = new UnionFind<SymbolExpr>();
+        for (var skt: skeletons) {
+            aliasMap.initializeWithCluster(skt.exprs);
+        }
+
+        for (var expr: exprToSkeletonMap.keySet()) {
+            if (expr.isDereference()) {
+                parseAndSetTypeAlias(expr, aliasMap);
+            }
+        }
+    }
+
+    public void parseAndSetTypeAlias(SymbolExpr expr, UnionFind<SymbolExpr> aliasMap) {
+        var parsed = ParsedExpr.parseFieldAccessExpr(expr);
+        if (parsed.isEmpty()) { return; }
+        var parsedExpr = parsed.get();
+        var base = parsedExpr.base;
+        var offset = parsedExpr.offset;
+
+        if (parsedExpr.base.isDereference()) {
+            parseAndSetTypeAlias(parsedExpr.base, aliasMap);
+        }
+
+        // 1. iterate all exprs alias with base in aliasMap
+        // 2. get alias's fieldExpr by aliasExpr + offset
+        // 3. if alias's fieldExpr in exprToSkeletonMap and not in same skeleton with expr, union them.
+        // 4. If relation already exists, skip.
     }
 
     public void addSkeleton(Skeleton skt) {

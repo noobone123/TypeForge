@@ -32,6 +32,7 @@ import java.util.*;
  * Finally, We take the pseudo code and Calculate the score for them, and find the best one as the final Structure Type
  */
 public class Generator {
+    // TODO: add decompiler inferred data type into polymorphic data type.
     public InterContext solverCtx;
     public final Map<Function, Map<HighSymbol, TypeConstraint>> funcConstraintMap = new HashMap<>();
     public final Map<HighSymbol, TypeConstraint> globalConstraintMap = new HashMap<>();
@@ -91,51 +92,4 @@ public class Generator {
             }
         });
     }
-
-
-    public void dumpResults(File outputDir) {
-        // dump typeRelationManager to JSON file
-        try {
-            solverCtx.typeRelationManager.dumpGraphMeta(outputDir);
-        } catch (IOException e) {
-            Logging.error("Generator", "Error writing typeRelationManager info to file" + e.getMessage());
-        }
-
-        // dump constraints to JSON file
-        File outputFile = new File(outputDir, "constraints.json");
-        var mapper = new ObjectMapper();
-        var root = mapper.createObjectNode();
-        exprToConstraint.forEach((symExpr, constraint) -> {
-            root.set("Constraint_" + constraint.shortUUID, constraint.getJsonObj(mapper));
-        });
-
-        // dump metadata to JSON file
-        File outputFile2 = new File(outputDir, "metadata.json");
-        var mapper2 = new ObjectMapper();
-        var root2 = mapper2.createObjectNode();
-        exprToConstraint.forEach((symExpr, constraint) -> {
-            if (!symExpr.isVariable()) {
-                return;
-            }
-            var prefix = symExpr.prefix;
-            var prefixNode = (ObjectNode) root2.get(prefix);
-            if (prefixNode == null) {
-                prefixNode = mapper2.createObjectNode();
-                root2.set(prefix, prefixNode);
-            }
-            prefixNode.put(symExpr.toString(), "Constraint_" + constraint.shortUUID);
-        });
-
-        try {
-            mapper.writerWithDefaultPrettyPrinter().writeValue(outputFile, root);
-            Logging.info("Generator", "Constraints dumped to " + outputFile.getPath());
-
-            mapper2.writerWithDefaultPrettyPrinter().writeValue(outputFile2, root2);
-            Logging.info("Generator", "Metadata dumped to " + outputFile2.getPath());
-
-        } catch (IOException e) {
-            Logging.error("Generator", "Error writing JSON to file" + e.getMessage());
-        }
-    }
-
 }

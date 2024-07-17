@@ -67,5 +67,17 @@ public class UnionFind<T> {
         }
         return new HashSet<>(clusters.values());
     }
+
+    public void initializeWithCluster(Set<T> cluster) {
+        T first = null;
+        for (T element : cluster) {
+            add(element);
+            if (first == null) {
+                first = element;
+            } else {
+                union(first, element);
+            }
+        }
+    }
 }
 

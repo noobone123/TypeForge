@@ -229,7 +229,7 @@ public class TypeRelationPathManager<T> {
             }
 
             if (noConflict) {
-                Logging.info("TypeRelationPathManager", "TTTTTTTTTTTTT");
+                Logging.info("TypeRelationPathManager", "TTTTTTTTTTTTTTTTTTTTTTTTTT");
                 sourceToConstraints.put(src, mergedConstraints);
                 for (var path: pathsFromSource) {
                     if (path.hasConflict || path.noComposite) {
@@ -238,7 +238,8 @@ public class TypeRelationPathManager<T> {
                     sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).addAll(path.nodes);
                 }
             } else {
-                Logging.info("TypeRelationPathManager", "FFFFFFFFFFFFF");
+                // TODO: Is this will happen ?
+                Logging.info("TypeRelationPathManager", "FFFFFFFFFFFFFFFFFFFFFFFFFF");
                 for (var path: pathsFromSource) {
                     Logging.info("TypeRelationPathManager", path.toString());
                     Logging.info("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));

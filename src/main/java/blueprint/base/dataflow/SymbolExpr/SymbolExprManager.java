@@ -118,10 +118,6 @@ public class SymbolExprManager {
         return exprToConstraintBeforeMerge;
     }
 
-    public Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> getBaseToFieldsMap() {
-        return baseToFieldsMap;
-    }
-
     public Set<SymbolExpr> getAllBaseExprs() {
         return baseToFieldsMap.keySet();
     }
