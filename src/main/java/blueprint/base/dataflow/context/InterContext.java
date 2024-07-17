@@ -103,8 +103,11 @@ public class InterContext {
             buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
-        var skeletonCollection = new SkeletonCollector();
-        mergeTypeConstraints(skeletonCollection);
+        var skeletonCollectior = new SkeletonCollector();
+        buildSkeletons(skeletonCollectior);
+
+        skeletonCollectior.test();
+
 //
 //        typeRelationManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
 
@@ -119,12 +122,10 @@ public class InterContext {
 //
 //        // Remove meaningLess constraints
 //        removeRedundantConstraints();
-
-        Logging.info("InterContext", "Collect constraints done.");
     }
 
 
-    private void mergeTypeConstraints(SkeletonCollector collector) {
+    private void buildSkeletons(SkeletonCollector collector) {
         Logging.info("InterContext", "========================= Start to merge type constraints =========================");
         Logging.info("InterContext", "Total Graph Number: " + typeRelationManager.getGraphs().size());
         typeRelationManager.buildAllPathManagers();
@@ -159,7 +160,6 @@ public class InterContext {
          * [0010f2db]-server_sockets_restore: param_1
          */
 
-        var totalNodeNumber = 0;
         for (var graph: typeRelationManager.getGraphs()) {
             if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
                 continue;
@@ -168,10 +168,7 @@ public class InterContext {
             graph.pathManager.tryMergeOnPath(symExprManager);
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
-            totalNodeNumber += graph.pathManager.nodeToConstraints.keySet().size();
         }
-
-        Logging.info("InterContext", String.format("Total Node Number: %d", totalNodeNumber));
 
         // typeRelationManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
     }
