@@ -2,6 +2,8 @@ package blueprint.base.dataflow.typeRelation;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
+import blueprint.base.dataflow.UnionFind;
+import blueprint.base.dataflow.constraints.SkeletonCollector;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.types.Layout;
 import blueprint.utils.Logging;
@@ -28,6 +30,12 @@ public class TypeRelationPathManager<T> {
     public final Set<List<T>> excludedPaths = new HashSet<>();
     public final Map<T, Set<T>> excludeEdges = new HashMap<>();
     public final Set<TypeRelationGraph.TypeRelationEdge> removeCandidates = new HashSet<>();
+
+
+    /** If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
+    public UnionFind<T> sourceGroups = new UnionFind<>();
+    public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
+    public final Map<T, TypeConstraint> sourceToConstraints = new HashMap<>();
 
     public TypeRelationPathManager(TypeRelationGraph<T> graph) {
         this.graph = graph;
@@ -129,48 +137,10 @@ public class TypeRelationPathManager<T> {
     }
 
     /**
-     * Merge paths from same source, and propagate TypeConstraints to each node start from this source.
-     * This method should be called in rebuilt path manager.
-     */
-    public void mergePathsFromSameSource() {
-        for (var src: source) {
-            var mergedConstraints = new TypeConstraint();
-            var pathsFromSource = getAllValidPathsFromSource(src);
-            var noConflict = true;
-            for (var path: pathsFromSource) {
-                if (path.noComposite || path.hasConflict) {
-                    continue;
-                }
-                noConflict = mergedConstraints.tryMerge(path.finalConstraint);
-                if (!noConflict) {
-                    break;
-                }
-            }
-
-            if (noConflict) {
-                Logging.info("TypeRelationPathManager", "TTTTTTTTTTTTTTTTTTTTTTTTTTTTT");
-                for (var path: pathsFromSource) {
-                    if (path.hasConflict || path.noComposite) {
-                        continue;
-                    }
-                    propagateConstraintOnPath(mergedConstraints, path);
-                }
-            } else {
-                Logging.info("TypeRelationPathManager", "FFFFFFFFFFFFFFFFFFFFFFFFFFFFF");
-                for (var path: pathsFromSource) {
-                    Logging.info("TypeRelationPathManager", path.toString());
-                    Logging.info("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));
-                }
-            }
-        }
-    }
-
-
-    /**
      * If there has multiple TypeConstraints in one node, means there has TypeConstraints
      * from different sources, we should handle them and try to merge them.
      */
-    public void handleNodeConstraints() {
+    public void handleConflictNodes() {
         for (var node: nodeToConstraints.keySet()) {
             var constraints = nodeToConstraints.get(node);
             if (constraints.size() > 1) {
@@ -178,15 +148,7 @@ public class TypeRelationPathManager<T> {
                 // 1. How to find which nodes need to remove edge
                 // 2. which edge to remove: all edge? backward edges? forward edges?
                 // 3. which type of edge to remove? CALL? DATAFLOW? or ...
-                var layoutToConstraints = new LinkedHashMap<Layout, Set<TypeConstraint>>();
-                for (var con: constraints) {
-                    var layout = new Layout(con);
-                    layoutToConstraints.computeIfAbsent(layout, k -> new HashSet<>()).add(con);
-                }
-                // Ranking the layoutToConstraints by Set<TypeConstraint>.size()
-                layoutToConstraints = layoutToConstraints.entrySet().stream()
-                        .sorted((e1, e2) -> e2.getValue().size() - e1.getValue().size())
-                        .collect(LinkedHashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), Map::putAll);
+                var layoutToConstraints = buildLayoutToConstraints(constraints);
 
                 if (layoutToConstraints.size() > 1) {
                     Logging.info("TypeRelationPathManager", String.format("Node has multiple Layouts: %s: %d", node, layoutToConstraints.size()));
@@ -240,6 +202,122 @@ public class TypeRelationPathManager<T> {
             }
             else {
                 Logging.info("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
+            }
+        }
+    }
+
+
+
+    /**
+     * Merge paths from same source, and propagate TypeConstraints to each node start from this source.
+     * This method should be called in rebuilt path manager.
+     */
+    public void mergePathsFromSameSource() {
+        for (var src: source) {
+            var mergedConstraints = new TypeConstraint();
+            var pathsFromSource = getAllValidPathsFromSource(src);
+            var noConflict = true;
+            for (var path: pathsFromSource) {
+                if (path.noComposite || path.hasConflict) {
+                    continue;
+                }
+                noConflict = mergedConstraints.tryMerge(path.finalConstraint);
+                if (!noConflict) {
+                    break;
+                }
+            }
+
+            if (noConflict) {
+                Logging.info("TypeRelationPathManager", "TTTTTTTTTTTTT");
+                sourceToConstraints.put(src, mergedConstraints);
+                for (var path: pathsFromSource) {
+                    if (path.hasConflict || path.noComposite) {
+                        continue;
+                    }
+                    sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).addAll(path.nodes);
+                }
+            } else {
+                Logging.info("TypeRelationPathManager", "FFFFFFFFFFFFF");
+                for (var path: pathsFromSource) {
+                    Logging.info("TypeRelationPathManager", path.toString());
+                    Logging.info("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));
+                }
+            }
+        }
+    }
+
+
+    public void buildSkeletons(SkeletonCollector collector) {
+        /* init sourceGroups */
+        for (var src: source) {
+            sourceGroups.add(src);
+        }
+
+        /* merge sources if they have common children nodes */
+        for (var src1: source) {
+            Set<T> children1 = sourceToChildren.get(src1);
+            if (children1 == null) continue;
+
+            for (T src2: source) {
+                if (src1.equals(src2)) continue;
+
+                Set<T> children2 = sourceToChildren.get(src2);
+                if (children2 == null) continue;
+
+                // if children1 and children2 has common nodes, union their sources
+                for (var child1: children1) {
+                    if (children2.contains(child1)) {
+                        sourceGroups.union(src1, src2);
+                        break;
+                    }
+                }
+            }
+        }
+
+        var clusters = sourceGroups.getClusters();
+        Logging.info("TypeRelationPathManager", String.format("Found %d clusters in sourceGroups", clusters.size()));
+        for (var cluster: clusters) {
+            Logging.info("TypeRelationPathManager", String.format("Cluster size: %s", cluster.size()));
+            var layoutToSources = new HashMap<Layout, Set<T>>();
+            /* group the cluster by node's layout */
+            for (var src: cluster) {
+                var layout = new Layout(sourceToConstraints.get(src));
+                layoutToSources.computeIfAbsent(layout, k -> new HashSet<>()).add(src);
+            }
+
+            if (layoutToSources.size() > 1) {
+                Logging.info("TypeRelationPathManager", "L > 1");
+                /* If layout count > 1, we merge children and TC by each layout */
+                for (var layout: layoutToSources.keySet()) {
+                    var sources = layoutToSources.get(layout);
+                    mergeSkeletonBySources(collector, sources);
+                }
+            } else if (layoutToSources.size() == 1) {
+                /* If layout count = 1, which means all sources in this cluster have same layout, we merge them */
+                Logging.info("TypeRelationPathManager", "L = 1");
+                mergeSkeletonBySources(collector, cluster);
+            } else {
+                Logging.error("TypeRelationPathManager", "L = 0");
+            }
+        }
+    }
+
+    public void mergeSkeletonBySources(SkeletonCollector collector, Set<T> sources) {
+        var mergedConstraints = new TypeConstraint();
+        for (var src: sources) {
+            mergedConstraints.mergeOther(sourceToConstraints.get(src));
+        }
+
+        if (mergedConstraints.isEmpty()) { return; }
+
+        for (var src: sources) {
+            var children = sourceToChildren.get(src);
+            if (children == null) {
+                Logging.warn("TypeRelationPathManager", String.format("Source %s has no children", src));
+                return;
+            }
+            for (var node: children) {
+                collector.updateSkeletonToExprs(mergedConstraints, (SymbolExpr) node);
             }
         }
     }
@@ -407,6 +485,20 @@ public class TypeRelationPathManager<T> {
         for (var node: path.nodes) {
             nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
         }
+    }
+
+
+    public LinkedHashMap<Layout, Set<TypeConstraint>> buildLayoutToConstraints(Set<TypeConstraint> constraints) {
+        var layoutToConstraints = new LinkedHashMap<Layout, Set<TypeConstraint>>();
+        for (var con: constraints) {
+            var layout = new Layout(con);
+            layoutToConstraints.computeIfAbsent(layout, k -> new HashSet<>()).add(con);
+        }
+        // Ranking the layoutToConstraints by Set<TypeConstraint>.size()
+        layoutToConstraints = layoutToConstraints.entrySet().stream()
+                .sorted((e1, e2) -> e2.getValue().size() - e1.getValue().size())
+                .collect(LinkedHashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), Map::putAll);
+        return layoutToConstraints;
     }
 
 

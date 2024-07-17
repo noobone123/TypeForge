@@ -52,7 +52,7 @@ public class InterSolver {
             ctx.solvedFunc.add(funcNode);
         }
 
-        ctx.collectConstraints();
+        ctx.collectSkeletons();
 
         var generator = new Generator(ctx);
         generator.dumpResults(new File(Global.outputDirectory));

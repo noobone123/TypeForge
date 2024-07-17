@@ -3,20 +3,19 @@ package blueprint.base.dataflow.context;
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.ParsedExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
+import blueprint.base.dataflow.constraints.SkeletonCollector;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.constraints.TypeConstraint;
 import blueprint.base.dataflow.typeRelation.TypeRelationManager;
 import blueprint.base.graph.CallGraph;
 import blueprint.base.node.FunctionNode;
-import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.PcodeOp;
 
 
-import java.io.File;
 import java.util.*;
 
 /**
@@ -98,13 +97,14 @@ public class InterContext {
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
-    public void collectConstraints() {
+    public void collectSkeletons() {
         // Parsing all fieldAccess Expressions first to build the constraint's skeleton
         for (var symExpr : fieldExprCandidates) {
             buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
-        mergeTypeConstraints();
+        var skeletonCollection = new SkeletonCollector();
+        mergeTypeConstraints(skeletonCollection);
 //
 //        typeRelationManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
 
@@ -124,7 +124,7 @@ public class InterContext {
     }
 
 
-    private void mergeTypeConstraints() {
+    private void mergeTypeConstraints(SkeletonCollector collector) {
         Logging.info("InterContext", "========================= Start to merge type constraints =========================");
         Logging.info("InterContext", "Total Graph Number: " + typeRelationManager.getGraphs().size());
         typeRelationManager.buildAllPathManagers();
@@ -136,7 +136,7 @@ public class InterContext {
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
                 graph.pathManager.tryMergeOnPath(symExprManager);
                 graph.pathManager.tryMergePathsFromSameSource();
-                graph.pathManager.handleNodeConstraints();
+                graph.pathManager.handleConflictNodes();
 
                 var edges = graph.pathManager.getEdgesToRemove();
                 for (var edge: edges) {
@@ -159,6 +159,7 @@ public class InterContext {
          * [0010f2db]-server_sockets_restore: param_1
          */
 
+        var totalNodeNumber = 0;
         for (var graph: typeRelationManager.getGraphs()) {
             if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
                 continue;
@@ -166,50 +167,11 @@ public class InterContext {
             // This time, try MergeOnPath will not appear conflicts because we have already removed these evil edges.
             graph.pathManager.tryMergeOnPath(symExprManager);
             graph.pathManager.mergePathsFromSameSource();
+            graph.pathManager.buildSkeletons(collector);
+            totalNodeNumber += graph.pathManager.nodeToConstraints.keySet().size();
         }
 
-
-
-        // merge constraints according to connected components
-////        for (var graph: typeRelationManager.getGraphs()) {
-////            var components = graph.getConnectedComponents();
-////            for (var component: components) {
-////                var mergedConstraint = new TypeConstraint();
-////                for (var node: component) {
-////                    var nodeConstraint = symExprManager.getConstraint(node);
-////                    if (nodeConstraint != null) {
-////                        var noConflict = mergedConstraint.tryMerge(nodeConstraint);
-////                        // TODO: handle cases: why conflict solve ...
-////                        if (!noConflict) {
-////                            Logging.warn("InterContext", String.format("Conflict when merging TypeConstraints in connected component for %s : %d", node, component.size()));
-////                            for (var n: component) {
-////                                var c = symExprManager.getConstraint(n);
-////                                if (c == null || c.isEmpty()) { continue; }
-////                                Logging.info("InterContext", String.format("Constraint for %s: %s", n, c));
-////                                Logging.info("InterContext", c.dumpLayout(0));
-////                            }
-////
-////                            break;
-////                        }
-////                    }
-////                    symExprManager.exprToConstraintAfterMerge.put(node, mergedConstraint);
-////                }
-////
-////                if (mergedConstraint.isEmpty()) {
-////                    continue;
-////                }
-////                // TODO: check unexpected layout
-////                // TODO: add field with fieldAccessExpr to check unexpected layout
-////                Logging.info("InterContext", "Connected components: ");
-////                Logging.info("InterContext", mergedConstraint.dumpLayout(0));
-////                for (var node: component) {
-////                    if (node.isVariable()) {
-////                        Logging.info("InterContext", node.toString());
-////                    }
-////                }
-////                Logging.info("InterContext", "======================================================================================");
-////            }
-//        }
+        Logging.info("InterContext", String.format("Total Node Number: %d", totalNodeNumber));
 
         // typeRelationManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
     }

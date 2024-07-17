@@ -52,7 +52,9 @@ public class Layout {
 
     @Override
     public int hashCode() {
-        return Objects.hash(intervals);
+        return Objects.hash(
+                intervals.stream().map(interval -> interval.offset).toArray()
+        );
     }
 
     @Override
@@ -60,6 +62,13 @@ public class Layout {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Layout layout = (Layout) o;
-        return intervals.equals(layout.intervals);
+
+        if (this.intervals.size() != layout.intervals.size()) return false;
+        for (int i = 0; i < this.intervals.size(); i++) {
+            if (this.intervals.get(i).offset != layout.intervals.get(i).offset) {
+                return false;
+            }
+        }
+        return true;
     }
 }

@@ -13,7 +13,6 @@ import java.util.*;
 public class SymbolExprManager {
 
     Map<SymbolExpr, TypeConstraint> exprToConstraintBeforeMerge;
-    public Map<SymbolExpr, TypeConstraint> exprToConstraintAfterMerge;
     Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap;
     Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
     Map<SymbolExpr.Attribute, Set<SymbolExpr>> attributeToExpr;
@@ -24,7 +23,6 @@ public class SymbolExprManager {
 
     public SymbolExprManager(InterContext interCtx) {
         exprToConstraintBeforeMerge = new HashMap<>();
-        exprToConstraintAfterMerge = new HashMap<>();
 
         baseToFieldsMap = new HashMap<>();
         fieldToBaseMap = new HashMap<>();
