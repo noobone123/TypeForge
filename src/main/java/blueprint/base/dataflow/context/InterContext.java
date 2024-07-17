@@ -106,7 +106,7 @@ public class InterContext {
         var skeletonCollectior = new SkeletonCollector();
         buildSkeletons(skeletonCollectior);
 
-        skeletonCollectior.test();
+        skeletonCollectior.mergeSkeletons();
 
 //
 //        typeRelationManager.removeRedundantGraphs(symExprManager.getBaseToFieldsMap());
@@ -146,20 +146,6 @@ public class InterContext {
             }
         }
 
-        // update memory alias relation
-        // TODO: enhance mayMemAliasCache
-        /**
-         * Fix following cases:
-         * Enter source node: [0011a135]-network_close: *(*(param_1 + 0x150) + local_10 * 0x8)
-         * Enter destination node: [0010f2db]-server_sockets_restore: *(*(param_1 + 0x150) + local_10 * 0x8)
-         * No path found.
-         * Enter source node: [0011a135]-network_close: param_1
-         * Enter destination node: [0010f2db]-server_sockets_restore: param_1
-         * [0011a135]-network_close: param_1 --- ("CALL") --- [00112116]-main: lVar2
-         * [00112116]-main: lVar2 --- ("CALL") --- [0010f2db]-server_sockets_restore: param_1
-         * [0010f2db]-server_sockets_restore: param_1
-         */
-
         for (var graph: typeRelationManager.getGraphs()) {
             if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
                 continue;
@@ -169,34 +155,7 @@ public class InterContext {
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
         }
-
-        // typeRelationManager.dumpEntryToExitPaths(new File(Global.outputDirectory));
     }
-
-
-//    /**
-//     * We created Constraints for all HighSymbols in the function, but not all of them can indicate the composite data type.
-//     * We only want HighSymbol which is:
-//     * 1. Structure, Array or Union
-//     * 2. Pointer to Structure, Array or Union
-//     * So we need to remove these Constraints which are not meaningful.
-//     */
-//    private void removeRedundantConstraints() {
-//        var finalResult = new HashMap<SymbolExpr, TypeConstraint>();
-//        for (var entry : symExprManager.getExprToConstraintMap().entrySet()) {
-//            var expr = entry.getKey();
-//            var constraint = entry.getValue();
-//            if (constraint.isInterested()) {
-//                finalResult.put(expr, constraint);
-//            } else {
-//                TypeConstraint.remove(constraint);
-//                Logging.warn("Context", String.format("Remove not interested %s -> Constraint_%s",
-//                        expr.toString(), constraint.toString()));
-//            }
-//        }
-//
-//        symExprManager.updateAllExprToConstraintMap(finalResult);
-//    }
 
     /**
      * Parse the Field Access SymbolExpr and build the constraints for it.

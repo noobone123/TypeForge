@@ -25,8 +25,7 @@ public class SkeletonCollector {
         this.multiSkeletonExprs = new HashSet<>();
     }
 
-
-    public void test() {
+    public void mergeSkeletons() {
         // Generate expr To Skeletons
         for (var skt: skeletons) {
             for (var expr: skt.exprs) {
@@ -92,20 +91,26 @@ public class SkeletonCollector {
         for (var entry: exprToSkeletonMap.entrySet()) {
             var expr = entry.getKey();
             var skt = entry.getValue();
+
+            if (visited.contains(skt)) continue;
+
             if (!skt.exprs.contains(expr)) {
                 Logging.error("SkeletonCollector", String.format("exprToSkeletonMap is inconsistent: %s -> %s", expr, skt));
             }
-
-            if (!skt.hasMultiConstraints) continue;
-            if (visited.contains(skt)) continue;
+            if (!skt.hasMultiConstraints) {
+                assert skt.constraints.size() == 1;
+                Logging.info("SkeletonCollector", String.format("Skeleton with single Constraint has Exprs: \n%s", skt.exprs));
+                Logging.info("SkeletonCollector", String.format("Constraint: \n%s", skt.constraints.iterator().next().dumpLayout(0)));
+            } else {
+                assert skt.constraints.size() > 1;
+                Logging.info("SkeletonCollector", String.format("Skeleton with multiple Constraints has Exprs: \n%s", skt.exprs));
+                for (var constraint: skt.constraints) {
+                    Logging.info("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
+                }
+            }
             visited.add(skt);
-            Logging.info("SkeletonCollector", String.format("Skeleton with multiple Constraints has Exprs: %s", skt.exprs));
         }
-
-        // Handle Memory Alias
-        // Save ReferenceTo Information between Skeletons
     }
-
 
     public void addSkeleton(Skeleton skt) {
         skeletons.add(skt);
