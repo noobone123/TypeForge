@@ -1,18 +1,18 @@
-package blueprint.base.dataflow.constraints;
+package blueprint.base.dataflow.skeleton;
 
 
-public class TCRelation {
+public class SkeletonRelation {
     public enum RelationType {
         REFERENCE,
         NEST
     }
 
     public RelationType type;
-    public TypeConstraint from;
-    public TypeConstraint to;
+    public Skeleton from;
+    public Skeleton to;
     public Long offset;
 
-    public TCRelation(RelationType type, TypeConstraint from, TypeConstraint to, Long offset) {
+    public SkeletonRelation(RelationType type, Skeleton from, Skeleton to, Long offset) {
         this.type = type;
         this.from = from;
         this.to = to;

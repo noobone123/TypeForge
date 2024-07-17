@@ -1,6 +1,6 @@
 package blueprint.utils;
 
-import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.skeleton.TypeConstraint;
 
 import java.util.*;
 

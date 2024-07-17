@@ -1,7 +1,7 @@
 package blueprint.base.dataflow.typeRelation;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
-import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.utils.Logging;
 import org.jgrapht.GraphPath;
 

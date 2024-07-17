@@ -1,7 +1,7 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
-import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.base.dataflow.context.InterContext;
 import blueprint.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;

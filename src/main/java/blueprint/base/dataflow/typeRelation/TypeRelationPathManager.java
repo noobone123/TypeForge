@@ -3,8 +3,9 @@ package blueprint.base.dataflow.typeRelation;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
-import blueprint.base.dataflow.constraints.SkeletonCollector;
-import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.skeleton.Skeleton;
+import blueprint.base.dataflow.skeleton.SkeletonCollector;
+import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.base.dataflow.types.Layout;
 import blueprint.utils.Logging;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
@@ -290,19 +291,19 @@ public class TypeRelationPathManager<T> {
                 /* If layout count > 1, we merge children and TC by each layout */
                 for (var layout: layoutToSources.keySet()) {
                     var sources = layoutToSources.get(layout);
-                    mergeSkeletonBySources(collector, sources);
+                    buildSkeleton(collector, sources);
                 }
             } else if (layoutToSources.size() == 1) {
                 /* If layout count = 1, which means all sources in this cluster have same layout, we merge them */
                 Logging.info("TypeRelationPathManager", "L = 1");
-                mergeSkeletonBySources(collector, cluster);
+                buildSkeleton(collector, cluster);
             } else {
                 Logging.error("TypeRelationPathManager", "L = 0");
             }
         }
     }
 
-    public void mergeSkeletonBySources(SkeletonCollector collector, Set<T> sources) {
+    public void buildSkeleton(SkeletonCollector collector, Set<T> sources) {
         var mergedConstraints = new TypeConstraint();
         for (var src: sources) {
             mergedConstraints.mergeOther(sourceToConstraints.get(src));
@@ -310,16 +311,20 @@ public class TypeRelationPathManager<T> {
 
         if (mergedConstraints.isEmpty()) { return; }
 
+        var exprs = new HashSet<SymbolExpr>();
         for (var src: sources) {
             var children = sourceToChildren.get(src);
             if (children == null) {
                 Logging.warn("TypeRelationPathManager", String.format("Source %s has no children", src));
-                return;
+                continue;
             }
             for (var node: children) {
-                collector.updateSkeletonToExprs(mergedConstraints, (SymbolExpr) node);
+                exprs.add((SymbolExpr) node);
             }
         }
+
+        var skeleton = new Skeleton(mergedConstraints, exprs);
+        collector.addSkeleton(skeleton);
     }
 
     /**

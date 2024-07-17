@@ -1,4 +1,4 @@
-package blueprint.base.dataflow.constraints;
+package blueprint.base.dataflow.skeleton;
 
 import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
@@ -44,12 +44,8 @@ public class TypeConstraint {
 
     public final Set<TypeDescriptor> polymorphicTypes;
 
-    /** This is important, which is used to record the symbol expression which associated with this TypeConstraint */
-    public Set<SymbolExpr> associatedExpr;
     public Set<Long> totalSize;
     public Set<Long> elementSize;
-
-    public Set<TCRelation> relations;
 
     public TypeConstraint() {
         uuid = UUID.randomUUID();
@@ -62,11 +58,8 @@ public class TypeConstraint {
         globalAttrs = new HashSet<>();
         accessOffsets = new HashMap<>();
         polymorphicTypes = new HashSet<>();
-        associatedExpr = new HashSet<>();
         totalSize = new HashSet<>();
         elementSize = new HashSet<>();
-
-        relations = new HashSet<>();
     }
 
     public TypeConstraint(TypeConstraint other) {
@@ -97,13 +90,9 @@ public class TypeConstraint {
 
         this.polymorphicTypes = new HashSet<>(other.polymorphicTypes);
 
-        this.associatedExpr = new HashSet<>(other.associatedExpr);
-
         this.totalSize = new HashSet<>(other.totalSize);
 
         this.elementSize = new HashSet<>(other.elementSize);
-
-        this.relations = new HashSet<>(other.relations);
     }
 
     public void addFieldAccess(long offset, AccessPoints.AP ap) {
@@ -138,66 +127,6 @@ public class TypeConstraint {
         }
     }
 
-//    public boolean hasReferenceTo(long offset, TypeConstraint other) {
-//        return referenceTo.containsKey(offset) && referenceTo.get(offset).contains(other);
-//    }
-//
-//    public void removeReferenceTo(long offset, TypeConstraint other) {
-//        if (referenceTo.containsKey(offset)) {
-//            referenceTo.get(offset).remove(other);
-//            Logging.debug("TypeConstraint", String.format("Constraint_%s removing referenceTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
-//
-//            if (referenceTo.get(offset).isEmpty()) {
-//                referenceTo.remove(offset);
-//            }
-//        }
-//    }
-//
-//    public void removeReferencedBy(TypeConstraint other, long offset) {
-//        if (referencedBy.containsKey(other)) {
-//            referencedBy.get(other).remove(offset);
-//            Logging.debug("TypeConstraint", String.format("Constraint_%s removing referencedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
-//
-//            if (referencedBy.get(other).isEmpty()) {
-//                referencedBy.remove(other);
-//            }
-//        }
-//    }
-//
-//    public void addNestTo(long offset, TypeConstraint other) {
-//        nestTo.putIfAbsent(offset, new HashSet<>());
-//        nestTo.get(offset).add(other);
-//        Logging.debug("TypeConstraint", String.format("Constraint_%s adding nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
-//    }
-//
-//    public void addNestedBy(TypeConstraint other, long offset) {
-//        nestedBy.putIfAbsent(other, new HashSet<>());
-//        nestedBy.get(other).add(offset);
-//        Logging.debug("TypeConstraint", String.format("Constraint_%s adding nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
-//    }
-//
-//    public void removeNestTo(long offset, TypeConstraint other) {
-//        if (nestTo.containsKey(offset)) {
-//            nestTo.get(offset).remove(other);
-//            Logging.debug("TypeConstraint", String.format("Constraint_%s removing nestTo: 0x%x -> Constraint_%s", shortUUID, offset, other.shortUUID));
-//
-//            if (nestTo.get(offset).isEmpty()) {
-//                nestTo.remove(offset);
-//            }
-//        }
-//    }
-//
-//    public void removeNestedBy(TypeConstraint other, long offset) {
-//        if (nestedBy.containsKey(other)) {
-//            nestedBy.get(other).remove(offset);
-//            Logging.debug("TypeConstraint", String.format("Constraint_%s removing nestedBy: Constraint_%s -> 0x%x", shortUUID, other.shortUUID, offset));
-//
-//            if (nestedBy.get(other).isEmpty()) {
-//                nestedBy.remove(other);
-//            }
-//        }
-//    }
-
     public void setTotalSize(long size) {
         this.totalSize.add(size);
         Logging.info("TypeConstraint", String.format("Constraint_%s setting total size: %d", shortUUID, size));
@@ -208,104 +137,6 @@ public class TypeConstraint {
         Logging.info("TypeConstraint", String.format("Constraint_%s setting element size: %d", shortUUID, size));
     }
 
-//    public void mergeXRef(TypeConstraint other) {
-//        // Be careful with Recursive Reference or Recursive Nest
-//        List<Runnable> changes = new ArrayList<>();
-//        other.referenceTo.forEach((offset, constraints) -> {
-//            constraints.forEach(refee -> {
-//                if (refee != other) {
-//                    changes.add(() -> {
-//                        this.addReferenceTo(offset, refee);
-//                        refee.addReferencedBy(this, offset);
-//                        other.removeReferenceTo(offset, refee);
-//                        refee.removeReferencedBy(other, offset);
-//                    });
-//                }
-//                // Recursive Reference to
-//                else {
-//                    changes.add(() -> {
-//                        this.addReferenceTo(offset, this);
-//                        this.addReferencedBy(this, offset);
-//                        other.removeReferenceTo(offset, refee);
-//                        refee.removeReferencedBy(other, offset);
-//                    });
-//                }
-//            });
-//        });
-//
-//        other.referencedBy.forEach((refer, offsets) -> {
-//            if (refer != other) {
-//                offsets.forEach(offset -> {
-//                    changes.add(() -> {
-//                        this.addReferencedBy(refer, offset);
-//                        refer.addReferenceTo(offset, this);
-//                        other.removeReferencedBy(refer, offset);
-//                        refer.removeReferenceTo(offset, other);
-//                    });
-//                });
-//            }
-//            // Recursive Reference by
-//            else {
-//                offsets.forEach(offset -> {
-//                    changes.add(() -> {
-//                        this.addReferencedBy(this, offset);
-//                        this.addReferenceTo(offset, this);
-//                        other.removeReferencedBy(refer, offset);
-//                        refer.removeReferenceTo(offset, other);
-//                    });
-//                });
-//            }
-//        });
-//
-//        other.nestTo.forEach((offset, constraints) -> {
-//            constraints.forEach(nestee -> {
-//                if (nestee != other) {
-//                    changes.add(() -> {
-//                        this.addNestTo(offset, nestee);
-//                        nestee.addNestedBy(this, offset);
-//                        other.removeNestTo(offset, nestee);
-//                        nestee.removeNestedBy(other, offset);
-//                    });
-//                }
-//                // Recursive Nest to
-//                else {
-//                    changes.add(() -> {
-//                        this.addNestTo(offset, this);
-//                        this.addNestedBy(this, offset);
-//                        other.removeNestTo(offset, nestee);
-//                        nestee.removeNestedBy(other, offset);
-//                    });
-//                }
-//            });
-//        });
-//
-//        other.nestedBy.forEach((nester, offsets) -> {
-//            if (nester != other) {
-//                offsets.forEach(offset -> {
-//                    changes.add(() -> {
-//                        this.addNestedBy(nester, offset);
-//                        nester.addNestTo(offset, this);
-//                        other.removeNestedBy(nester, offset);
-//                        nester.removeNestTo(offset, other);
-//                    });
-//                });
-//            }
-//            // Recursive Nested by
-//            else {
-//                offsets.forEach(offset -> {
-//                    changes.add(() -> {
-//                        this.addNestedBy(this, offset);
-//                        this.addNestTo(offset, this);
-//                        other.removeNestedBy(nester, offset);
-//                        nester.removeNestTo(offset, other);
-//                    });
-//                });
-//            }
-//        });
-//
-//        changes.forEach(Runnable::run);
-//    }
-
     public List<Long> collectFieldOffsets() {
         Set<Long> offsets = new HashSet<>(fieldAccess.keySet());
         offsets.addAll(fieldAttrs.keySet());
@@ -313,29 +144,6 @@ public class TypeConstraint {
         Collections.sort(sortedOffset);
         return sortedOffset;
     }
-
-    /**
-     * Remove current constraint, which means remove all reference and nest edges
-     * @param constraint the constraint to be removed
-     */
-//    public static void remove(TypeConstraint constraint) {
-//        constraint.referenceTo.forEach((offset, constraints) -> {
-//            constraints.forEach(refee -> refee.removeReferencedBy(constraint, offset));
-//        });
-//
-//        constraint.referencedBy.forEach((refer, offsets) -> {
-//            offsets.forEach(offset -> refer.removeReferenceTo(offset, constraint));
-//        });
-//
-//        constraint.nestTo.forEach((offset, constraints) -> {
-//            constraints.forEach(nestee -> nestee.removeNestedBy(constraint, offset));
-//        });
-//
-//        constraint.nestedBy.forEach((nester, offsets) -> {
-//            offsets.forEach(offset -> nester.removeNestTo(offset, constraint));
-//        });
-//    }
-
 
     /**
      * Merge two TypeConstraints into a new TypeConstraint.
@@ -377,9 +185,6 @@ public class TypeConstraint {
 
         // Merging global attributes
         this.globalAttrs.addAll(other.globalAttrs);
-
-        // Merging associatedExpr
-        this.associatedExpr.addAll(other.associatedExpr);
 
         // Merging accessOffsets
         other.accessOffsets.forEach((ap, offsets) -> {
@@ -449,15 +254,6 @@ public class TypeConstraint {
 
     public JsonNode getJsonObj(ObjectMapper mapper) {
         var rootNode = mapper.createObjectNode();
-
-        // Add associatedExpr and it's attributes
-        var exprs = rootNode.putArray("AssociatedExpr");
-        associatedExpr.forEach(expr -> {
-            var exprNode = exprs.addObject();
-            exprNode.put("Expr", expr.toString());
-            exprNode.put("Attributes", expr.getAttributes().toString());
-            exprNode.put("Size", "0x" + Long.toHexString(expr.variableSize));
-        });
 
         // dump all totalSize and elementSize
         var sizeNode = rootNode.putArray("TotalSize");

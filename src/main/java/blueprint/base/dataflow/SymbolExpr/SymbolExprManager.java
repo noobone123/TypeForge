@@ -1,6 +1,6 @@
 package blueprint.base.dataflow.SymbolExpr;
 
-import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.base.dataflow.context.InterContext;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.utils.Logging;

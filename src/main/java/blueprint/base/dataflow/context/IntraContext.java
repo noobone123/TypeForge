@@ -3,7 +3,7 @@ package blueprint.base.dataflow.context;
 import blueprint.base.dataflow.KSet;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
-import blueprint.base.dataflow.constraints.TypeConstraint;
+import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.base.dataflow.types.TypeDescriptorManager;
 import blueprint.base.node.FunctionNode;
 import blueprint.utils.DataTypeHelper;
