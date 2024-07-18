@@ -103,11 +103,11 @@ public class InterContext {
             buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
-        var skeletonCollectior = new SkeletonCollector();
+        var skeletonCollectior = new SkeletonCollector(symExprManager);
         buildSkeletons(skeletonCollectior);
 
         skeletonCollectior.mergeSkeletons();
-        // skeletonCollectior.handleTypeAlias();
+        skeletonCollectior.handleTypeAlias();
 
 //        handleReference();
 //        handleExprWithAttributions();

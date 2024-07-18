@@ -2,6 +2,7 @@ package blueprint.base.dataflow.skeleton;
 
 import blueprint.base.dataflow.SymbolExpr.ParsedExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.utils.Logging;
 
@@ -20,11 +21,15 @@ public class SkeletonCollector {
     /* SymbolExprs that have multiple skeletons */
     private final Set<SymbolExpr> multiSkeletonExprs;
 
-    public SkeletonCollector() {
+    private final SymbolExprManager exprManager;
+
+    public SkeletonCollector(SymbolExprManager exprManager) {
         this.skeletons = new HashSet<>();
         this.exprToSkeletons_T = new HashMap<>();
         this.exprToSkeletonMap = new HashMap<>();
         this.multiSkeletonExprs = new HashSet<>();
+
+        this.exprManager = exprManager;
     }
 
     /**
@@ -126,7 +131,7 @@ public class SkeletonCollector {
     public void handleTypeAlias() {
         /* initialize aliasMap using Skeleton's expressions */
         var aliasMap = new UnionFind<SymbolExpr>();
-        for (var skt: skeletons) {
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             aliasMap.initializeWithCluster(skt.exprs);
         }
 
@@ -142,16 +147,34 @@ public class SkeletonCollector {
         if (parsed.isEmpty()) { return; }
         var parsedExpr = parsed.get();
         var base = parsedExpr.base;
-        var offset = parsedExpr.offset;
+        var offset = parsedExpr.offsetValue;
 
         if (parsedExpr.base.isDereference()) {
             parseAndSetTypeAlias(parsedExpr.base, aliasMap);
         }
 
-        // 1. iterate all exprs alias with base in aliasMap
-        // 2. get alias's fieldExpr by aliasExpr + offset
-        // 3. if alias's fieldExpr in exprToSkeletonMap and not in same skeleton with expr, union them.
-        // 4. If relation already exists, skip.
+        if (!aliasMap.contains(base)) {
+            return;
+        }
+
+        for (var alias: aliasMap.getCluster(base)) {
+            var res = exprManager.getFieldExprsByOffset(alias, offset);
+            if (res.isEmpty()) { continue; }
+            var fieldExprs = res.get();
+            for (var e: fieldExprs) {
+                if (aliasMap.contains(e) && aliasMap.contains(expr)) {
+                    if (aliasMap.connected(e, expr)) continue;
+
+                    var skt1 = exprToSkeletonMap.get(e);
+                    var skt2 = exprToSkeletonMap.get(expr);
+                    // TODO: check if conflict before union
+                    if (skt1 != skt2) {
+                        aliasMap.union(e, expr);
+                        Logging.info("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
+                    }
+                }
+            }
+        }
     }
 
     public void addSkeleton(Skeleton skt) {

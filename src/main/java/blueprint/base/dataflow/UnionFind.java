@@ -1,5 +1,8 @@
 package blueprint.base.dataflow;
 
+import blueprint.utils.Logging;
+import edu.uci.ics.jung.visualization.transform.shape.HyperbolicShapeTransformer;
+
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -57,6 +60,21 @@ public class UnionFind<T> {
     // Check if two elements are in the same set
     public boolean connected(T element1, T element2) {
         return find(element1).equals(find(element2));
+    }
+
+    public boolean contains(T element) {
+        return parent.containsKey(element);
+    }
+
+    public Set<T> getCluster(T element) {
+        Set<T> cluster = new HashSet<>();
+        T root = find(element);
+        for (T key : parent.keySet()) {
+            if (find(key).equals(root)) {
+                cluster.add(key);
+            }
+        }
+        return cluster;
     }
 
     public Set<Set<T>> getClusters() {
