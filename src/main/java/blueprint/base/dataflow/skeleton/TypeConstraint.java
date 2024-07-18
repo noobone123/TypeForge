@@ -145,6 +145,14 @@ public class TypeConstraint {
         return sortedOffset;
     }
 
+    public int getFieldMaxSize(long offset) {
+        int maxSize = 0;
+        for (AccessPoints.AP ap : fieldAccess.get(offset)) {
+            maxSize = Math.max(maxSize, ap.dataType.getLength());
+        }
+        return maxSize;
+    }
+
     /**
      * Merge two TypeConstraints into a new TypeConstraint.
      * This merging will not change the original TypeConstraints' structure and relations

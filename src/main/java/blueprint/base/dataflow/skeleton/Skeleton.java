@@ -1,12 +1,15 @@
 package blueprint.base.dataflow.skeleton;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Map;
 
 public class Skeleton {
     public final java.util.UUID uuid = java.util.UUID.randomUUID();
@@ -15,6 +18,9 @@ public class Skeleton {
     public Set<TypeConstraint> constraints = new HashSet<>();
     public Set<SymbolExpr> exprs = new HashSet<>();
     public boolean hasMultiConstraints = false;
+
+    public Map<Long, Set<Skeleton>> ptrReference = new HashMap<>();
+    public Map<Long, Integer> ptrLevel = new HashMap<>();
 
     public Set<DataType> derivedTypes;
 
@@ -47,6 +53,24 @@ public class Skeleton {
 
     public int getConstraintsHash() {
         return constraints.hashCode();
+    }
+
+    public void addPtrReference(long ptr, Skeleton skt) {
+        ptrReference.computeIfAbsent(ptr, k -> new HashSet<>()).add(skt);
+    }
+
+    public boolean isMultiLevel() {
+        if (constraints.size() > 1) { return false; }
+        var constraint = constraints.iterator().next();
+        if (constraint.fieldAccess.size() != 1) { return false; }
+        if (constraint.fieldAccess.get(0L) == null) { return false; }
+        for (var element: constraint.fieldAccess.get(0L)) {
+            var dataType = element.dataType;
+            var size = dataType.getLength();
+            if (size != Global.currentProgram.getDefaultPointerSize()) { return false; }
+        }
+        if (ptrReference.get(0L) == null) { return false; }
+        return true;
     }
 
     @Override

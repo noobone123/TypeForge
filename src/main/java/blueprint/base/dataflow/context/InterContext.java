@@ -108,13 +108,9 @@ public class InterContext {
 
         skeletonCollectior.mergeSkeletons();
         skeletonCollectior.handleTypeAlias();
+        skeletonCollectior.handlePtrReference();
 
-//        handleReference();
 //        handleExprWithAttributions();
-//
-//        // merge constraints in same offset
-//        mergeConstraints();
-//
 //        // Remove meaningLess constraints
 //        removeRedundantConstraints();
     }
@@ -194,33 +190,6 @@ public class InterContext {
     }
 
 //    /**
-//     * Add the reference relationship between the referencer and referencee.
-//     * In buildConstraintByFieldAccessExpr, we only add the reference relationship only if there is reference relationship which can be inferred from the field access expression.
-//     * But in some cases like `*(a + 0x10) = b`, if a and b are both pointer to composite datatype, we should add the reference relationship between a and b.
-//     */
-//    private void handleReference() {
-//        for (var expr: fieldExprCandidates) {
-//            if (symExprManager.getConstraint(expr) == null || !symExprManager.getConstraint(expr).isInterested()) {
-//                continue;
-//            }
-//
-//            if (expr.isDereference()) {
-//                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
-//                if (parsed.isEmpty()) {
-//                    continue;
-//                }
-//                var base = parsed.get().base;
-//                var offset = parsed.get().offsetValue;
-//                var referencee = symExprManager.getConstraint(expr);
-//                var referencer = symExprManager.getConstraint(base);
-//                if (!referencer.hasReferenceTo(offset, referencee)) {
-//                    updateReferenceConstraint(referencer, offset, referencee);
-//                }
-//            }
-//        }
-//    }
-
-//    /**
 //     * Handle the SymbolExpressions with some special attributes. Like Argument, CodePTR, ...
 //     */
 //    private void handleExprWithAttributions() {
@@ -266,118 +235,6 @@ public class InterContext {
         }
     }
 
-    /**
-     * Current memory alias graph is not complete, it only contains the alias relationship with explicit data-flow relations.
-     * And alias relations introduced by memory alias is not handled yet.
-     * For example: if `a` and `b` is alias, then `*(a + 0x10)` and `*(b + 0x10)` should be alias too.
-     * In this method, we consider fields as type alias only if their bases are alias and offsets are the same.
-     */
-    // DEPRECATED
-    private void handleMemoryAlias() {
-        var workList = new LinkedList<SimpleEntry>();
-        var visited = new HashSet<SimpleEntry>();
-        var allBaseExprs = symExprManager.getAllBaseExprs();
-
-        Logging.info("InterContext", "Start to handle memory alias.");
-        for (var baseExpr: allBaseExprs) {
-            var fieldExprs = symExprManager.getFieldInfo(baseExpr);
-            for (var fieldInfo : fieldExprs.entrySet()) {
-                var entry = new SimpleEntry(baseExpr, fieldInfo.getKey());
-                workList.add(entry);
-                Logging.debug("InterContext", String.format("Add baseExpr %s with offset 0x%x", baseExpr, fieldInfo.getKey()));
-            }
-        }
-
-        while (!workList.isEmpty()) {
-            var entry = workList.poll();
-            var baseExpr = entry.baseExpr;
-            var offset = entry.offset;
-
-            if (visited.contains(entry)) {
-                continue;
-            }
-            Logging.debug("InterContext", String.format("Processing baseExpr %s with offset 0x%x", baseExpr, offset));
-            visited.add(entry);
-            var currentFieldExprs = symExprManager.getFieldExprsByOffset(baseExpr, offset);
-            var otherFieldExprsWithSameOffset = getOtherFieldExprsWithSameOffset(baseExpr, offset, visited);
-
-            if (currentFieldExprs.isEmpty()) { continue; }
-            for (var currentFieldExpr: currentFieldExprs.get()) {
-                for (var otherFieldExpr : otherFieldExprsWithSameOffset) {
-                    if (addMemoryAliasRelation(currentFieldExpr, otherFieldExpr)) {
-                        // If a new memory alias relation is added, and new added otherFieldExpr still has fields, we need to add them into workList
-                        var newFieldExprs = symExprManager.getFieldInfo(otherFieldExpr);
-                        if (newFieldExprs == null) {
-                            Logging.debug("InterContext", String.format("Other field expr %s has no fields.", otherFieldExpr));
-                        }
-                        else {
-                            for (var newFieldInfo : newFieldExprs.entrySet()) {
-                                workList.add(new SimpleEntry(otherFieldExpr, newFieldInfo.getKey()));
-                                Logging.debug("InterContext", String.format("Add otherFieldExpr %s with offset 0x%x", otherFieldExpr, newFieldInfo.getKey()));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-
-    private Set<SymbolExpr> getOtherFieldExprsWithSameOffset(SymbolExpr baseExpr, long offset, Set<SimpleEntry> visited) {
-        var result = new HashSet<SymbolExpr>();
-        var typeAliasGraph = typeRelationManager.getTypeRelationGraph(baseExpr);
-        if (typeAliasGraph == null) {
-            return result;
-        }
-
-        for (var node: typeAliasGraph.getNodes()) {
-            if (node.equals(baseExpr)) {
-                continue;
-            } else {
-                var fieldExprs = symExprManager.getFieldExprsByOffset(node, offset);
-                if (fieldExprs.isPresent()) {
-                    visited.add(new SimpleEntry(node, offset));
-                    var exprs = fieldExprs.get();
-                    for (var expr : exprs) {
-                        if (result.add(expr)) {
-                            Logging.debug("InterContext", String.format("Found other field expr %s with same offset 0x%x", expr, offset));
-                        }
-                    }
-                }
-            }
-        }
-
-        return result;
-    }
-
-
-    static class SimpleEntry {
-        final SymbolExpr baseExpr;
-        final long offset;
-
-        public SimpleEntry(SymbolExpr baseExpr, long offset) {
-            this.baseExpr = baseExpr;
-            this.offset = offset;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(baseExpr, offset);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            SimpleEntry that = (SimpleEntry) obj;
-            return offset == that.offset && baseExpr.equals(that.baseExpr);
-        }
-    }
-
     private boolean isMergedVariableExpr(SymbolExpr expr) {
         if (expr.isTemp) { return false; }
         var rootSym = expr.getRootHighSymbol();
@@ -389,7 +246,6 @@ public class InterContext {
             return funcNode.mergedVariables.contains(rootSym);
         }
     }
-
 
     private boolean checkOffsetSize(TypeConstraint constraint, long offset, int wantedSize) {
         boolean result = true;

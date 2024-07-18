@@ -118,6 +118,53 @@ public class SkeletonCollector {
 
 
     /**
+     * Build Relationships introduced by Struct Pointer Reference
+     */
+    public void handlePtrReference() {
+        /* Build basic Reference Relationship */
+        for (var expr: exprToSkeletonMap.keySet()) {
+            if (!expr.isDereference()) {
+                continue;
+            }
+
+            var parsed = ParsedExpr.parseFieldAccessExpr(expr);
+            if (parsed.isEmpty()) continue;
+            var parsedExpr = parsed.get();
+            var base = parsedExpr.base;
+            var offset = parsedExpr.offsetValue;
+
+            if (exprToSkeletonMap.containsKey(base)) {
+                var baseSkt = exprToSkeletonMap.get(base);
+                baseSkt.addPtrReference(offset, exprToSkeletonMap.get(expr));
+                baseSkt.ptrLevel.put(offset, 1);
+            }
+        }
+
+        /* Handle MultiLevel Ptr Reference */
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            for (var offset: skt.ptrReference.keySet()) {
+                if (skt.ptrReference.get(offset).size() > 1) {
+                    continue;
+                }
+
+                var ptrEESkt = skt.ptrReference.get(offset).iterator().next();
+                var ptrLevel = 1;
+                while (ptrEESkt.isMultiLevel()) {
+                    ptrLevel++;
+                    ptrEESkt = ptrEESkt.ptrReference.get(0L).iterator().next();
+                }
+
+                if (ptrLevel > 1) {
+                    Logging.info("SkeletonCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
+                    skt.ptrLevel.put(offset, ptrLevel);
+                    skt.ptrReference.put(offset, Set.of(ptrEESkt));
+                    // TODO: check correctness
+                }
+            }
+        }
+    }
+
+    /**
      * Similar to `handleMemoryAlias`, if `*(a+0x8)` and `*(b+0x8)` has different Skeleton but `a` and `b` has same Skeleton.
      * We Consider `*(a+0x8)` and `*(b+0x8)` has same Skeleton and merge them.
      */
