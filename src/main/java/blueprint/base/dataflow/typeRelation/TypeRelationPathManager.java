@@ -28,10 +28,12 @@ public class TypeRelationPathManager<T> {
 
     /** fields for conflict nodes */
     public final Set<T> evilNodes = new HashSet<>();  /** EvilNodes are nodes that may cause type ambiguity */
-    public final Set<List<T>> excludedPaths = new HashSet<>();
-    public final Map<T, Set<T>> excludeEdges = new HashMap<>();
+    public final Map<T, TypeRelationPath<T>> evilNodeToPath = new HashMap<>();
+
+    /** fields for handle edges that introduce conflicts */
     public final Set<TypeRelationGraph.TypeRelationEdge> mustRemove = new HashSet<>();
     public final Set<TypeRelationGraph.TypeRelationEdge> mayRemove = new HashSet<>();
+    public final Set<TypeRelationGraph.TypeRelationEdge> keepEdges = new HashSet<>();
 
 
     /** If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
@@ -166,8 +168,9 @@ public class TypeRelationPathManager<T> {
     /**
      * If there has multiple TypeConstraints in one node, means there has TypeConstraints
      * from different sources, we should handle them and try to merge them.
+     * @return evil Edges to remove
      */
-    public void handleConflictNodes() {
+    public Set<TypeRelationGraph.TypeRelationEdge> handleConflictNodes() {
         for (var node: nodeToConstraints.keySet()) {
             var constraints = nodeToConstraints.get(node);
             if (constraints.size() > 1) {
@@ -189,8 +192,8 @@ public class TypeRelationPathManager<T> {
 
                     if (!noConflict) {
                         evilNodes.add(node);
-
                         Logging.warn("TypeRelationPathManager", String.format("Conflict when merging TypeConstraints in node %s", node));
+                        /* Start debugging */
                         for (var layout: layoutToConstraints.keySet()) {
                             Logging.info("TypeRelationPathManager", String.format("Layout count: %d", layoutToConstraints.get(layout).size()));
                             Logging.info("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
@@ -202,22 +205,47 @@ public class TypeRelationPathManager<T> {
                             }
                             Logging.info("TypeRelationPathManager", path.toString());
                         }
+                        /* End Debugging */
 
-                        var mostCommonLayout = layoutToConstraints.keySet().iterator().next();
-                        if (((double) layoutToConstraints.get(mostCommonLayout).size() / constraints.size() > 0.6) && constraints.size() > 10) {
-                            Logging.info("TypeRelationPathManager", "Most common layout is more than 70%, adding excluded paths ...");
-                            /* DEPRECATED Feature
-                            var layoutConstraints = layoutToConstraints.get(mostCommonLayout);
-                            for (var con: layoutConstraints) {
-                                for (var path: constraintToPaths.get(con)) {
-                                    excludedPaths.add(path.nodes);
-                                    Logging.info("TypeRelationPathManager", String.format("Add excluded path: %s", path));
+                        // If Conflict Node in Sources, its may be a wrapper function
+                        if (source.contains(node)) {
+                            Logging.warn("TypeRelationPathManager", String.format("May Wrapper Function found: %s", node));
+                            var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
+                            List<T> wrapperPath = new ArrayList<>();
+                            for (var lcs: LCSs) {
+                                if (lcs.contains(node)) {
+                                    wrapperPath = lcs;
                                 }
                             }
-                            */
+                            var endEdges = getEndEdgesOfLCS(wrapperPath, nodeToPathsMap.get(node));
+                            var lcsEdges = getEdgesInLCS(wrapperPath, nodeToPathsMap.get(node));
+                            /* wrapperPath's end edges mark must remove */
+                            mustRemove.addAll(endEdges);
+                            keepEdges.addAll(lcsEdges);
                         }
+                        else {
+                            /* Add all edges of current conflict node to mustRemove */
+                            mayRemove.addAll(graph.getGraph().edgesOf(node));
+                            /* If there has LCS in node's paths, we should keep edges in LCS */
+                            var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
+                            for (var lcs: LCSs) {
+                                var lcsEdges = getEdgesInLCS(lcs, nodeToPathsMap.get(node));
+                                keepEdges.addAll(lcsEdges);
+                            }
 
-                        excludedPaths.addAll(getLongestCommonPath(nodeToPathsMap.get(node)));
+                            /* heuristic rules to find more keep edges */
+                            var mostCommonLayout = layoutToConstraints.keySet().iterator().next();
+                            if (((double) layoutToConstraints.get(mostCommonLayout).size() / constraints.size() > 0.6) && constraints.size() > 10) {
+                                Logging.info("TypeRelationPathManager", "Most common layout is more than 70%, adding excluded paths ...");
+                                var layoutConstraints = layoutToConstraints.get(mostCommonLayout);
+                                for (var con: layoutConstraints) {
+                                    for (var path: constraintToPaths.get(con)) {
+                                        // TODO: add all edges in path to keepEdges or Only add edges connected to conflict node?
+                                        keepEdges.addAll(path.edges);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
                 else if (layoutToConstraints.size() == 1) {
@@ -231,6 +259,16 @@ public class TypeRelationPathManager<T> {
                 Logging.info("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
             }
         }
+
+        /* Removed edges are mustRemove + (mayRemove - keepEdges) */
+        var removedEdges = new HashSet<>(mustRemove);
+        for (var edge: mayRemove) {
+            if (!keepEdges.contains(edge)) {
+                removedEdges.add(edge);
+                Logging.info("TypeRelationPathManager", String.format("Mark Edge to remove: %s", edge));
+            }
+        }
+        return removedEdges;
     }
 
 
@@ -264,7 +302,6 @@ public class TypeRelationPathManager<T> {
                     sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).addAll(path.nodes);
                 }
             } else {
-                // TODO: Is this will happen ?
                 Logging.info("TypeRelationPathManager", "FFFFFFFFFFFFFFFFFFFFFFFFFF");
                 for (var path: pathsFromSource) {
                     Logging.info("TypeRelationPathManager", path.toString());
@@ -309,7 +346,12 @@ public class TypeRelationPathManager<T> {
             var layoutToSources = new HashMap<Layout, Set<T>>();
             /* group the cluster by node's layout */
             for (var src: cluster) {
-                var layout = new Layout(sourceToConstraints.get(src));
+                var sc = sourceToConstraints.get(src);
+                if (sc == null) {
+                    Logging.warn("TypeRelationPathManager", String.format("Source has no final constraints: %s", src));
+                    continue;
+                }
+                var layout = new Layout(sc);
                 layoutToSources.computeIfAbsent(layout, k -> new HashSet<>()).add(src);
             }
 
@@ -354,36 +396,6 @@ public class TypeRelationPathManager<T> {
         collector.addSkeleton(skeleton);
     }
 
-    /**
-     * Get the edges need to remove in TypeRelationGraph, these edges are related to conflict nodes
-     * @return Set of edges need to remove
-     */
-    public Set<TypeRelationGraph.TypeRelationEdge> getEdgesToRemove() {
-        buildExcludeEdges();
-
-        for (var node: evilNodes) {
-            for (var edge: graph.getGraph().edgesOf(node)) {
-                var src = graph.getGraph().getEdgeSource(edge);
-                var dst = graph.getGraph().getEdgeTarget(edge);
-                var excludeNodes = excludeEdges.get(node);
-                if (src.equals(node)) {
-                    if (excludeNodes != null && excludeNodes.contains(dst)) {
-                        continue;
-                    }
-                }
-                else if (dst.equals(node)) {
-                    if (excludeNodes != null && excludeNodes.contains(src)) {
-                        continue;
-                    }
-                }
-
-                mayRemove.add(edge);
-                Logging.info("TypeRelationPathManager", String.format("Mark Edge to remove in TypeRelationGraph: %s ---> %s", src, dst));
-            }
-        }
-        return mayRemove;
-    }
-
 
     public void findSources() {
         for (T vertex : graph.getGraph().vertexSet()) {
@@ -420,7 +432,7 @@ public class TypeRelationPathManager<T> {
      * @param paths Set of given paths
      * @return Set of sub-paths
      */
-    public Set<List<T>> getLongestCommonPath(Set<TypeRelationPath<T>> paths) {
+    public Set<List<T>> getLongestCommonSubpath(Set<TypeRelationPath<T>> paths) {
         int lowBound = 1;
         int highBound = Integer.MAX_VALUE;
         Map<Integer, Set<Integer>> lengthToPathHash = new HashMap<>();
@@ -478,38 +490,70 @@ public class TypeRelationPathManager<T> {
 
 
     /**
-     * The soundest strategy is to remove all edges of the conflict node, but it may be too aggressive.
-     * By finding the longest common path of the conflict node, we found that some edges are not necessary to remove.
-     * So we need to find these edges (marked as tuples like (node_1, node2))
+     * Obtain the edges located at both ends of the given LCS (Longest Common Subpath) in the set of paths.
+     * @param lcs given Longest Common Subpath in the set of paths
+     * @param paths set of paths
      */
-    public void buildExcludeEdges() {
-        for (var path: excludedPaths) {
-            if (path.size() < 2) {
+    private Set<TypeRelationGraph.TypeRelationEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+        Set<TypeRelationGraph.TypeRelationEdge> endEdges = new HashSet<>();
+        if (lcs.isEmpty()) {
+            return endEdges;
+        }
+
+        for (var path: paths) {
+            List<T> nodes = path.nodes;
+            List<TypeRelationGraph.TypeRelationEdge> edges = path.edges;
+
+            // Find the start index of the LCS in the current path
+            int startIdx = Collections.indexOfSubList(nodes, lcs);
+            if (startIdx == -1) {
                 continue;
             }
 
-            for (int i = 0; i < path.size(); i++) {
-                if (i > 0) {
-                    excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i - 1));
-                }
-                if (i < path.size() - 1) {
-                    excludeEdges.computeIfAbsent(path.get(i), k -> new HashSet<>()).add(path.get(i + 1));
-                }
+            // Find the ending index of the LCS in the current path
+            int endIdx = startIdx + lcs.size() - 1;
+
+            // Get the edge before the LCS (if it exists)
+            if (startIdx > 0) {
+                endEdges.add(edges.get(startIdx - 1));
+            }
+
+            // Get the edge after the LCS (if it exists)
+            if (endIdx < edges.size() - 1) {
+                endEdges.add(edges.get(endIdx));
             }
         }
 
-        for (var node: excludeEdges.keySet()) {
-            Logging.info("TypeRelationPathManager", String.format("Built Exclude edges: %s: %s", node, excludeEdges.get(node)));
-        }
+        return endEdges;
     }
 
 
-    public void updateNewPath(TypeRelationPath<T> path) {
-        allPaths.add(path);
-        srcSinkToPathsMap.computeIfAbsent(path.start, k -> new HashMap<>())
-                .computeIfAbsent(path.end, k -> new HashSet<>())
-                .add(path);
-        updateNodeToPathsMap(path);
+    private Set<TypeRelationGraph.TypeRelationEdge> getEdgesInLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+        // Initialize a set to store the edges within the LCS
+        Set<TypeRelationGraph.TypeRelationEdge> lcsEdges = new HashSet<>();
+
+        // Loop through each path in the set
+        for (TypeRelationPath<T> path : paths) {
+            List<T> nodes = path.nodes;
+            List<TypeRelationGraph.TypeRelationEdge> edges = path.edges;
+
+            // Find the starting index of LCS in the current path
+            int startIdx = Collections.indexOfSubList(nodes, lcs);
+            if (startIdx == -1) {
+                // LCS not found in this path, continue to the next path
+                continue;
+            }
+
+            // Find the ending index of LCS in the current path
+            int endIdx = startIdx + lcs.size() - 1;
+
+            // Collect the edges corresponding to the LCS
+            for (int i = startIdx; i < endIdx; i++) {
+                lcsEdges.add(edges.get(i));
+            }
+        }
+
+        return lcsEdges;
     }
 
 
