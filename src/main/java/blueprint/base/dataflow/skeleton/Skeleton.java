@@ -1,9 +1,11 @@
 package blueprint.base.dataflow.skeleton;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 public class Skeleton {
@@ -26,6 +28,11 @@ public class Skeleton {
     public Skeleton(Set<TypeConstraint> constraints, SymbolExpr expr) {
         this.constraints.addAll(constraints);
         this.exprs.add(expr);
+    }
+
+    public Skeleton(Set<TypeConstraint> constraints, Set<SymbolExpr> exprs) {
+        this.constraints.addAll(constraints);
+        this.exprs.addAll(exprs);
     }
 
     public void addExpr(SymbolExpr expr) {
@@ -59,4 +66,50 @@ public class Skeleton {
     public String toString() {
         return "Skeleton_" + shortUUID;
     }
+
+
+    /**
+     * Merge two skeletons into a new skeleton
+     * @param skt1 merged skeleton
+     * @param skt2 merged skeleton
+     * @param isStrongMerge if true, merge all constraints in set into one constraint; otherwise just merge constraints set
+     * @return new merged skeleton
+     */
+    public static Optional<Skeleton> mergeSkeletons(Skeleton skt1, Skeleton skt2, boolean isStrongMerge) {
+        var newConstraints = new HashSet<TypeConstraint>();
+        var newExprs = new HashSet<SymbolExpr>();
+        newConstraints.addAll(skt1.constraints);
+        newConstraints.addAll(skt2.constraints);
+        newExprs.addAll(skt1.exprs);
+        newExprs.addAll(skt2.exprs);
+
+        if (isStrongMerge) {
+            var mergedConstraint = new TypeConstraint();
+            var noConflict = true;
+            for (var c: newConstraints) {
+                noConflict = mergedConstraint.tryMerge(c);
+                if (!noConflict) {
+                    break;
+                }
+            }
+
+            if (!noConflict) {
+                Logging.warn("Skeleton", String.format("Failed to merge skeletons %s and %s", skt1, skt2));
+                return Optional.empty();
+            }
+
+            Logging.info("Skeleton", String.format("Merged skeletons %s and %s", skt1, skt2));
+            Logging.info("Skeleton", String.format("Merged constraints:\n %s", mergedConstraint.dumpLayout(0)));
+            newConstraints.clear();
+            newConstraints.add(mergedConstraint);
+            var newSkeleton = new Skeleton(newConstraints, newExprs);
+            newSkeleton.hasMultiConstraints = false;
+            return Optional.of(newSkeleton);
+        } else {
+            var newSkeleton = new Skeleton(newConstraints, newExprs);
+            newSkeleton.hasMultiConstraints = true;
+            return Optional.of(newSkeleton);
+        }
+    }
+
 }

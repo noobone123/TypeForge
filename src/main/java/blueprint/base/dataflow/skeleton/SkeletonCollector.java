@@ -6,10 +6,7 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.utils.Logging;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 public class SkeletonCollector {
     private final Set<Skeleton> skeletons;
@@ -117,10 +114,6 @@ public class SkeletonCollector {
                 }
             }
         }
-
-        // update skeletons
-        skeletons.clear();
-        skeletons.addAll(new HashSet<>(exprToSkeletonMap.values()));
     }
 
 
@@ -167,10 +160,31 @@ public class SkeletonCollector {
 
                     var skt1 = exprToSkeletonMap.get(e);
                     var skt2 = exprToSkeletonMap.get(expr);
-                    // TODO: check if conflict before union
                     if (skt1 != skt2) {
                         aliasMap.union(e, expr);
                         Logging.info("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
+                        Optional<Skeleton> mergedRes = null;
+                        Skeleton newSkeleton = null;
+                        if (skt1.hasMultiConstraints && skt2.hasMultiConstraints) {
+                            Logging.warn("SkeletonCollector", "all have multi constraints");
+                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, false);
+                        } else if (skt1.hasMultiConstraints || skt2.hasMultiConstraints) {
+                            Logging.warn("SkeletonCollector", "one has multi constraints");
+                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, true);
+                        } else {
+                            Logging.warn("SkeletonCollector", "none has multi constraints");
+                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, true);
+                        }
+
+                        if (mergedRes.isPresent()) {
+                            newSkeleton = mergedRes.get();
+                            /* update exprToSkeletonMap */
+                            for (var e1: newSkeleton.exprs) {
+                                exprToSkeletonMap.put(e1, newSkeleton);
+                            }
+                        } else {
+                            Logging.warn("SkeletonCollector", String.format("Failed to merge skeletons of %s and %s", e, expr));
+                        }
                     }
                 }
             }
