@@ -30,7 +30,7 @@ public class TypeRelationPathManager<T> {
     public final Set<T> evilNodes = new HashSet<>();  /** EvilNodes are nodes that may cause type ambiguity */
     public final Set<List<T>> excludedPaths = new HashSet<>();
     public final Map<T, Set<T>> excludeEdges = new HashMap<>();
-    public final Set<TypeRelationGraph.TypeRelationEdge> removeCandidates = new HashSet<>();
+    public final Set<TypeRelationGraph.TypeRelationEdge> removedEdges = new HashSet<>();
 
 
     /** If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
@@ -80,7 +80,7 @@ public class TypeRelationPathManager<T> {
             // If Conflict occurs when merging TypeConstraints on path, we just mark all nodes in this path as evil nodes
             if (hasConflict.isPresent()) {
                 path.hasConflict = true;
-                removeCandidates.addAll(path.edges);
+                removedEdges.addAll(path.edges);
             }
             Logging.info("TypeRelationPathManager", "============================================== end ==============================================\n");
         }
@@ -351,11 +351,11 @@ public class TypeRelationPathManager<T> {
                     }
                 }
 
-                removeCandidates.add(edge);
+                removedEdges.add(edge);
                 Logging.info("TypeRelationPathManager", String.format("Mark Edge to remove in TypeRelationGraph: %s ---> %s", src, dst));
             }
         }
-        return removeCandidates;
+        return removedEdges;
     }
 
 

@@ -33,7 +33,9 @@ public class TypeRelationGraph<T> {
 
         @Override
         public String toString() {
-            return type.toString();
+            var source = this.getSource();
+            var target = this.getTarget();
+            return String.format("%s ---%s---> %s", source, type, target);
         }
     }
 

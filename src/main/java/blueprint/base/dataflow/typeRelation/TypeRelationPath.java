@@ -12,13 +12,14 @@ public class TypeRelationPath<T> {
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
     public List<TypeRelationGraph.TypeRelationEdge> edges;
-    public List<TypeConstraint> backwardMergedConstraints;
     public List<TypeConstraint> forwardMergedConstraints;
+    public List<TypeConstraint> backwardMergedConstraints;
     public TypeConstraint finalConstraint = null;
     public boolean hasConflict = false;
     public boolean noComposite = false;
     public T start;
     public T end;
+    public Set<TypeRelationGraph.TypeRelationEdge> evilEdges;
 
     /**
      * Map[SUB_PATH_LENGTH, Map[HASH_CODE, SUB_PATH_NODES]]
@@ -30,18 +31,19 @@ public class TypeRelationPath<T> {
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
 
-        this.backwardMergedConstraints = new ArrayList<>();
         this.forwardMergedConstraints = new ArrayList<>();
+        this.backwardMergedConstraints = new ArrayList<>();
 
         this.start = nodes.get(0);
         this.end = nodes.get(nodes.size() - 1);
+        this.evilEdges = new HashSet<>();
     }
 
     public TypeRelationPath(List<T> nodes, List<TypeRelationGraph.TypeRelationEdge> edges) {
         this.nodes = nodes;
         this.edges = edges;
-        this.backwardMergedConstraints = new ArrayList<>();
         this.forwardMergedConstraints = new ArrayList<>();
+        this.backwardMergedConstraints = new ArrayList<>();
 
         this.start = nodes.get(0);
         this.end = nodes.get(nodes.size() - 1);
@@ -94,38 +96,126 @@ public class TypeRelationPath<T> {
                 }
             }
 
-            // Merge backward constraints in the path
+            // Merge forward constraints in the path
             if (i > 0) {
-                var prevMergedCon = backwardMergedConstraints.get(i - 1);
-                Logging.info("TypeAliasPath", String.format("Try to merge previous into current: %s -> %s", prevMergedCon, curMergedCon));
-                Logging.info("TypeAliasPath", prevMergedCon.dumpLayout(0));
-                Logging.info("TypeAliasPath", curMergedCon.dumpLayout(0));
+                var prevMergedCon = forwardMergedConstraints.get(i - 1);
                 if (prevMergedCon.isEmpty()) {
-                    backwardMergedConstraints.add(curMergedCon);
+                    forwardMergedConstraints.add(curMergedCon);
                     continue;
                 } else if (curMergedCon.isEmpty()) {
-                    backwardMergedConstraints.add(prevMergedCon);
+                    forwardMergedConstraints.add(prevMergedCon);
                     continue;
                 } else {
                     var noConflict = curMergedCon.tryMerge(prevMergedCon);
                     if (noConflict) {
-                        backwardMergedConstraints.add(curMergedCon);
+                        forwardMergedConstraints.add(curMergedCon);
                         continue;
                     }
                     else {
-                        Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints on path for %s", curExpr));
-                        // If conflict happens, we should return the conflict node
+                        Logging.warn("TypeAliasPath", String.format("Conflict when forward merging TypeConstraints on path for %s", curExpr));
+                        var rightBoundIndex = i;
+                        var leftBoundIndex = tryMergeBackward(exprManager).orElse(-1);
+                        /* Find evil edges via forwardMergedConstraints and backwardMergedConstraint */
+                        findEvilEdges(rightBoundIndex, leftBoundIndex);
                         return Optional.of(node);
                     }
                 }
             } else {
-                backwardMergedConstraints.add(curMergedCon);
+                forwardMergedConstraints.add(curMergedCon);
             }
         }
 
         // update finalConstraint
-        finalConstraint = backwardMergedConstraints.get(backwardMergedConstraints.size() - 1);
+        finalConstraint = forwardMergedConstraints.get(forwardMergedConstraints.size() - 1);
         return Optional.empty();
+    }
+
+
+    public Optional<Integer> tryMergeBackward(SymbolExprManager exprManager) {
+        for (int i = nodes.size() - 1; i >= 0; i--) {
+            T node = nodes.get(i);
+            TypeConstraint curMergedCon;
+            SymbolExpr curExpr = (SymbolExpr) node;
+            TypeConstraint curExprCon = exprManager.getConstraint(curExpr);
+
+            if (curExprCon == null) {
+                curMergedCon = new TypeConstraint();
+            } else {
+                curMergedCon = new TypeConstraint(curExprCon);
+                if (curExpr.isDereference()) {
+                    Logging.info("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
+                    var mayMemAliases = exprManager.fastGetMayMemAliases(curExpr);
+                    for (var alias: mayMemAliases) {
+                        if (alias == curExpr) {
+                            continue;
+                        }
+                        var aliasCon = exprManager.getConstraint(alias);
+                        if (aliasCon == null) {
+                            continue;
+                        }
+                        var noConflict = curMergedCon.tryMerge(aliasCon);
+                        if (!noConflict) {
+                            Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in memAlias for %s and %s", curExpr, alias));
+                        }
+                    }
+                }
+            }
+
+            if (i == nodes.size() - 1) {
+                backwardMergedConstraints.add(curMergedCon);
+            } else {
+                var nextMergedCon = backwardMergedConstraints.get(backwardMergedConstraints.size() - 1);
+                if (nextMergedCon.isEmpty()) {
+                    backwardMergedConstraints.add(curMergedCon);
+                    continue;
+                } else if (curMergedCon.isEmpty()) {
+                    backwardMergedConstraints.add(nextMergedCon);
+                    continue;
+                } else {
+                    var noConflict = curMergedCon.tryMerge(nextMergedCon);
+                    if (noConflict) {
+                        backwardMergedConstraints.add(curMergedCon);
+                        continue;
+                    } else {
+                        Logging.warn("TypeAliasPath", String.format("Conflict when backward merging TypeConstraints on path for %s", curExpr));
+                        return Optional.of(i);
+                    }
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+
+    public void findEvilEdges(int rightBoundIndex, int leftBoundIndex) {
+        if (leftBoundIndex == -1) {
+            Logging.warn("TypeAliasPath", "Cannot find leftBoundIndex when finding evil edges");
+            evilEdges.add(edges.get(rightBoundIndex - 1));
+        }
+        else if (leftBoundIndex == rightBoundIndex) {
+            Logging.info("TypeAliasPath", "LB == RB");
+            evilEdges.add(edges.get(rightBoundIndex));
+            evilEdges.add(edges.get(rightBoundIndex - 1));
+        }
+        else if (leftBoundIndex > rightBoundIndex) {
+            Logging.info("TypeAliasPath", "LB > RB");
+            evilEdges.add(edges.get(leftBoundIndex));
+            evilEdges.add(edges.get(rightBoundIndex - 1));
+            for (int i = rightBoundIndex; i < leftBoundIndex; i++) {
+                evilEdges.add(edges.get(i));
+            }
+        }
+        /* leftBoundIndex < rightBoundIndex, this is what we expect */
+        else {
+            Logging.info("TypeAliasPath", "LB < RB");
+            for (int i = leftBoundIndex; i < rightBoundIndex; i++) {
+                evilEdges.add(edges.get(i));
+            }
+        }
+
+        for (var edge: evilEdges) {
+            Logging.info("TypeAliasPath", String.format("Found Evil Edge: %s", edge));
+        }
     }
 
 
