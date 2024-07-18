@@ -49,19 +49,7 @@ public class TypeRelationPath<T> {
         this.end = nodes.get(nodes.size() - 1);
     }
 
-    public Map.Entry<TypeRelationPath<T>, TypeRelationPath<T>> splitPathFromNode(T conflictNode) {
-        int startIndex = nodes.indexOf(conflictNode);
-        var firstPathNodes = nodes.subList(0, startIndex);
-        // TODO: first split path has last edge from last node ...
-        var firstPathEdges = edges.subList(0, startIndex);
-        var firstPath = new TypeRelationPath<>(firstPathNodes, firstPathEdges);
-        var secondPathNodes = nodes.subList(startIndex, nodes.size());
-        var secondPathEdges = edges.subList(startIndex, edges.size());
-        var secondPath = new TypeRelationPath<>(secondPathNodes, secondPathEdges);
-        return new AbstractMap.SimpleEntry<>(firstPath, secondPath);
-    }
-
-    public Optional<T> tryMergeOnPath(SymbolExprManager exprManager) {
+    public boolean tryMergeOnPath(SymbolExprManager exprManager) {
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get(i);
             TypeConstraint curMergedCon;
@@ -117,7 +105,7 @@ public class TypeRelationPath<T> {
                         var leftBoundIndex = tryMergeBackward(exprManager).orElse(-1);
                         /* Find evil edges via forwardMergedConstraints and backwardMergedConstraint */
                         findEvilEdges(rightBoundIndex, leftBoundIndex);
-                        return Optional.of(node);
+                        return false;
                     }
                 }
             } else {
@@ -127,7 +115,7 @@ public class TypeRelationPath<T> {
 
         // update finalConstraint
         finalConstraint = forwardMergedConstraints.get(forwardMergedConstraints.size() - 1);
-        return Optional.empty();
+        return true;
     }
 
 
@@ -186,7 +174,7 @@ public class TypeRelationPath<T> {
         return Optional.empty();
     }
 
-
+    // TODO: Evil Edges is hard to find correctly
     public void findEvilEdges(int rightBoundIndex, int leftBoundIndex) {
         if (leftBoundIndex == -1) {
             Logging.warn("TypeAliasPath", "Cannot find leftBoundIndex when finding evil edges");
@@ -218,12 +206,10 @@ public class TypeRelationPath<T> {
         }
     }
 
-
     public void createSubPathsOfLength(int length) {
         if (length < 1) {
             return;
         }
-
         for (int i = 0; i < nodes.size() - length + 1; i++) {
             var subPathNodes = nodes.subList(i, i + length);
             var hash = getPathsHashCode(subPathNodes);

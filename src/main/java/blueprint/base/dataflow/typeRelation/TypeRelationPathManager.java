@@ -30,7 +30,8 @@ public class TypeRelationPathManager<T> {
     public final Set<T> evilNodes = new HashSet<>();  /** EvilNodes are nodes that may cause type ambiguity */
     public final Set<List<T>> excludedPaths = new HashSet<>();
     public final Map<T, Set<T>> excludeEdges = new HashMap<>();
-    public final Set<TypeRelationGraph.TypeRelationEdge> removedEdges = new HashSet<>();
+    public final Set<TypeRelationGraph.TypeRelationEdge> mustRemove = new HashSet<>();
+    public final Set<TypeRelationGraph.TypeRelationEdge> mayRemove = new HashSet<>();
 
 
     /** If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
@@ -49,6 +50,13 @@ public class TypeRelationPathManager<T> {
     }
 
     public void build() {
+        this.source.clear();
+        this.sink.clear();
+        this.allPaths.clear();
+        this.nodeToPathsMap.clear();
+        this.srcSinkToPathsMap.clear();
+        this.nodeToConstraints.clear();
+
         findSources();
         findSinks();
         if (source.isEmpty() || sink.isEmpty()) {
@@ -71,20 +79,38 @@ public class TypeRelationPathManager<T> {
      */
     public void tryMergeOnPath(SymbolExprManager exprManager) {
         var workList = new LinkedList<>(allPaths);
+        var remove = new HashSet<TypeRelationGraph.TypeRelationEdge>();
+        var needRebuild = false;
 
         while (!workList.isEmpty()) {
             var path = workList.poll();
             Logging.info("TypeRelationPathManager", "============================================== start ==============================================\n");
             Logging.info("TypeRelationPathManager", String.format("Try merge by path: %s", path));
-            var hasConflict = path.tryMergeOnPath(exprManager);
+            var success = path.tryMergeOnPath(exprManager);
             // If Conflict occurs when merging TypeConstraints on path, we just mark all nodes in this path as evil nodes
-            if (hasConflict.isPresent()) {
-                path.hasConflict = true;
-                removedEdges.addAll(path.edges);
+            if (!success) {
+                remove.addAll(path.evilEdges);
+                needRebuild = true;
             }
             Logging.info("TypeRelationPathManager", "============================================== end ==============================================\n");
         }
 
+        if (needRebuild) {
+            for (var edge: remove) {
+                graph.getGraph().removeEdge(edge);
+            }
+
+            // IMPORTANT: Rebuild the graph
+            build();
+        }
+
+        for (var path: allPaths) {
+            var success = path.tryMergeOnPath(exprManager);
+            if (!success) {
+                path.hasConflict = true;
+                Logging.error("TypeRelationPathManager", String.format("UnExpected Conflict when merging on Paths\n: %s", path));
+            }
+        }
 
         // Post handle
         for (var path: allPaths) {
@@ -351,11 +377,11 @@ public class TypeRelationPathManager<T> {
                     }
                 }
 
-                removedEdges.add(edge);
+                mayRemove.add(edge);
                 Logging.info("TypeRelationPathManager", String.format("Mark Edge to remove in TypeRelationGraph: %s ---> %s", src, dst));
             }
         }
-        return removedEdges;
+        return mayRemove;
     }
 
 
