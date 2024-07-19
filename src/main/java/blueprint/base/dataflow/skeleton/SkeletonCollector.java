@@ -149,7 +149,7 @@ public class SkeletonCollector {
 
                 var ptrEESkt = skt.ptrReference.get(offset).iterator().next();
                 var ptrLevel = 1;
-                while (ptrEESkt.isMultiLevel()) {
+                while (ptrEESkt.isMultiLevelPtr()) {
                     ptrLevel++;
                     ptrEESkt = ptrEESkt.ptrReference.get(0L).iterator().next();
                 }
@@ -281,7 +281,7 @@ public class SkeletonCollector {
                             mergedRes = Skeleton.mergeSkeletons(skt1, skt2, false);
                         } else if (skt1.hasMultiConstraints || skt2.hasMultiConstraints) {
                             Logging.warn("SkeletonCollector", "one has multi constraints");
-                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, true);
+                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, false);
                         } else {
                             Logging.warn("SkeletonCollector", "none has multi constraints");
                             mergedRes = Skeleton.mergeSkeletons(skt1, skt2, true);

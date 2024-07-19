@@ -39,6 +39,7 @@ public class Generator {
     public void explore() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.isMultiLevelPtr()) continue;
             Logging.info("Generator", " ------------------------------- Start --------------------------------- ");
             if (skt.hasMultiConstraints) {
                 Logging.info("Generator", String.format("Exploring %s : C > 1, = %d", skt, skt.constraints.size()));

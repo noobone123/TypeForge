@@ -61,7 +61,7 @@ public class Skeleton {
         ptrReference.computeIfAbsent(ptr, k -> new HashSet<>()).add(skt);
     }
 
-    public boolean isMultiLevel() {
+    public boolean isMultiLevelPtr() {
         if (constraints.size() > 1) { return false; }
         var constraint = constraints.iterator().next();
         if (constraint.fieldAccess.size() != 1) { return false; }

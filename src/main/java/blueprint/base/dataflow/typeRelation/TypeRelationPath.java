@@ -39,16 +39,6 @@ public class TypeRelationPath<T> {
         this.evilEdges = new HashSet<>();
     }
 
-    public TypeRelationPath(List<T> nodes, List<TypeRelationGraph.TypeRelationEdge> edges) {
-        this.nodes = nodes;
-        this.edges = edges;
-        this.forwardMergedConstraints = new ArrayList<>();
-        this.backwardMergedConstraints = new ArrayList<>();
-
-        this.start = nodes.get(0);
-        this.end = nodes.get(nodes.size() - 1);
-    }
-
     public boolean tryMergeOnPath(SymbolExprManager exprManager) {
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get(i);
@@ -174,7 +164,7 @@ public class TypeRelationPath<T> {
         return Optional.empty();
     }
 
-    // TODO: Evil Edges is hard to find correctly
+    // TODO: Evil Edges is hard to find accurately, need to be improved
     public void findEvilEdges(int rightBoundIndex, int leftBoundIndex) {
         if (leftBoundIndex == -1) {
             Logging.warn("TypeAliasPath", "Cannot find leftBoundIndex when finding evil edges");
@@ -204,6 +194,21 @@ public class TypeRelationPath<T> {
         for (var edge: evilEdges) {
             Logging.info("TypeAliasPath", String.format("Found Evil Edge: %s", edge));
         }
+    }
+
+
+    public Set<TypeRelationGraph.TypeRelationEdge> getConnectedEdges(T node) {
+        var result = new HashSet<TypeRelationGraph.TypeRelationEdge>();
+        var nodeIdx = nodes.indexOf(node);
+        if (nodeIdx != -1) {
+            if (nodeIdx > 0) {
+                result.add(edges.get(nodeIdx - 1));
+            }
+            if (nodeIdx < nodes.size() - 1) {
+                result.add(edges.get(nodeIdx));
+            }
+        }
+        return result;
     }
 
     public void createSubPathsOfLength(int length) {

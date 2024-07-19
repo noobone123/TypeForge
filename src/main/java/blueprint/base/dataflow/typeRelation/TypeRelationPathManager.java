@@ -234,17 +234,19 @@ public class TypeRelationPathManager<T> {
                             }
 
                             /* heuristic rules to find more keep edges */
+                            /* DEPRECATED Feature
                             var mostCommonLayout = layoutToConstraints.keySet().iterator().next();
-                            if (((double) layoutToConstraints.get(mostCommonLayout).size() / constraints.size() > 0.6) && constraints.size() > 10) {
+                            if (((double) layoutToConstraints.get(mostCommonLayout).size() / constraints.size() > 0.7) && constraints.size() > 10) {
                                 Logging.info("TypeRelationPathManager", "Most common layout is more than 70%, adding excluded paths ...");
                                 var layoutConstraints = layoutToConstraints.get(mostCommonLayout);
                                 for (var con: layoutConstraints) {
                                     for (var path: constraintToPaths.get(con)) {
-                                        // TODO: add all edges in path to keepEdges or Only add edges connected to conflict node?
-                                        keepEdges.addAll(path.edges);
+                                        // TODO: will this cause incorrect result?
+                                        keepEdges.addAll(path.getConnectedEdges(node));
                                     }
                                 }
                             }
+                            */
                         }
                     }
                 }
