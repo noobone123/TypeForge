@@ -7,7 +7,6 @@ import blueprint.utils.*;
 
 import ghidra.program.model.address.Address;
 
-import java.io.File;
 import java.util.*;
 
 public class InterSolver {
@@ -56,7 +55,8 @@ public class InterSolver {
 
         ctx.collectSkeletons();
 
-        var generator = new Generator(ctx);
+        var generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
+        generator.explore();
     }
 
     public void checkCallSitesInconsistency() {

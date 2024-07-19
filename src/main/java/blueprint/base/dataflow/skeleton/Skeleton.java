@@ -17,10 +17,12 @@ public class Skeleton {
 
     public Set<TypeConstraint> constraints = new HashSet<>();
     public Set<SymbolExpr> exprs = new HashSet<>();
+    public Set<SymbolExpr> variables = new HashSet<>();
     public boolean hasMultiConstraints = false;
 
     public Map<Long, Set<Skeleton>> ptrReference = new HashMap<>();
     public Map<Long, Integer> ptrLevel = new HashMap<>();
+    public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
 
     public Set<DataType> derivedTypes;
 
@@ -72,6 +74,20 @@ public class Skeleton {
         if (ptrReference.get(0L) == null) { return false; }
         return true;
     }
+
+    public Set<SymbolExpr> getVariables() {
+        if (!variables.isEmpty()) {
+            return variables;
+        }
+
+        for (var expr: exprs) {
+            if (expr.isVariable()) {
+                variables.add(expr);
+            }
+        }
+        return variables;
+    }
+
 
     @Override
     public int hashCode() {

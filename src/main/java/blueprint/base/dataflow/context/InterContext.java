@@ -5,7 +5,6 @@ import blueprint.base.dataflow.SymbolExpr.ParsedExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
-import blueprint.base.dataflow.types.PrimitiveTypeDescriptor;
 import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.base.dataflow.typeRelation.TypeRelationManager;
 import blueprint.base.graph.CallGraph;
@@ -35,6 +34,7 @@ public class InterContext {
     public TypeRelationManager<SymbolExpr> typeRelationManager;
     public Set<SymbolExpr> fieldExprCandidates;
     public SymbolExprManager symExprManager;
+    public SkeletonCollector skeletonCollector;
 
     public InterContext(CallGraph cg) {
         this.callGraph = cg;
@@ -45,6 +45,7 @@ public class InterContext {
         this.typeRelationManager = new TypeRelationManager<>();
         this.fieldExprCandidates = new HashSet<>();
         this.symExprManager = new SymbolExprManager(this);
+        this.skeletonCollector = new SkeletonCollector(symExprManager);
     }
 
     public void createIntraContext(FunctionNode funcNode) {
@@ -74,25 +75,6 @@ public class InterContext {
         typeRelationManager.addEdge(from, to, edgeType);
     }
 
-    public boolean addMemoryAliasRelation(SymbolExpr from, SymbolExpr to) {
-        if (from.equals(to)) {
-            return false;
-        }
-        // If there is already an existing edge between from and to, we don't need to add a new one.
-        if (typeRelationManager.hasEdge(from, to)) {
-            Logging.debug("InterContext", String.format("There is already an existing edge between %s and %s", from, to));
-            return false;
-        }
-        if (isMergedVariableExpr(from) || isMergedVariableExpr(to)) {
-            Logging.info("InterContext", String.format("Skip adding type alias relation between merged variables: %s and %s", from, to));
-            return false;
-        }
-
-        typeRelationManager.addEdge(from, to, TypeRelationGraph.EdgeType.MEMALIAS);
-        return true;
-    }
-
-
     /**
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
@@ -103,16 +85,13 @@ public class InterContext {
             buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
-        var skeletonCollectior = new SkeletonCollector(symExprManager);
-        buildSkeletons(skeletonCollectior);
+        buildSkeletons(skeletonCollector);
 
-        skeletonCollectior.mergeSkeletons();
-        skeletonCollectior.handleTypeAlias();
-        skeletonCollectior.handlePtrReference();
-
-//        handleExprWithAttributions();
-//        // Remove meaningLess constraints
-//        removeRedundantConstraints();
+        skeletonCollector.mergeSkeletons();
+        skeletonCollector.handleTypeAlias();
+        skeletonCollector.handlePtrReference();
+        skeletonCollector.handleNesting(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT));
+        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
 
 
@@ -189,44 +168,6 @@ public class InterContext {
         }
     }
 
-//    /**
-//     * Handle the SymbolExpressions with some special attributes. Like Argument, CodePTR, ...
-//     */
-//    private void handleExprWithAttributions() {
-//        for (var expr: symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT)) {
-//            if (symExprManager.getConstraint(expr) == null || !symExprManager.getConstraint(expr).isInterested()) {
-//                continue;
-//            }
-//
-//            // If there is a base + offset Expression as an argument, we should update the nested constraint
-//            if (expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
-//                var base = expr.getBase();
-//                var offset = expr.getOffset().getConstant();
-//                var nestedConstraint = symExprManager.getConstraint(expr);
-//                updateNestedConstraint(symExprManager.getConstraint(base), offset, nestedConstraint);
-//                Logging.info("Context", String.format("There may exist a nested constraint in %s: offset 0x%x", expr, offset));
-//            }
-//        }
-//
-//        // Handle the CodePTR
-//        for (var expr: symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR)) {
-//            if (expr.isDereference()) {
-//                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
-//                if (parsed.isEmpty()) { return; }
-//                var base = parsed.get().base;
-//                var offset = parsed.get().offsetValue;
-//                var constraint = symExprManager.getConstraint(base);
-//                constraint.addFieldAttr(offset, TypeConstraint.Attribute.CODE_PTR);
-//            }
-//        }
-//    }
-
-//    private void updateNestedConstraint(TypeConstraint nester, long offsetValue, TypeConstraint nestee) {
-//        nester.addNestTo(offsetValue, nestee);
-//        nestee.addNestedBy(nester, offsetValue);
-//        nester.addFieldAttr(offsetValue, TypeConstraint.Attribute.MAY_NESTED);
-//    }
-
     private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, SymbolExpr fieldExpr) {
         var fieldAPs = APs.getFieldAccessPoints(fieldExpr);
         baseConstraint.addFieldExpr(offsetValue, fieldExpr);
@@ -245,23 +186,6 @@ public class InterContext {
         else {
             return funcNode.mergedVariables.contains(rootSym);
         }
-    }
-
-    private boolean checkOffsetSize(TypeConstraint constraint, long offset, int wantedSize) {
-        boolean result = true;
-        for (var access: constraint.fieldAccess.get(offset)) {
-            if (access.dataType instanceof PrimitiveTypeDescriptor primDataType) {
-                if (primDataType.getDataTypeSize() != wantedSize) {
-                    result = false;
-                    break;
-                }
-            }
-        }
-        return result;
-    }
-
-    public AccessPoints getAccessPoints() {
-        return APs;
     }
 
     public boolean isFunctionSolved(FunctionNode funcNode) {

@@ -13,7 +13,7 @@ public class SkeletonCollector {
     /* Map[SymbolExpr, Set[Skeleton]]: this is temp data structure before handling skeletons */
     private final Map<SymbolExpr, Set<Skeleton>> exprToSkeletons_T;
     /* Map[SymbolExpr, Skeleton]: this is final data structure, very important */
-    private final Map<SymbolExpr, Skeleton> exprToSkeletonMap;
+    public final Map<SymbolExpr, Skeleton> exprToSkeletonMap;
 
     /* SymbolExprs that have multiple skeletons */
     private final Set<SymbolExpr> multiSkeletonExprs;
@@ -161,9 +161,9 @@ public class SkeletonCollector {
 
                     /* For debug */
                     if (skt.hasMultiConstraints) {
-                        Logging.info("SkeletonCollector", "Referencer has multi constraints");
+                        Logging.info("SkeletonCollector", "Referencer C > 1");
                     } else {
-                        Logging.info("SkeletonCollector", "Referencer has single constraints");
+                        Logging.info("SkeletonCollector", "Referencer C = 1");
                     }
                     Logging.info("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
                     Logging.info("SkeletonCollector", skt.exprs.toString());
@@ -193,7 +193,60 @@ public class SkeletonCollector {
         }
     }
 
-    public void parseAndSetTypeAlias(SymbolExpr expr, UnionFind<SymbolExpr> aliasMap) {
+    /**
+     * Handle May Nesting Relationships between Skeletons
+     * @param exprsAsArgument SymbolExpr that used as arguments in callSite.
+     */
+    public void handleNesting(Set<SymbolExpr> exprsAsArgument) {
+        for (var expr: exprsAsArgument) {
+            if (!exprToSkeletonMap.containsKey(expr)) continue;
+            /* If expr is a SymbolExpr like `base + offset`, we seem it as a may nested expr */
+            if (expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
+                var base = expr.getBase();
+                var offset = expr.getOffset().getConstant();
+                if (exprToSkeletonMap.containsKey(base)) {
+                    var baseSkt = exprToSkeletonMap.get(base);
+                    baseSkt.mayNestedSkeleton.computeIfAbsent(offset, k -> new HashSet<>())
+                            .add(exprToSkeletonMap.get(expr));
+                }
+            }
+        }
+
+        /* For Debugging */
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            for (var entry: skt.mayNestedSkeleton.entrySet()) {
+                var offset = entry.getKey();
+                var nestedSkts = entry.getValue();
+                Logging.info("SkeletonCollector", String.format("%s has May Nested Skeletons at 0x%s: %s", skt, Long.toHexString(offset), nestedSkts));
+                if (!skt.hasMultiConstraints) {
+                    Logging.info("SkeletonCollector", "Nester: C > 1");
+                } else {
+                    Logging.info("SkeletonCollector", "Nester: C = 1");
+                }
+                Logging.info("SkeletonCollector", skt.exprs.toString());
+                Logging.info("SkeletonCollector", skt.constraints.iterator().next().dumpLayout(0));
+                for (var nestedSkt: nestedSkts) {
+                    Logging.info("SkeletonCollector", nestedSkt.exprs.toString());
+                    Logging.info("SkeletonCollector", nestedSkt.constraints.iterator().next().dumpLayout(0));
+                }
+            }
+        }
+    }
+
+
+    public void handleCodePtr(Set<SymbolExpr> exprsAsCodePtr) {
+        for (var expr: exprsAsCodePtr) {
+            if (expr.isDereference()) {
+                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
+                if (parsed.isEmpty()) { return; }
+                var base = parsed.get().base;
+                var offset = parsed.get().offsetValue;
+                // TODO: add attr to skeleton?
+            }
+        }
+    }
+
+    private void parseAndSetTypeAlias(SymbolExpr expr, UnionFind<SymbolExpr> aliasMap) {
         var parsed = ParsedExpr.parseFieldAccessExpr(expr);
         if (parsed.isEmpty()) { return; }
         var parsedExpr = parsed.get();

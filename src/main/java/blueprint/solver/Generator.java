@@ -1,16 +1,11 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
+import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.base.dataflow.skeleton.TypeConstraint;
-import blueprint.base.dataflow.context.InterContext;
 import blueprint.utils.Logging;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import ghidra.program.model.listing.Function;
-import ghidra.program.model.pcode.HighSymbol;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.*;
 
 /**
@@ -32,56 +27,38 @@ import java.util.*;
  * Finally, We take the pseudo code and Calculate the score for them, and find the best one as the final Structure Type
  */
 public class Generator {
-    // TODO: add decompiler inferred data type into polymorphic data type.
-    public InterContext solverCtx;
-    public final Map<Function, Map<HighSymbol, TypeConstraint>> funcConstraintMap = new HashMap<>();
-    public final Map<HighSymbol, TypeConstraint> globalConstraintMap = new HashMap<>();
-
-    public final Map<SymbolExpr, TypeConstraint> exprToConstraint;
-    public final Map<HighSymbol, TypeConstraint> builtConstraints = new HashMap<>();
+    public SkeletonCollector skeletonCollector;
+    public SymbolExprManager exprManager;
 
 
-    public Generator(InterContext solverCtx) {
-        this.solverCtx = solverCtx;
-        this.exprToConstraint = new HashMap<>(solverCtx.symExprManager.getExprToConstraintMap());
-        buildConstraintMap();
-
-        for (var entry: exprToConstraint.entrySet()) {
-            buildSkeleton(entry.getKey(), entry.getValue());
-        }
+    public Generator(SkeletonCollector skeletonCollector, SymbolExprManager exprManager) {
+        this.skeletonCollector = skeletonCollector;
+        this.exprManager = exprManager;
     }
 
-    public void buildConstraintMap() {
-        for (var entry : exprToConstraint.entrySet()) {
-            var expr = entry.getKey();
-            if (expr.isVariable()) {
-                var highSym = expr.getRootHighSymbol();
-                if (highSym.isGlobal()) {
-                    globalConstraintMap.put(highSym, entry.getValue());
-                } else {
-                    var func = highSym.getHighFunction().getFunction();
-                    funcConstraintMap.computeIfAbsent(func, k -> new HashMap<>());
-                    funcConstraintMap.get(func).put(highSym, entry.getValue());
-                }
+    public void explore() {
+        var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            Logging.info("Generator", " ------------------------------- Start --------------------------------- ");
+            if (skt.hasMultiConstraints) {
+                Logging.info("Generator", String.format("Exploring %s : C > 1, = %d", skt, skt.constraints.size()));
+            } else {
+                Logging.info("Generator", String.format("Exploring %s : C = 1", skt));
             }
+            Logging.info("Generator", "Associated Exprs Count: " + skt.exprs.size());
+            Logging.info("Generator", "All Exprs: " + skt.exprs);
+            Logging.info("Generator", "Associated Variables Count: " + skt.getVariables().size());
+            Logging.info("Generator", "All Variables: " + skt.getVariables());
+
+            for (var con: skt.constraints) {
+                Logging.info("Generator", "Constraint:\n " + con);
+                Logging.info("Generator", con.dumpLayout(0));
+            }
+            Logging.info("Generator", " ------------------------------- End --------------------------------- ");
         }
     }
 
-//    public void buildSkeletonOfVariable() {
-//        var funcNode = solverCtx.callGraph.getNodebyAddr(FunctionHelper.getAddress(0x001492c8));
-//        var highSymbol = funcNode.getHighSymbolbyName("param_1");
-//
-//        var constraint = funcConstraintMap.get(funcNode.value).get(highSymbol);
-//        if (constraint != null) {
-//            Logging.info("Generator", String.format("Building Skeleton for Function %s -> %s",
-//                                funcNode.value.getName(), highSymbol.getName()));
-//            buildSkeleton();
-//        } else {
-//            Logging.error("Generator", String.format("No Constraint found for Function %s -> %s",
-//                                funcNode.value.getName(), highSymbol.getName()));
-//        }
-//    }
-//
+
     public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
         constraint.accessOffsets.forEach((ap, offsets) -> {
             if (offsets.size() > 1) {

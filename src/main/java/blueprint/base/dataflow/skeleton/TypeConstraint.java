@@ -10,6 +10,7 @@ import java.util.*;
 import blueprint.utils.TCHelper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import ghidra.program.model.data.DataType;
 
 public class TypeConstraint {
 
@@ -250,10 +251,18 @@ public class TypeConstraint {
         sb.append(prefixTab).append("Constraint_").append(shortUUID).append(":\n");
         sb.append(prefixTab).append("PolyTypes: ").append(polymorphicTypes).append("\n");
         fieldAccess.forEach((offset, aps) -> {
+            /* Group the aps into Map[dataType, accessCount] */
+            Map<DataType, Integer> apCount = new HashMap<>();
+            aps.forEach(ap -> {
+                apCount.putIfAbsent(ap.dataType, 0);
+                apCount.put(ap.dataType, apCount.get(ap.dataType) + 1);
+            });
             sb.append(prefixTab).append("\t");
             sb.append(String.format("0x%x: ", offset));
             sb.append("\t");
-            aps.forEach(ap -> sb.append(ap.dataType.getName()).append(", "));
+            apCount.forEach((dataType, count) -> {
+                sb.append(String.format("%s(%d) ", dataType.getName(), count));
+            });
             sb.append("\n");
         });
         return sb.toString();
