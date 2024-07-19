@@ -244,6 +244,14 @@ public class TypeConstraint {
         return polymorphicTypes;
     }
 
+    public int getAllFieldsAccessCount() {
+        int count = 0;
+        for (var aps: fieldAccess.values()) {
+            count += aps.size();
+        }
+        return count;
+    }
+
     /** Dump current TypeConstraint's layout */
     public String dumpLayout(int prefixTabCnt) {
         StringBuilder sb = new StringBuilder();

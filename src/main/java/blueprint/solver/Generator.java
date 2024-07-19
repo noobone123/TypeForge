@@ -50,11 +50,9 @@ public class Generator {
             Logging.info("Generator", "All Exprs: " + skt.exprs);
             Logging.info("Generator", "Associated Variables Count: " + skt.getVariables().size());
             Logging.info("Generator", "All Variables: " + skt.getVariables());
+            Logging.info("Generator", "Constraint:\n " + skt.finalConstraint);
+            Logging.info("Generator", skt.finalConstraint.dumpLayout(0));
 
-            for (var con: skt.constraints) {
-                Logging.info("Generator", "Constraint:\n " + con);
-                Logging.info("Generator", con.dumpLayout(0));
-            }
             Logging.info("Generator", " ------------------------------- End --------------------------------- ");
         }
     }

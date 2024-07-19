@@ -57,6 +57,8 @@ public class InterSolver {
 
         var generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
         generator.explore();
+        // TODO: add decompiler inferred types into polymorphic types
+        // TODO: add evil nodes into Skeleton
     }
 
     public void checkCallSitesInconsistency() {

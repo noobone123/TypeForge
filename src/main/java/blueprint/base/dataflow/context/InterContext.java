@@ -88,7 +88,9 @@ public class InterContext {
         buildSkeletons(skeletonCollector);
 
         skeletonCollector.mergeSkeletons();
+        /* Important: handle Type Alias first, then handle Final Constraint. Due to Type Alias may have a negative impact on soundness */
         skeletonCollector.handleTypeAlias();
+        skeletonCollector.handleFinalConstraint();
         skeletonCollector.handlePtrReference();
         skeletonCollector.handleNesting(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT));
         // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));

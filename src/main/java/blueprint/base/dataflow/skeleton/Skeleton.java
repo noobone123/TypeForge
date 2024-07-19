@@ -16,6 +16,7 @@ public class Skeleton {
     public final String shortUUID = java.util.UUID.randomUUID().toString().substring(0, 8);
 
     public Set<TypeConstraint> constraints = new HashSet<>();
+    public TypeConstraint finalConstraint;
     public Set<SymbolExpr> exprs = new HashSet<>();
     public Set<SymbolExpr> variables = new HashSet<>();
     public boolean hasMultiConstraints = false;

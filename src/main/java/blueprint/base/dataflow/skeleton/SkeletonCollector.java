@@ -93,6 +93,7 @@ public class SkeletonCollector {
             }
         }
 
+        var SkeletonsToRemove = new HashSet<Skeleton>();
         // Checking Consistency
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             for (var e: skt.exprs) {
@@ -113,9 +114,57 @@ public class SkeletonCollector {
                     Logging.info("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
                 }
             }
+
+            /* Remove Redundant Constraints */
+            boolean emptySkeleton = true;
+            for (var constraint: skt.constraints) {
+                if (!constraint.isEmpty()) {
+                    emptySkeleton = false;
+                    break;
+                }
+            }
+            if (emptySkeleton) {
+                Logging.info("SkeletonCollector", String.format("Empty Skeleton Detected: %s", skt));
+                SkeletonsToRemove.add(skt);
+            }
+        }
+
+        for (var skt: SkeletonsToRemove) {
+            skeletons.remove(skt);
+            for (var expr: skt.exprs) {
+                exprToSkeletonMap.remove(expr);
+            }
         }
     }
 
+    /**
+     * For Skeletons with multiple constraints, we choose the most visited one as the final constraint.
+     */
+    public void handleFinalConstraint() {
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (!skt.hasMultiConstraints) {
+                skt.finalConstraint = skt.constraints.iterator().next();
+            };
+
+            int maxVisit = 0;
+            TypeConstraint maxVisitConstraint = null;
+            for (var con: skt.constraints) {
+                var curVisit = con.getAllFieldsAccessCount();
+                if (curVisit > maxVisit) {
+                    maxVisit = curVisit;
+                    maxVisitConstraint = con;
+                }
+            }
+
+            // TODO: should we merge Skeletons with same finalConstraint ?
+            if (maxVisitConstraint != null) {
+                skt.hasMultiConstraints = false;
+                skt.finalConstraint = maxVisitConstraint;
+                Logging.info("SkeletonCollector", String.format("%s:\n%s", skt, skt.exprs));
+                Logging.info("SkeletonCollector", String.format("Choose the most visited constraint:\n%s", maxVisitConstraint.dumpLayout(0)));
+            }
+        }
+    }
 
     /**
      * Build Relationships introduced by Struct Pointer Reference
@@ -160,16 +209,11 @@ public class SkeletonCollector {
                     skt.ptrReference.put(offset, Set.of(ptrEESkt));
 
                     /* For debug */
-                    if (skt.hasMultiConstraints) {
-                        Logging.info("SkeletonCollector", "Referencer C > 1");
-                    } else {
-                        Logging.info("SkeletonCollector", "Referencer C = 1");
-                    }
                     Logging.info("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
                     Logging.info("SkeletonCollector", skt.exprs.toString());
-                    Logging.info("SkeletonCollector", skt.constraints.iterator().next().dumpLayout(0));
+                    Logging.info("SkeletonCollector", skt.finalConstraint.dumpLayout(0));
                     Logging.info("SkeletonCollector", ptrEESkt.exprs.toString());
-                    Logging.info("SkeletonCollector", ptrEESkt.constraints.iterator().next().dumpLayout(0));
+                    Logging.info("SkeletonCollector", ptrEESkt.finalConstraint.dumpLayout(0));
                 }
             }
         }
@@ -218,16 +262,11 @@ public class SkeletonCollector {
                 var offset = entry.getKey();
                 var nestedSkts = entry.getValue();
                 Logging.info("SkeletonCollector", String.format("%s has May Nested Skeletons at 0x%s: %s", skt, Long.toHexString(offset), nestedSkts));
-                if (!skt.hasMultiConstraints) {
-                    Logging.info("SkeletonCollector", "Nester: C > 1");
-                } else {
-                    Logging.info("SkeletonCollector", "Nester: C = 1");
-                }
                 Logging.info("SkeletonCollector", skt.exprs.toString());
-                Logging.info("SkeletonCollector", skt.constraints.iterator().next().dumpLayout(0));
+                Logging.info("SkeletonCollector", skt.finalConstraint.dumpLayout(0));
                 for (var nestedSkt: nestedSkts) {
                     Logging.info("SkeletonCollector", nestedSkt.exprs.toString());
-                    Logging.info("SkeletonCollector", nestedSkt.constraints.iterator().next().dumpLayout(0));
+                    Logging.info("SkeletonCollector", nestedSkt.finalConstraint.dumpLayout(0));
                 }
             }
         }
@@ -274,8 +313,9 @@ public class SkeletonCollector {
                     if (skt1 != skt2) {
                         aliasMap.union(e, expr);
                         Logging.info("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
-                        Optional<Skeleton> mergedRes = null;
+                        Optional<Skeleton> mergedRes;
                         Skeleton newSkeleton = null;
+
                         if (skt1.hasMultiConstraints && skt2.hasMultiConstraints) {
                             Logging.warn("SkeletonCollector", "all have multi constraints");
                             mergedRes = Skeleton.mergeSkeletons(skt1, skt2, false);
