@@ -158,7 +158,18 @@ public class SkeletonCollector {
                     Logging.info("SkeletonCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
                     skt.ptrLevel.put(offset, ptrLevel);
                     skt.ptrReference.put(offset, Set.of(ptrEESkt));
-                    // TODO: check correctness
+
+                    /* For debug */
+                    if (skt.hasMultiConstraints) {
+                        Logging.info("SkeletonCollector", "Referencer has multi constraints");
+                    } else {
+                        Logging.info("SkeletonCollector", "Referencer has single constraints");
+                    }
+                    Logging.info("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
+                    Logging.info("SkeletonCollector", skt.exprs.toString());
+                    Logging.info("SkeletonCollector", skt.constraints.iterator().next().dumpLayout(0));
+                    Logging.info("SkeletonCollector", ptrEESkt.exprs.toString());
+                    Logging.info("SkeletonCollector", ptrEESkt.constraints.iterator().next().dumpLayout(0));
                 }
             }
         }
