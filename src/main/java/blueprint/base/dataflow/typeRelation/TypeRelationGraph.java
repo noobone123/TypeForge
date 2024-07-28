@@ -32,6 +32,23 @@ public class TypeRelationGraph<T> {
         }
 
         @Override
+        public int hashCode() {
+            return Objects.hash(this.getSource(), this.getTarget(), type);
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (obj == null || getClass() != obj.getClass()) {
+                return false;
+            }
+            TypeRelationEdge other = (TypeRelationEdge) obj;
+            return this.getSource().equals(other.getSource()) && this.getTarget().equals(other.getTarget()) && this.type == other.type;
+        }
+
+        @Override
         public String toString() {
             var source = this.getSource();
             var target = this.getTarget();

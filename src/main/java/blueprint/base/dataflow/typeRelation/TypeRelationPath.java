@@ -15,7 +15,7 @@ public class TypeRelationPath<T> {
     public List<TypeConstraint> forwardMergedConstraints;
     public List<TypeConstraint> backwardMergedConstraints;
     public TypeConstraint finalConstraint = null;
-    public boolean hasConflict = false;
+    public boolean evil = false;
     public boolean noComposite = false;
     public T start;
     public T end;
@@ -30,6 +30,18 @@ public class TypeRelationPath<T> {
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
+
+        this.forwardMergedConstraints = new ArrayList<>();
+        this.backwardMergedConstraints = new ArrayList<>();
+
+        this.start = nodes.get(0);
+        this.end = nodes.get(nodes.size() - 1);
+        this.evilEdges = new HashSet<>();
+    }
+
+    public TypeRelationPath(List<T> nodes, List<TypeRelationGraph.TypeRelationEdge> edges) {
+        this.nodes = nodes;
+        this.edges = edges;
 
         this.forwardMergedConstraints = new ArrayList<>();
         this.backwardMergedConstraints = new ArrayList<>();
@@ -91,10 +103,12 @@ public class TypeRelationPath<T> {
                     }
                     else {
                         Logging.warn("TypeAliasPath", String.format("Conflict when forward merging TypeConstraints on path for %s", curExpr));
+                        /* Deprecated Features: Find Evil Edges
                         var rightBoundIndex = i;
                         var leftBoundIndex = tryMergeBackward(exprManager).orElse(-1);
-                        /* Find evil edges via forwardMergedConstraints and backwardMergedConstraint */
+                        // Find evil edges via forwardMergedConstraints and backwardMergedConstraint
                         findEvilEdges(rightBoundIndex, leftBoundIndex);
+                        */
                         return false;
                     }
                 }
@@ -235,6 +249,24 @@ public class TypeRelationPath<T> {
         return hash;
     }
 
+    @Override
+    public int hashCode() {
+        return edges.hashCode();
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || getClass() != obj.getClass()) {
+            return false;
+        }
+        TypeRelationPath<?> other = (TypeRelationPath<?>) obj;
+        return this.hashCode() == other.hashCode();
+    }
+
+    @Override
     public String toString() {
         StringBuilder builder = new StringBuilder();
         builder.append(String.format("Path-%s: ", shortUUID));

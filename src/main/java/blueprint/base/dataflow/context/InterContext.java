@@ -109,8 +109,9 @@ public class InterContext {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
                 graph.pathManager.tryMergeOnPath(symExprManager);
-                graph.pathManager.tryMergePathsFromSameSource();
-                var removeEdges = graph.pathManager.handleConflictNodes();
+                graph.pathManager.tryMergePathsFromSameSource(symExprManager);
+                graph.pathManager.tryHandleConflictNodes();
+                var removeEdges = graph.pathManager.getEdgesToRemove();
                 for (var edge: removeEdges) {
                     graph.getGraph().removeEdge(edge);
                 }

@@ -19,24 +19,22 @@ public class TypeRelationPathManager<T> {
     public final Set<T> source;
     public final Set<T> sink;
 
-    public final Set<TypeRelationPath<T>> allPaths;
     public final Map<T, Set<TypeRelationPath<T>>> nodeToPathsMap;
-    public final Map<T, Map<T, Set<TypeRelationPath<T>>>> srcSinkToPathsMap;
+    public final Map<T, Set<TypeRelationPath<T>>> srcToPathsMap;
 
     public final Map<T, Set<TypeConstraint>> nodeToConstraints;
-    public final Map<TypeConstraint, Set<TypeRelationPath<T>>> constraintToPaths = new HashMap<>();
 
-    /** fields for conflict nodes */
-    public final Set<T> evilNodes = new HashSet<>();  /** EvilNodes are nodes that may cause type ambiguity */
-    public final Map<T, TypeRelationPath<T>> evilNodeToPath = new HashMap<>();
+    /** fields for handle conflict paths and nodes */
+    public final Set<TypeRelationPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
+    public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
 
     /** fields for handle edges that introduce conflicts */
     public final Set<TypeRelationGraph.TypeRelationEdge> mustRemove = new HashSet<>();
     public final Set<TypeRelationGraph.TypeRelationEdge> mayRemove = new HashSet<>();
     public final Set<TypeRelationGraph.TypeRelationEdge> keepEdges = new HashSet<>();
 
-
-    /** If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
+    /** Fields for build skeletons, not used for conflict checking
+     * If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
     public UnionFind<T> sourceGroups = new UnionFind<>();
     public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
     public final Map<T, TypeConstraint> sourceToConstraints = new HashMap<>();
@@ -45,18 +43,16 @@ public class TypeRelationPathManager<T> {
         this.graph = graph;
         this.source = new HashSet<>();
         this.sink = new HashSet<>();
-        this.allPaths = new HashSet<>();
         this.nodeToPathsMap = new HashMap<>();
-        this.srcSinkToPathsMap = new HashMap<>();
+        this.srcToPathsMap = new HashMap<>();
         this.nodeToConstraints = new HashMap<>();
     }
 
     public void build() {
         this.source.clear();
         this.sink.clear();
-        this.allPaths.clear();
         this.nodeToPathsMap.clear();
-        this.srcSinkToPathsMap.clear();
+        this.srcToPathsMap.clear();
         this.nodeToConstraints.clear();
 
         findSources();
@@ -70,8 +66,10 @@ public class TypeRelationPathManager<T> {
             findAllPathFromSrcToSink();
         }
 
-        for (var path: allPaths) {
-            updateNodeToPathsMap(path);
+        for (var src: srcToPathsMap.keySet()) {
+            for (var path: srcToPathsMap.get(src)) {
+                updateNodeToPathsMap(path);
+            }
         }
     }
 
@@ -80,86 +78,102 @@ public class TypeRelationPathManager<T> {
      * IMPORTANT: This Function should be called after all Graph's pathManager built
      */
     public void tryMergeOnPath(SymbolExprManager exprManager) {
-        var workList = new LinkedList<>(allPaths);
-        var remove = new HashSet<TypeRelationGraph.TypeRelationEdge>();
-        var needRebuild = false;
-
-        while (!workList.isEmpty()) {
-            var path = workList.poll();
-            Logging.info("TypeRelationPathManager", "============================================== start ==============================================\n");
-            Logging.info("TypeRelationPathManager", String.format("Try merge by path: %s", path));
-            var success = path.tryMergeOnPath(exprManager);
-            // If Conflict occurs when merging TypeConstraints on path, we just mark all nodes in this path as evil nodes
-            if (!success) {
-                remove.addAll(path.evilEdges);
-                needRebuild = true;
-            }
-            Logging.info("TypeRelationPathManager", "============================================== end ==============================================\n");
-        }
-
-        if (needRebuild) {
-            for (var edge: remove) {
-                graph.getGraph().removeEdge(edge);
-            }
-
-            // IMPORTANT: Rebuild the graph
-            build();
-        }
-
-        for (var path: allPaths) {
-            var success = path.tryMergeOnPath(exprManager);
-            if (!success) {
-                path.hasConflict = true;
-                Logging.error("TypeRelationPathManager", String.format("UnExpected Conflict when merging on Paths\n: %s", path));
-            }
-        }
-
-        // Post handle
-        for (var path: allPaths) {
-            if (path.hasConflict) {
-                continue;
-            }
-            if (path.finalConstraint.isEmpty()) {
-                path.noComposite = true;
-            }
-            if (!path.noComposite && !path.hasConflict) {
-                constraintToPaths.computeIfAbsent(path.finalConstraint, k -> new HashSet<>()).add(path);
+        for (var src: srcToPathsMap.keySet()) {
+            for (var path: srcToPathsMap.get(src)) {
+                Logging.info("TypeRelationPathManager", "============================================== start ==============================================\n");
+                Logging.info("TypeRelationPathManager", String.format("Try merge by path: %s", path));
+                var success = path.tryMergeOnPath(exprManager);
+                if (!success) {
+                    evilPaths.add(path);
+                    path.evil = true;
+                    Logging.info("TypeRelationPathManager", String.format("Conflict found in path: \n%s", path));
+                } else {
+                    if (path.finalConstraint.isEmpty()) {
+                        path.noComposite = true;
+                    }
+                }
+                Logging.info("TypeRelationPathManager", "============================================== end ==============================================\n");
             }
         }
     }
 
     // Try merge paths from same source, them propagate TypeConstraints to each node start from this source
     // Because there may have some node with paths from different source, we then handle them in next step
-    public void tryMergePathsFromSameSource() {
-        for (var src: source) {
-            var mergedConstraints = new TypeConstraint();
-            var pathsFromSource = getAllValidPathsFromSource(src);
-            var hasConflict = false;
-            for (var path: pathsFromSource) {
-                var noConflict = mergedConstraints.tryMerge(path.finalConstraint);
-                if (!noConflict) {
-                    // If there has conflict when merging different paths from same source, we do not try to
-                    // merge them, and see these paths are from `different sources` and propagate TypeConstraints
-                    // to each node in their path.
-                    hasConflict = true;
-                    Logging.warn("TypeRelationPathManager", String.format("Paths from source %s has conflict when merging path's final Constraint", src));
-                    for (var p: pathsFromSource) {
-                        propagateConstraintOnPath(p.finalConstraint, p);
-                    }
+    public void tryMergePathsFromSameSource(SymbolExprManager exprManager) {
+        var workList = new LinkedList<T>(source);
+
+        while (!workList.isEmpty()) {
+            var src = workList.poll();
+            var mergedCon = new TypeConstraint();
+            var pathsFromSrc = getAllValidPathsFromSource(src);
+            if (pathsFromSrc.isEmpty()) {
+                Logging.warn("TypeRelationPathManager", String.format("No valid paths from source %s", src));
+                continue;
+            }
+
+            var success = true;
+            for (var path: pathsFromSrc) {
+                success = mergedCon.tryMerge(path.finalConstraint);
+                if (!success) {
                     break;
                 }
             }
 
-            if (!hasConflict) {
-                // If there has no conflict when merging different paths from same source, we propagate the merged Constraints
-                // to each node start from this source
-                Logging.info("TypeRelationPathManager", String.format("Paths from source %s has no conflict when merging path's final Constraint", src));
-                for (var path: pathsFromSource) {
-                    if (path.hasConflict || path.noComposite) {
+            // If there has conflict when merging different paths from same source, means there maybe wrapper function or some other reasons
+            // For soundness, we need to find the longest common subpath in these paths and remove edges
+            if (!success) {
+                Logging.info("TypeRelationPathManager", String.format("Evil source found: %s", src));
+                for (var path: pathsFromSrc) {
+                    Logging.info("TypeRelationPathManager", path.toString());
+                }
+
+                var LCSs = getLongestCommonSubpath(pathsFromSrc);
+                List<T> wrapperPath = new ArrayList<>();
+                for (var lcs: LCSs) {
+                    if (lcs.contains(src)) {
+                        wrapperPath = lcs;
+                    }
+                }
+                Logging.info("TypeRelationPathManager", String.format("Wrapper Path: %s", wrapperPath));
+                // TODO: mark endEdges of evil sources.
+                var endEdges = getEndEdgesOfLCS(wrapperPath, pathsFromSrc);
+                var lcsEdges = getEdgesInLCS(wrapperPath, pathsFromSrc);
+                /* wrapperPath's end edges mark must remove */
+                mustRemove.addAll(endEdges);
+                keepEdges.addAll(lcsEdges);
+                /* Split Paths from Source by end Edges, And Created New Paths */
+                var newPaths = splitPathsByLCS(pathsFromSrc, endEdges, exprManager);
+
+                /* update metadata using newPaths */
+                for (var path: pathsFromSrc) {
+                    source.remove(path.start);
+                    srcToPathsMap.remove(path.start);
+                    for (var node: path.nodes) {
+                        nodeToPathsMap.get(node).remove(path);
+                    }
+                }
+
+                var newSources = new HashSet<T>();
+                for (var path: newPaths) {
+                    newSources.add(path.start);
+                    source.add(path.start);
+                    srcToPathsMap.computeIfAbsent(path.start, k -> new HashSet<>()).add(path);
+                    for (var node: path.nodes) {
+                        nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
+                    }
+                }
+                workList.addAll(newSources);
+            }
+
+            // If there has no conflict when merging different paths from same source, we propagate the merged Constraints
+            // to each node start from this source
+            else {
+                Logging.info("TypeRelationPathManager", String.format("No Conflict when merging paths from same source: %s", src));
+                for (var path: pathsFromSrc) {
+                    if (path.evil || path.noComposite) {
                         continue;
                     }
-                    propagateConstraintOnPath(mergedConstraints, path);
-                    constraintToPaths.computeIfAbsent(mergedConstraints, k -> new HashSet<>()).add(path);
+                    propagateConstraintOnPath(mergedCon, path);
                 }
             }
         }
@@ -168,9 +182,8 @@ public class TypeRelationPathManager<T> {
     /**
      * If there has multiple TypeConstraints in one node, means there has TypeConstraints
      * from different sources, we should handle them and try to merge them.
-     * @return evil Edges to remove
      */
-    public Set<TypeRelationGraph.TypeRelationEdge> handleConflictNodes() {
+    public void tryHandleConflictNodes() {
         for (var node: nodeToConstraints.keySet()) {
             var constraints = nodeToConstraints.get(node);
             if (constraints.size() > 1) {
@@ -183,70 +196,37 @@ public class TypeRelationPathManager<T> {
                 if (layoutToConstraints.size() > 1) {
                     Logging.info("TypeRelationPathManager", String.format("Node has multiple Layouts: %s: %d", node, layoutToConstraints.size()));
 
-                    var noConflict = true;
+                    var success = true;
                     var mergedConstraints = new TypeConstraint();
                     for (var con: constraints) {
-                        noConflict = mergedConstraints.tryMerge(con);
-                        if (!noConflict) { break; }
+                        success = mergedConstraints.tryMerge(con);
+                        if (!success) { break; }
                     }
 
-                    if (!noConflict) {
+                    if (!success) {
+                        Logging.warn("TypeRelationPathManager", String.format("Evil nodes found: %s", node));
                         evilNodes.add(node);
-                        Logging.warn("TypeRelationPathManager", String.format("Conflict when merging TypeConstraints in node %s", node));
+
                         /* Start debugging */
                         for (var layout: layoutToConstraints.keySet()) {
                             Logging.info("TypeRelationPathManager", String.format("Layout count: %d", layoutToConstraints.get(layout).size()));
                             Logging.info("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
                         }
-
                         for (var path: nodeToPathsMap.get(node)) {
-                            if (path.hasConflict || path.noComposite) {
+                            if (path.evil || path.noComposite) {
                                 continue;
                             }
                             Logging.info("TypeRelationPathManager", path.toString());
                         }
                         /* End Debugging */
 
-                        // If Conflict Node in Sources, its may be a wrapper function
-                        if (source.contains(node)) {
-                            Logging.warn("TypeRelationPathManager", String.format("May Wrapper Function found: %s", node));
-                            var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
-                            List<T> wrapperPath = new ArrayList<>();
-                            for (var lcs: LCSs) {
-                                if (lcs.contains(node)) {
-                                    wrapperPath = lcs;
-                                }
-                            }
-                            var endEdges = getEndEdgesOfLCS(wrapperPath, nodeToPathsMap.get(node));
-                            var lcsEdges = getEdgesInLCS(wrapperPath, nodeToPathsMap.get(node));
-                            /* wrapperPath's end edges mark must remove */
-                            mustRemove.addAll(endEdges);
+                        /* Add all edges of current conflict node to mustRemove */
+                        mayRemove.addAll(graph.getGraph().edgesOf(node));
+                        /* If there has LCS in node's paths, we should keep edges in LCS */
+                        var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
+                        for (var lcs: LCSs) {
+                            var lcsEdges = getEdgesInLCS(lcs, nodeToPathsMap.get(node));
                             keepEdges.addAll(lcsEdges);
-                        }
-                        else {
-                            /* Add all edges of current conflict node to mustRemove */
-                            mayRemove.addAll(graph.getGraph().edgesOf(node));
-                            /* If there has LCS in node's paths, we should keep edges in LCS */
-                            var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
-                            for (var lcs: LCSs) {
-                                var lcsEdges = getEdgesInLCS(lcs, nodeToPathsMap.get(node));
-                                keepEdges.addAll(lcsEdges);
-                            }
-
-                            /* heuristic rules to find more keep edges */
-                            /* DEPRECATED Feature
-                            var mostCommonLayout = layoutToConstraints.keySet().iterator().next();
-                            if (((double) layoutToConstraints.get(mostCommonLayout).size() / constraints.size() > 0.7) && constraints.size() > 10) {
-                                Logging.info("TypeRelationPathManager", "Most common layout is more than 70%, adding excluded paths ...");
-                                var layoutConstraints = layoutToConstraints.get(mostCommonLayout);
-                                for (var con: layoutConstraints) {
-                                    for (var path: constraintToPaths.get(con)) {
-                                        // TODO: will this cause incorrect result?
-                                        keepEdges.addAll(path.getConnectedEdges(node));
-                                    }
-                                }
-                            }
-                            */
                         }
                     }
                 }
@@ -261,7 +241,10 @@ public class TypeRelationPathManager<T> {
                 Logging.info("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
             }
         }
+    }
 
+
+    public Set<TypeRelationGraph.TypeRelationEdge> getEdgesToRemove() {
         /* Removed edges are mustRemove + (mayRemove - keepEdges) */
         var removedEdges = new HashSet<>(mustRemove);
         for (var edge: mayRemove) {
@@ -274,7 +257,6 @@ public class TypeRelationPathManager<T> {
     }
 
 
-
     /**
      * Merge paths from same source, and propagate TypeConstraints to each node start from this source.
      * This method should be called in rebuilt path manager.
@@ -285,9 +267,6 @@ public class TypeRelationPathManager<T> {
             var pathsFromSource = getAllValidPathsFromSource(src);
             var noConflict = true;
             for (var path: pathsFromSource) {
-                if (path.noComposite || path.hasConflict) {
-                    continue;
-                }
                 noConflict = mergedConstraints.tryMerge(path.finalConstraint);
                 if (!noConflict) {
                     break;
@@ -298,7 +277,7 @@ public class TypeRelationPathManager<T> {
                 Logging.info("TypeRelationPathManager", "TTTTTTTTTTTTTTTTTTTTTTTTTT");
                 sourceToConstraints.put(src, mergedConstraints);
                 for (var path: pathsFromSource) {
-                    if (path.hasConflict || path.noComposite) {
+                    if (path.evil || path.noComposite) {
                         continue;
                     }
                     sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).addAll(path.nodes);
@@ -421,12 +400,10 @@ public class TypeRelationPathManager<T> {
                 var allPaths = new AllDirectedPaths<>(graph.getGraph()).getAllPaths(src, sk, true, Integer.MAX_VALUE);
                 for (var path: allPaths) {
                     TypeRelationPath<T> typeRelationPath = new TypeRelationPath<>(path);
-                    this.allPaths.add(typeRelationPath);
-                    srcSinkToPathsMap.computeIfAbsent(src, k -> new HashMap<>()).computeIfAbsent(sk, k -> new HashSet<>()).add(typeRelationPath);
+                    srcToPathsMap.computeIfAbsent(src, k -> new HashSet<>()).add(typeRelationPath);
                 }
             }
         }
-        Logging.info("TypeRelationPathManager", String.format("%s: Found %d paths from sources to sinks", graph.toString(), allPaths.size()));
     }
 
     /**
@@ -492,7 +469,7 @@ public class TypeRelationPathManager<T> {
 
 
     /**
-     * Obtain the edges located at both ends of the given LCS (Longest Common Subpath) in the set of paths.
+     * Obtain the edges located at ends of the given LCS (Longest Common Subpath) in the set of paths.
      * @param lcs given Longest Common Subpath in the set of paths
      * @param paths set of paths
      */
@@ -515,15 +492,14 @@ public class TypeRelationPathManager<T> {
             // Find the ending index of the LCS in the current path
             int endIdx = startIdx + lcs.size() - 1;
 
-            // Get the edge before the LCS (if it exists)
-            if (startIdx > 0) {
-                endEdges.add(edges.get(startIdx - 1));
-            }
-
-            // Get the edge after the LCS (if it exists)
-            if (endIdx < edges.size() - 1) {
+            // Get the edge at the end of the LCS
+            if (endIdx < edges.size()) {
                 endEdges.add(edges.get(endIdx));
             }
+        }
+
+        for (var edge: endEdges) {
+            Logging.info("TypeRelationPathManager", String.format("End Edge of LCS: %s", edge));
         }
 
         return endEdges;
@@ -555,7 +531,62 @@ public class TypeRelationPathManager<T> {
             }
         }
 
+        for (var edge: lcsEdges) {
+            Logging.info("TypeRelationPathManager", String.format("Edges in LCS: %s", edge));
+        }
+
         return lcsEdges;
+    }
+
+    private Set<TypeRelationPath<T>> splitPathsByLCS(Set<TypeRelationPath<T>> candidatePaths,
+                                                     Set<TypeRelationGraph.TypeRelationEdge> endEdgesOfLCS,
+                                                     SymbolExprManager exprManager) {
+        Set<TypeRelationPath<T>> newPaths = new HashSet<>();
+
+        for (TypeRelationPath<T> path : candidatePaths) {
+            List<T> nodes = path.nodes;
+            List<TypeRelationGraph.TypeRelationEdge> edges = path.edges;
+
+            var splitIndex = 0;
+            for (int i = 0; i < edges.size(); i++) {
+                if (endEdgesOfLCS.contains(edges.get(i))) {
+                    List<T> subPathNodes = new ArrayList<>(nodes.subList(0, i + 1));
+                    List<TypeRelationGraph.TypeRelationEdge> subPathEdges = new ArrayList<>(edges.subList(0, i));
+
+                    if (!subPathNodes.isEmpty()) {
+                        TypeRelationPath<T> newPath = new TypeRelationPath<>(subPathNodes, subPathEdges);
+                        newPaths.add(newPath);
+                    }
+
+                    splitIndex = i + 1;
+                    break;
+                }
+            }
+
+            // Add the remaining part of the path as a new path if any
+            if (splitIndex < nodes.size()) {
+                List<T> remainingNodes = new ArrayList<>(nodes.subList(splitIndex, nodes.size()));
+                List<TypeRelationGraph.TypeRelationEdge> remainingEdges = new ArrayList<>(edges.subList(splitIndex, edges.size()));
+
+                if (!remainingNodes.isEmpty()) {
+                    TypeRelationPath<T> newPath = new TypeRelationPath<>(remainingNodes, remainingEdges);
+                    newPaths.add(newPath);
+                }
+            }
+        }
+
+        for (var path: newPaths) {
+            var success = path.tryMergeOnPath(exprManager);
+            if (!success) {
+                path.evil = true;
+            }
+            if (path.finalConstraint.isEmpty()) {
+                path.noComposite = true;
+            }
+            Logging.info("TypeRelationPathManager", String.format("New Path split by LCS:\n%s", path));
+        }
+
+        return newPaths;
     }
 
 
@@ -582,13 +613,11 @@ public class TypeRelationPathManager<T> {
 
     public Set<TypeRelationPath<T>> getAllValidPathsFromSource(T source) {
         var result = new HashSet<TypeRelationPath<T>>();
-        for (var sk: srcSinkToPathsMap.get(source).keySet()) {
-            var paths = srcSinkToPathsMap.get(source).get(sk);
-            for (var path: paths) {
-                if (!path.hasConflict && !path.noComposite) {
-                    result.add(path);
-                }
+        for (var path: srcToPathsMap.get(source)) {
+            if (path.evil || path.noComposite) {
+                continue;
             }
+            result.add(path);
         }
         return result;
     }
@@ -610,23 +639,20 @@ public class TypeRelationPathManager<T> {
         writer.write(String.format("Graph: %s\n", graph));
         for (var src: source) {
             writer.write(String.format("\tSource: %s\n", src));
-            for (var sk: sink) {
-                var paths = srcSinkToPathsMap.get(src).get(sk);
-                if (paths == null) {
-                    continue;
+            var paths = srcToPathsMap.get(src);
+            if (paths == null) {
+                continue;
+            }
+            for (var path: paths) {
+                writer.write(String.format("\t\t\tPath: %s\n", path));
+                if (path.evil) {
+                    writer.write("\t\t\t\tConflict\n");
+                } else if (path.noComposite) {
+                    writer.write("\t\t\t\tNo Composite\n");
+                } else {
+                    writer.write(path.finalConstraint.dumpLayout(4));
                 }
-                writer.write(String.format("\t\tSink: %s\n", sk));
-                for (var path: paths) {
-                    writer.write(String.format("\t\t\tPath: %s\n", path));
-                    if (path.hasConflict) {
-                        writer.write("\t\t\t\tConflict\n");
-                    } else if (path.noComposite) {
-                        writer.write("\t\t\t\tNo Composite\n");
-                    } else {
-                        writer.write(path.finalConstraint.dumpLayout(4));
-                    }
-                    writer.write("\t\t\t\t======================================================\n");
-                }
+                writer.write("\t\t\t\t======================================================\n");
             }
         }
         writer.write("\n");
