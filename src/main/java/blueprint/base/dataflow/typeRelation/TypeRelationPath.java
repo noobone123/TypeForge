@@ -251,7 +251,7 @@ public class TypeRelationPath<T> {
 
     @Override
     public int hashCode() {
-        return edges.hashCode();
+        return edges.hashCode() + nodes.hashCode();
     }
 
     @Override

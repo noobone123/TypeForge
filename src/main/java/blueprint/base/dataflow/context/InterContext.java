@@ -123,6 +123,7 @@ public class InterContext {
                 continue;
             }
             // This time, try MergeOnPath will not appear conflicts because we have already removed these evil edges.
+            // TODO: update tryMergeOnPath into mergeOnPath, record the conflict paths ....
             graph.pathManager.tryMergeOnPath(symExprManager);
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
