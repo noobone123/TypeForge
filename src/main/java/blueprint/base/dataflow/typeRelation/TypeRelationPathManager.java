@@ -27,6 +27,10 @@ public class TypeRelationPathManager<T> {
     /** fields for handle conflict paths and nodes */
     public final Set<TypeRelationPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
     public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
+    public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
+    public final Set<T> evilSource = new HashSet<>();
+    public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
+    public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
 
     /** fields for handle edges that introduce conflicts */
     public final Set<TypeRelationGraph.TypeRelationEdge> mustRemove = new HashSet<>();
@@ -122,6 +126,7 @@ public class TypeRelationPathManager<T> {
             // If there has conflict when merging different paths from same source, means there maybe wrapper function or some other reasons
             // For soundness, we need to find the longest common subpath in these paths and remove edges
             if (!success) {
+                evilSource.add(src);
                 Logging.info("TypeRelationPathManager", String.format("Evil source found: %s", src));
                 for (var path: pathsFromSrc) {
                     Logging.info("TypeRelationPathManager", path.toString());
@@ -135,9 +140,11 @@ public class TypeRelationPathManager<T> {
                     }
                 }
                 Logging.info("TypeRelationPathManager", String.format("Wrapper Path: %s", wrapperPath));
-                // TODO: mark endEdges of evil sources.
                 var endEdges = getEndEdgesOfLCS(wrapperPath, pathsFromSrc);
                 var lcsEdges = getEdgesInLCS(wrapperPath, pathsFromSrc);
+                evilSourceEndEdges.put(src, endEdges);
+                evilSourceLCSEdges.put(src, lcsEdges);
+
                 /* wrapperPath's end edges mark must remove */
                 mustRemove.addAll(endEdges);
                 keepEdges.addAll(lcsEdges);
@@ -222,6 +229,7 @@ public class TypeRelationPathManager<T> {
 
                         /* Add all edges of current conflict node to mustRemove */
                         mayRemove.addAll(graph.getGraph().edgesOf(node));
+                        evilNodeEdges.put(node, new HashSet<>(graph.getGraph().edgesOf(node)));
                         /* If there has LCS in node's paths, we should keep edges in LCS */
                         var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
                         for (var lcs: LCSs) {

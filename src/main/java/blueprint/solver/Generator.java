@@ -24,7 +24,7 @@ import java.util.*;
  *     "StructureBuilder_2": [pseudo_code_3, pseudo_code_4, ...],
  *     ...
  * }
- * Finally, We take the pseudo code and Calculate the score for them, and find the best one as the final Structure Type
+ * Finally, We take the pseudocode and Calculate the score for them, and find the best one as the final Structure Type
  */
 public class Generator {
     public SkeletonCollector skeletonCollector;
@@ -54,6 +54,19 @@ public class Generator {
             Logging.info("Generator", skt.finalConstraint.dumpLayout(0));
 
             Logging.info("Generator", " ------------------------------- End --------------------------------- ");
+        }
+
+        Logging.info("Generator", String.format("Evil Sources (%d):", skeletonCollector.evilSource.size()));
+        for (var source: skeletonCollector.evilSource) {
+            Logging.info("Generator", source.toString());
+        }
+        Logging.info("Generator", String.format("Evil Nodes (%d):", skeletonCollector.evilNodes.size()));
+        for (var node: skeletonCollector.evilNodes) {
+            Logging.info("Generator", node.toString());
+        }
+        Logging.info("Generator", String.format("Evil Paths (%d):", skeletonCollector.evilPaths.size()));
+        for (var path: skeletonCollector.evilPaths) {
+            Logging.info("Generator", path.toString());
         }
     }
 

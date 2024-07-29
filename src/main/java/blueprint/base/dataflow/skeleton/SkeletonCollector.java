@@ -4,6 +4,8 @@ import blueprint.base.dataflow.SymbolExpr.ParsedExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
+import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
+import blueprint.base.dataflow.typeRelation.TypeRelationPath;
 import blueprint.utils.Logging;
 
 import java.util.*;
@@ -20,6 +22,14 @@ public class SkeletonCollector {
 
     private final SymbolExprManager exprManager;
 
+    /** fields for handle conflict paths and nodes */
+    public final Set<TypeRelationPath<SymbolExpr>> evilPaths = new HashSet<>();
+    public final Set<SymbolExpr> evilNodes = new HashSet<>();
+    public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
+    public final Set<SymbolExpr> evilSource = new HashSet<>();
+    public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
+    public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
+
     public SkeletonCollector(SymbolExprManager exprManager) {
         this.skeletons = new HashSet<>();
         this.exprToSkeletons_T = new HashMap<>();
@@ -30,7 +40,8 @@ public class SkeletonCollector {
     }
 
     /**
-     * Merge and rebuild Skeletons, generate `exprToSkeletonMap`
+     * Some SymbolExprs may hold multiple Skeletons, we need to
+     * merge and rebuild these Skeletons, and finally generate `exprToSkeletonMap`
      */
     public void mergeSkeletons() {
         // Generate expr To Skeletons
@@ -344,5 +355,23 @@ public class SkeletonCollector {
 
     public void addSkeleton(Skeleton skt) {
         skeletons.add(skt);
+    }
+
+    public void updateEvilPaths(Set<TypeRelationPath<SymbolExpr>> evilPaths) {
+        this.evilPaths.addAll(evilPaths);
+    }
+
+    public void updateEvilSource(Set<SymbolExpr> evilSource,
+                                  Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges,
+                                  Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges) {
+        this.evilSource.addAll(evilSource);
+        this.evilSourceLCSEdges.putAll(evilSourceLCSEdges);
+        this.evilSourceEndEdges.putAll(evilSourceEndEdges);
+    }
+
+    public void updateEvilNodes(Set<SymbolExpr> evilNodes,
+                                Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilNodeEdges) {
+        this.evilNodes.addAll(evilNodes);
+        this.evilNodeEdges.putAll(evilNodeEdges);
     }
 }

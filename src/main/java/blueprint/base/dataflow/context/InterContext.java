@@ -114,6 +114,11 @@ public class InterContext {
                 for (var edge: removeEdges) {
                     graph.getGraph().removeEdge(edge);
                 }
+
+                collector.updateEvilSource(graph.pathManager.evilSource,
+                        graph.pathManager.evilSourceLCSEdges, graph.pathManager.evilSourceEndEdges);
+                collector.updateEvilNodes(graph.pathManager.evilNodes,
+                        graph.pathManager.evilNodeEdges);
             }
         }
 
@@ -124,9 +129,9 @@ public class InterContext {
             graph.pathManager.mergeOnPath(symExprManager);
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
-        }
 
-        // TODO: record evil path, evil source and evil nodes.
+            collector.updateEvilPaths(graph.pathManager.evilPaths);
+        }
     }
 
     /**
