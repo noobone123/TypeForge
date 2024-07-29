@@ -5,6 +5,7 @@ import blueprint.base.dataflow.context.InterContext;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
+import ghidra.program.model.data.DataType;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.Varnode;
 
@@ -17,6 +18,7 @@ public class SymbolExprManager {
     Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
     Map<SymbolExpr.Attribute, Set<SymbolExpr>> attributeToExpr;
     InterContext interCtx;
+    Map<SymbolExpr, DataType> exprToDecompilerInferredType;
 
     // mem alias related fields
     public Map<SymbolExpr, Set<SymbolExpr>> fastMayMemAliasCache;
@@ -29,6 +31,7 @@ public class SymbolExprManager {
         attributeToExpr = new HashMap<>();
         this.interCtx = interCtx;
 
+        exprToDecompilerInferredType = new HashMap<>();
         fastMayMemAliasCache = new HashMap<>();
     }
 
@@ -109,25 +112,12 @@ public class SymbolExprManager {
         return result;
     }
 
-    public void updateAllExprToConstraintMap(Map<SymbolExpr, TypeConstraint> newMap) {
-        exprToConstraintBeforeMerge.clear();
-        exprToConstraintBeforeMerge.putAll(newMap);
+    public void addDecompilerInferredType(SymbolExpr expr, DataType dataType) {
+        exprToDecompilerInferredType.put(expr, dataType);
     }
 
-    public Map<SymbolExpr, TypeConstraint> getExprToConstraintMap() {
-        return exprToConstraintBeforeMerge;
-    }
-
-    public Set<SymbolExpr> getAllBaseExprs() {
-        return baseToFieldsMap.keySet();
-    }
-
-    public Set<TypeConstraint> getAllConstraints() {
-        return new HashSet<>(exprToConstraintBeforeMerge.values());
-    }
-
-    public TreeMap<Long, Set<SymbolExpr>> getFieldInfo(SymbolExpr base) {
-        return baseToFieldsMap.get(base);
+    public Optional<DataType> getInferredType(SymbolExpr expr) {
+        return Optional.ofNullable(exprToDecompilerInferredType.get(expr));
     }
 
     /**

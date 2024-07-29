@@ -9,10 +9,7 @@ import blueprint.base.node.FunctionNode;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.HighSymbolHelper;
 import blueprint.utils.Logging;
-import ghidra.program.model.data.Array;
-import ghidra.program.model.data.Pointer;
-import ghidra.program.model.data.Structure;
-import ghidra.program.model.data.Union;
+import ghidra.program.model.data.*;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
@@ -33,7 +30,6 @@ public class IntraContext {
     public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
     public HashSet<SymbolExpr> returnExprs;
     public int dataFlowFactKSize = 10;
-    public Map<PcodeOp, FunctionNode> callsites;
     public SymbolExprManager symbolExprManager;
 
     public IntraContext(FunctionNode funcNode, SymbolExprManager symbolExprManager) {
@@ -103,53 +99,56 @@ public class IntraContext {
 
             SymbolExpr expr;
             TypeConstraint constraint;
-            var dataType = symbol.getDataType();
+            DataType dt;
 
             // Create the SymbolExpr and Constraint for the HighSymbol
             if (symbol.isGlobal()) {
                 expr = new SymbolExprManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
                 symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.GLOBAL);
+                dt = symbol.getDataType();
             } else {
                 expr = new SymbolExprManager.Builder().rootSymbol(symbol).build();
+                dt = funcNode.getDecompilerInferredDT(symbol.getStorage());
+                if (dt == null) {
+                    dt = symbol.getDataType();
+                }
             }
+            symbolExprManager.addDecompilerInferredType(expr, dt);
             constraint = symbolExprManager.createConstraint(expr);
 
-            if (DataTypeHelper.isCompositeOrArray(dataType)) {
-                if (dataType instanceof Array array) {
-                    Logging.info("IntraContext", "Found Array " + dataType.getName());
+            if (DataTypeHelper.isCompositeOrArray(dt)) {
+                if (dt instanceof Array array) {
+                    Logging.info("IntraContext", "Found Array " + dt.getName());
                     symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.ARRAY);
                     expr.setVariableSize(array.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                 }
-                else if (dataType instanceof Structure structure) {
-                    Logging.info("IntraContext", "Found Structure " + dataType.getName());
+                else if (dt instanceof Structure structure) {
+                    Logging.info("IntraContext", "Found Structure " + dt.getName());
                     symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.STRUCT);
                     expr.setVariableSize(structure.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                 }
-                else if (dataType instanceof Union union) {
-                    Logging.info("IntraContext", "Found Union " + dataType.getName());
+                else if (dt instanceof Union union) {
+                    Logging.info("IntraContext", "Found Union " + dt.getName());
                     symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.UNION);
                     expr.setVariableSize(union.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                 }
-            } else if (dataType instanceof Pointer) {
-                var decompilerInferredDT = funcNode.getDecompilerInferredDT(symbol.getStorage());
-                if (decompilerInferredDT instanceof Pointer ptrDT) {
-                    if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
-                        Logging.info("IntraContext", "Found Pointer " + ptrDT.getName());
-                        symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
-                        if (ptrDT.getDataType() instanceof Array array) {
-                            constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
-                        } else if (ptrDT.getDataType() instanceof Structure structure) {
-                            constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
-                        } else if (ptrDT.getDataType() instanceof Union union) {
-                            constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
-                        }
+            } else if (dt instanceof Pointer ptrDT) {
+                if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
+                    Logging.info("IntraContext", "Found Pointer " + ptrDT.getName());
+                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
+                    if (ptrDT.getDataType() instanceof Array array) {
+                        constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
+                    } else if (ptrDT.getDataType() instanceof Structure structure) {
+                        constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
+                    } else if (ptrDT.getDataType() instanceof Union union) {
+                        constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                     }
                 }
             } else {
-                Logging.info("IntraContext", "Found Primitive " + dataType.getName());
+                Logging.info("IntraContext", "Found Primitive " + dt.getName());
             }
 
             // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:

@@ -283,6 +283,20 @@ public class SkeletonCollector {
         }
     }
 
+    /**
+     * This method should be called after all skeletons are successfully handled.
+     */
+    public void handleDecompilerInferredTypes() {
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            for (var expr: skt.exprs) {
+                if (expr.isVariable()) {
+                    var inferredType = exprManager.getInferredType(expr);
+                    inferredType.ifPresent(skt::updateDerivedTypes);
+                }
+            }
+        }
+    }
+
 
     public void handleCodePtr(Set<SymbolExpr> exprsAsCodePtr) {
         for (var expr: exprsAsCodePtr) {

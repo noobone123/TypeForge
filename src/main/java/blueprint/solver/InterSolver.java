@@ -57,7 +57,6 @@ public class InterSolver {
 
         var generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
         generator.explore();
-        // TODO: add decompiler inferred types into polymorphic types
     }
 
     public void checkCallSitesInconsistency() {
@@ -95,6 +94,11 @@ public class InterSolver {
         postOrderTraversal(root, visited, sortedFuncs);
 
         for (FunctionNode funcNode : sortedFuncs) {
+            if (!FunctionHelper.isMeaningfulFunction(funcNode.value)) {
+                Logging.info("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
+                continue;
+            }
+
             if (!funcNode.initialize()) {
                 Logging.warn("InterSolver", "Failed to pre-analyze function: " + funcNode.value.getName());
                 continue;

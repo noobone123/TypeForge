@@ -34,6 +34,8 @@ public class Generator {
     public Generator(SkeletonCollector skeletonCollector, SymbolExprManager exprManager) {
         this.skeletonCollector = skeletonCollector;
         this.exprManager = exprManager;
+
+        skeletonCollector.handleDecompilerInferredTypes();
     }
 
     public void explore() {
@@ -52,6 +54,7 @@ public class Generator {
             Logging.info("Generator", "All Variables: " + skt.getVariables());
             Logging.info("Generator", "Constraint:\n " + skt.finalConstraint);
             Logging.info("Generator", skt.finalConstraint.dumpLayout(0));
+            Logging.info("Generator", "All Decompiler Inferred Types:\n" + skt.derivedTypes);
 
             Logging.info("Generator", " ------------------------------- End --------------------------------- ");
         }

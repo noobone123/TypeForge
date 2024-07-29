@@ -240,10 +240,6 @@ public class TypeConstraint {
         Logging.info("TypeConstraint", String.format("Constraint_%s adding polymorphicType: %s", shortUUID, type.getName()));
     }
 
-    public Set<TypeDescriptor> getPolymorphicTypes() {
-        return polymorphicTypes;
-    }
-
     public int getAllFieldsAccessCount() {
         int count = 0;
         for (var aps: fieldAccess.values()) {

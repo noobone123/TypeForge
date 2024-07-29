@@ -89,6 +89,13 @@ public class Skeleton {
         return variables;
     }
 
+    public void updateDerivedTypes(DataType dt) {
+        if (derivedTypes == null) {
+            derivedTypes = new HashSet<>();
+        }
+        derivedTypes.add(dt);
+    }
+
 
     @Override
     public int hashCode() {

@@ -120,16 +120,15 @@ public class FunctionNode extends NodeBase<Function> {
     /**
      * We can not fully trust decompiler inferred composite datatype, so we need to record them and fix them into primitive.
      */
-    // TODO: handle composite datatype in stack ?
     private Optional<Set<HighSymbol>> checkLocalVariables() {
         Set<HighSymbol> reTypeCandidate = new HashSet<>();
         var localSymMap = hFunc.getLocalSymbolMap();
         for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();
             var dt = sym.getDataType();
+            decompilerInferredDT.put(sym.getStorage(), dt);
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
                 reTypeCandidate.add(sym);
-                decompilerInferredDT.put(sym.getStorage(), dt);
                 Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s -> %s", sym.getName(), dt.getName()));
             }
         }
