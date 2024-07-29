@@ -256,6 +256,29 @@ public class TypeRelationPathManager<T> {
         return removedEdges;
     }
 
+    /**
+     * This method is actually very similar to tryMergeOnPath
+     * @param exprManager SymbolExprManager
+     */
+    public void mergeOnPath(SymbolExprManager exprManager) {
+        for (var src: srcToPathsMap.keySet()) {
+            for (var path: srcToPathsMap.get(src)) {
+                var success = path.tryMergeOnPath(exprManager);
+                if (!success) {
+                    evilPaths.add(path);
+                    path.evil = true;
+                    Logging.info("TypeRelationPathManager", String.format("Evil in path: \n%s", path));
+                } else {
+                    if (path.finalConstraint.isEmpty()) {
+                        path.noComposite = true;
+                        continue;
+                    }
+                    Logging.info("TypeRelationPathManager", String.format("Expected path: \n%s", path));
+                }
+            }
+        }
+    }
+
 
     /**
      * Merge paths from same source, and propagate TypeConstraints to each node start from this source.
@@ -265,25 +288,22 @@ public class TypeRelationPathManager<T> {
         for (var src: source) {
             var mergedConstraints = new TypeConstraint();
             var pathsFromSource = getAllValidPathsFromSource(src);
-            var noConflict = true;
+            var success = true;
             for (var path: pathsFromSource) {
-                noConflict = mergedConstraints.tryMerge(path.finalConstraint);
-                if (!noConflict) {
+                success = mergedConstraints.tryMerge(path.finalConstraint);
+                if (!success) {
                     break;
                 }
             }
 
-            if (noConflict) {
-                Logging.info("TypeRelationPathManager", "TTTTTTTTTTTTTTTTTTTTTTTTTT");
+            if (success) {
+                Logging.info("TypeRelationPathManager", "Expected Source");
                 sourceToConstraints.put(src, mergedConstraints);
                 for (var path: pathsFromSource) {
-                    if (path.evil || path.noComposite) {
-                        continue;
-                    }
                     sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).addAll(path.nodes);
                 }
             } else {
-                Logging.info("TypeRelationPathManager", "FFFFFFFFFFFFFFFFFFFFFFFFFF");
+                Logging.info("TypeRelationPathManager", "Unexpected Evil Source");
                 for (var path: pathsFromSource) {
                     Logging.info("TypeRelationPathManager", path.toString());
                     Logging.info("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));

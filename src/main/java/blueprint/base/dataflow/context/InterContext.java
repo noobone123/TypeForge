@@ -102,7 +102,6 @@ public class InterContext {
         Logging.info("InterContext", "Total Graph Number: " + typeRelationManager.getGraphs().size());
         typeRelationManager.buildAllPathManagers();
 
-        // TODO: add evil nodes information into SkeletonCollector
         // Remove some redundant edges in the graph
         for (var graph: typeRelationManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
@@ -122,12 +121,12 @@ public class InterContext {
             if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
                 continue;
             }
-            // This time, try MergeOnPath will not appear conflicts because we have already removed these evil edges.
-            // TODO: update tryMergeOnPath into mergeOnPath, record the conflict paths ....
-            graph.pathManager.tryMergeOnPath(symExprManager);
+            graph.pathManager.mergeOnPath(symExprManager);
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
         }
+
+        // TODO: record evil path, evil source and evil nodes.
     }
 
     /**
