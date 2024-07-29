@@ -38,25 +38,43 @@ public class Generator {
         skeletonCollector.handleDecompilerInferredTypes();
     }
 
+    /**
+     * Generate all possible structure declarations for each skeleton.
+     */
+    public void run() {
+        /* In rare cases, */
+        findingMayArrayBySlidingWindow();
+    }
+
+    // TODO: handle Independent Skeleton
+    // TODO: derived types should not has overlap conflict with skeleton's final Constraint
+    // TODO: how to handle nested (multi nested ?)
+    //  1. try to merge nested if no conflicts found, if there are multiNested, choose the one with the most field
+    //  2. try to scanning using sliding window like independent skeleton, consider nested and reference
+    // TODO: handle evil nodes and evil sources
+    // TODO: handle stack variables
+    private void findingMayArrayBySlidingWindow() {
+        var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.isIndependent()) {
+                Logging.info("Generator", "Independent Skeleton: " + skt);
+                skt.dumpInfo();
+            }
+            else if (skt.isMultiLevelPtr()) {
+                Logging.info("Generator", "Multi Level Ptr Skeleton: " + skt);
+            }
+            else {
+                Logging.info("Generator", "Normal Skeleton: " + skt);
+                skt.dumpInfo();
+            }
+        }
+    }
+
     public void explore() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isMultiLevelPtr()) continue;
-            Logging.info("Generator", " ------------------------------- Start --------------------------------- ");
-            if (skt.hasMultiConstraints) {
-                Logging.info("Generator", String.format("Exploring %s : C > 1, = %d", skt, skt.constraints.size()));
-            } else {
-                Logging.info("Generator", String.format("Exploring %s : C = 1", skt));
-            }
-            Logging.info("Generator", "Associated Exprs Count: " + skt.exprs.size());
-            Logging.info("Generator", "All Exprs: " + skt.exprs);
-            Logging.info("Generator", "Associated Variables Count: " + skt.getVariables().size());
-            Logging.info("Generator", "All Variables: " + skt.getVariables());
-            Logging.info("Generator", "Constraint:\n " + skt.finalConstraint);
-            Logging.info("Generator", skt.finalConstraint.dumpLayout(0));
-            Logging.info("Generator", "All Decompiler Inferred Types:\n" + skt.derivedTypes);
-
-            Logging.info("Generator", " ------------------------------- End --------------------------------- ");
+            skt.dumpInfo();
         }
 
         Logging.info("Generator", String.format("Evil Sources (%d):", skeletonCollector.evilSource.size()));

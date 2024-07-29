@@ -22,6 +22,7 @@ public class Skeleton {
     public boolean hasMultiConstraints = false;
 
     public Map<Long, Set<Skeleton>> ptrReference = new HashMap<>();
+    public Map<Long, Skeleton> finalPtrReference = new HashMap<>();
     public Map<Long, Integer> ptrLevel = new HashMap<>();
     public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
 
@@ -96,6 +97,34 @@ public class Skeleton {
         derivedTypes.add(dt);
     }
 
+    /**
+     * If current skeleton has no pointer reference or nested skeletons, it is independent
+     * @return true if independent
+     */
+    public boolean isIndependent() {
+        return ptrReference.isEmpty() && mayNestedSkeleton.isEmpty();
+    }
+
+    /**
+     * If current skeleton has a pointer reference to multiple skeletons, it has multi pointer reference
+     */
+    public boolean hasMultiPtrReferenceTo() {
+        for (var entry: ptrReference.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean hasMultiNestedSkeleton() {
+        for (var entry: mayNestedSkeleton.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     @Override
     public int hashCode() {
@@ -115,6 +144,24 @@ public class Skeleton {
         return "Skeleton_" + shortUUID;
     }
 
+    public void dumpInfo() {
+        Logging.info("Skeleton", " ------------------------------- Start --------------------------------- ");
+        Logging.info("Skeleton", this.toString());
+        if (hasMultiConstraints) {
+            Logging.info("Skeleton", String.format("C > 1, = %d", constraints.size()));
+        } else {
+            Logging.info("Skeleton", "C = 1");
+        }
+        Logging.info("Skeleton", "Associated Exprs Count: " + exprs.size());
+        Logging.info("Skeleton", "All Exprs: " + exprs);
+        Logging.info("Skeleton", "Associated Variables Count: " + getVariables().size());
+        Logging.info("Skeleton", "All Variables: " + getVariables());
+        Logging.info("Skeleton", "Constraint:\n " + finalConstraint);
+        Logging.info("Skeleton", finalConstraint.dumpLayout(0));
+        Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + derivedTypes);
+
+        Logging.info("Skeleton", " ------------------------------- End --------------------------------- ");
+    }
 
     /**
      * Merge two skeletons into a new skeleton

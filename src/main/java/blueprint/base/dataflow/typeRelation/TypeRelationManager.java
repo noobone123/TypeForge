@@ -100,7 +100,7 @@ public class TypeRelationManager<T> {
         }
     }
 
-    public void dumpGraphMeta(File outputDir) throws IOException {
+    public void dumpTRG(File outputDir) throws IOException {
         File metadataFile = new File(outputDir, "TypeRelationManager.json");
 
         ObjectMapper mapper = new ObjectMapper();

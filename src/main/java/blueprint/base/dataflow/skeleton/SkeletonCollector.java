@@ -7,6 +7,7 @@ import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.typeRelation.TypeRelationPath;
 import blueprint.utils.Logging;
+import blueprint.utils.TCHelper;
 
 import java.util.*;
 
@@ -200,24 +201,23 @@ public class SkeletonCollector {
             }
         }
 
+        /* In rare cases, for some reason, there may be some multi-ple ptr reference or nested skeletons */
+        handleMultiPtrReferenceTo();
+
         /* Handle MultiLevel Ptr Reference */
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            for (var offset: skt.ptrReference.keySet()) {
-                if (skt.ptrReference.get(offset).size() > 1) {
-                    continue;
-                }
-
-                var ptrEESkt = skt.ptrReference.get(offset).iterator().next();
+            for (var offset: skt.finalPtrReference.keySet()) {
+                var ptrEESkt = skt.finalPtrReference.get(offset);
                 var ptrLevel = 1;
                 while (ptrEESkt.isMultiLevelPtr()) {
                     ptrLevel++;
-                    ptrEESkt = ptrEESkt.ptrReference.get(0L).iterator().next();
+                    ptrEESkt = ptrEESkt.finalPtrReference.get(0L);
                 }
 
                 if (ptrLevel > 1) {
                     Logging.info("SkeletonCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
                     skt.ptrLevel.put(offset, ptrLevel);
-                    skt.ptrReference.put(offset, Set.of(ptrEESkt));
+                    skt.finalPtrReference.put(offset, ptrEESkt);
 
                     /* For debug */
                     Logging.info("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
@@ -225,6 +225,8 @@ public class SkeletonCollector {
                     Logging.info("SkeletonCollector", skt.finalConstraint.dumpLayout(0));
                     Logging.info("SkeletonCollector", ptrEESkt.exprs.toString());
                     Logging.info("SkeletonCollector", ptrEESkt.finalConstraint.dumpLayout(0));
+                } else {
+                    Logging.info("SkeletonCollector", "Ptr Level = 1");
                 }
             }
         }
@@ -283,6 +285,61 @@ public class SkeletonCollector {
         }
     }
 
+    public void handleMultiPtrReferenceTo() {
+        /* Choose the most visited one as the final ReferenceTo constraint */
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.hasMultiPtrReferenceTo()) {
+                Logging.warn("SkeletonCollector", String.format("Multi Ptr Reference To Detected: \n%s", skt));
+                skt.dumpInfo();
+                for (var offset: skt.ptrReference.keySet()) {
+                    var ptrEEs = skt.ptrReference.get(offset);
+                    if (ptrEEs.size() > 1) {
+                        Logging.warn("SkeletonCollector", String.format("At 0x%s: %s", Long.toHexString(offset), ptrEEs));
+                        Skeleton chosenSkt = null;
+                        for (var ptrEE: ptrEEs) {
+                            ptrEE.dumpInfo();
+                            if (chosenSkt == null) {
+                                chosenSkt = ptrEE;
+                            } else {
+                                if (ptrEE.exprs.size() > chosenSkt.exprs.size()) {
+                                    chosenSkt = ptrEE;
+                                }
+                            }
+                        }
+                        skt.finalPtrReference.put(offset, chosenSkt);
+                    } else {
+                        skt.finalPtrReference.put(offset, ptrEEs.iterator().next());
+                    }
+                }
+            }
+            else {
+                for (var offset: skt.ptrReference.keySet()) {
+                    var ptrEE = skt.ptrReference.get(offset).iterator().next();
+                    skt.finalPtrReference.put(offset, ptrEE);
+                }
+            }
+        }
+    }
+
+    public void handleMultiNestedSkeleton() {
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.hasMultiNestedSkeleton()) {
+                Logging.warn("SkeletonCollector", String.format("Multi Nested Skeleton Detected: \n%s", skt));
+                skt.dumpInfo();
+                for (var offset: skt.mayNestedSkeleton.keySet()) {
+                    var nestedSkts = skt.mayNestedSkeleton.get(offset);
+                    if (nestedSkts.size() > 1) {
+                        Logging.warn("SkeletonCollector", String.format("At 0x%s: %s", Long.toHexString(offset), nestedSkts));
+                        for (var nestedSkt: nestedSkts) {
+                            nestedSkt.dumpInfo();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
     /**
      * This method should be called after all skeletons are successfully handled.
      */
@@ -311,6 +368,8 @@ public class SkeletonCollector {
     }
 
     private void parseAndSetTypeAlias(SymbolExpr expr, UnionFind<SymbolExpr> aliasMap) {
+        // IMPORTANT: this algorithm is not perfect, it didn't run until a fixed point is reached.
+        // So UnionFind may cause some inconsistency problem.
         var parsed = ParsedExpr.parseFieldAccessExpr(expr);
         if (parsed.isEmpty()) { return; }
         var parsedExpr = parsed.get();
@@ -336,8 +395,13 @@ public class SkeletonCollector {
                     var skt1 = exprToSkeletonMap.get(e);
                     var skt2 = exprToSkeletonMap.get(expr);
                     if (skt1 != skt2) {
-                        aliasMap.union(e, expr);
+                        if (twoSkeletonsConflict(skt1, skt2)) {
+                            Logging.warn("SkeletonCollector", String.format("Conflict Type Alias: %s <--> %s", e, expr));
+                            continue;
+                        }
+
                         Logging.info("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
+                        aliasMap.union(e, expr);
                         Optional<Skeleton> mergedRes;
                         Skeleton newSkeleton = null;
 
@@ -365,6 +429,19 @@ public class SkeletonCollector {
                 }
             }
         }
+    }
+
+    private boolean twoSkeletonsConflict(Skeleton skt1, Skeleton skt2) {
+        boolean conflict = false;
+        for (var con1: skt1.constraints) {
+            for (var con2: skt2.constraints) {
+                if (TCHelper.checkFieldOverlap(con1, con2)) {
+                    conflict = true;
+                    return conflict;
+                }
+            }
+        }
+        return conflict;
     }
 
     public void addSkeleton(Skeleton skt) {

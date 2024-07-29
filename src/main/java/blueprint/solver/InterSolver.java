@@ -7,6 +7,7 @@ import blueprint.utils.*;
 
 import ghidra.program.model.address.Address;
 
+import java.io.File;
 import java.util.*;
 
 public class InterSolver {
@@ -55,8 +56,16 @@ public class InterSolver {
 
         ctx.collectSkeletons();
 
+        try {
+            var outputFile = new File(Global.outputDirectory);
+            ctx.typeRelationManager.dumpTRG(outputFile);
+            ctx.typeRelationManager.dumpEntryToExitPaths(outputFile);
+        } catch (Exception e) {
+            Logging.error("InterSolver", "Failed to dump TRGInfo: " + e.getMessage());
+        }
+
         var generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
-        generator.explore();
+        generator.run();
     }
 
     public void checkCallSitesInconsistency() {
