@@ -1,6 +1,7 @@
 package blueprint.base.dataflow.skeleton;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
@@ -26,7 +27,9 @@ public class Skeleton {
     public Map<Long, Integer> ptrLevel = new HashMap<>();
     public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
 
+    public boolean isPointerToPrimitive = false;
     public Set<DataType> derivedTypes;
+    public DataType finalType;
 
     public Skeleton() { }
 
@@ -124,6 +127,31 @@ public class Skeleton {
             }
         }
         return false;
+    }
+
+    public boolean hasNestedSkeleton() {
+        return !mayNestedSkeleton.isEmpty();
+    }
+
+    public boolean hasOneField() {
+        return finalConstraint.fieldAccess.size() == 1;
+    }
+
+    public boolean decompilerInferredTypesHasComposite() {
+        if (derivedTypes == null) {
+            return false;
+        }
+        for (var dt: derivedTypes) {
+            if (DataTypeHelper.isPointerToCompositeDataType(dt) || DataTypeHelper.isCompositeOrArray(dt)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void setPrimitiveType(DataType dt) {
+        isPointerToPrimitive = true;
+        finalType = dt;
     }
 
     @Override

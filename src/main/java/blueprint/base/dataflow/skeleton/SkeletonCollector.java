@@ -432,16 +432,12 @@ public class SkeletonCollector {
     }
 
     private boolean twoSkeletonsConflict(Skeleton skt1, Skeleton skt2) {
-        boolean conflict = false;
-        for (var con1: skt1.constraints) {
-            for (var con2: skt2.constraints) {
-                if (TCHelper.checkFieldOverlap(con1, con2)) {
-                    conflict = true;
-                    return conflict;
-                }
-            }
+        // Only check if both skeletons have single constraint
+        if (!skt1.hasMultiConstraints && !skt2.hasMultiConstraints) {
+            return TCHelper.checkFieldOverlap(skt1.constraints.iterator().next(), skt2.constraints.iterator().next());
+        } else {
+            return false;
         }
-        return conflict;
     }
 
     public void addSkeleton(Skeleton skt) {

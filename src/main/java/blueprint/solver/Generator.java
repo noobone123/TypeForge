@@ -2,9 +2,12 @@ package blueprint.solver;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
+import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.base.dataflow.skeleton.TypeConstraint;
+import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Logging;
+import ghidra.program.model.data.DataType;
 
 import java.util.*;
 
@@ -53,20 +56,63 @@ public class Generator {
     //  2. try to scanning using sliding window like independent skeleton, consider nested and reference
     // TODO: handle evil nodes and evil sources
     // TODO: handle stack variables
+    // TODO: generate type declaration first, then try to retype and get pseudo-code
     private void findingMayArrayBySlidingWindow() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.isIndependent()) {
-                Logging.info("Generator", "Independent Skeleton: " + skt);
-                skt.dumpInfo();
-            }
-            else if (skt.isMultiLevelPtr()) {
+            if (skt.isMultiLevelPtr()) {
                 Logging.info("Generator", "Multi Level Ptr Skeleton: " + skt);
+                continue;
+            }
+            else if (skt.isIndependent() && skt.hasOneField() &&
+                    !skt.decompilerInferredTypesHasComposite() &&
+                    (skt.finalConstraint.fieldAccess.get(0L) != null)) {
+                /* These types are considered as pointers to primitive types and no need to assess and ranking */
+                handlePointerToPrimitive(skt);
+            }
+            else if (!skt.hasNestedSkeleton()) {
+                /* If No Nested Skeleton Found */
+                Logging.info("Generator", "No Nested Skeleton: " + skt);
+                handleNoNestedSkeleton(skt);
             }
             else {
                 Logging.info("Generator", "Normal Skeleton: " + skt);
                 skt.dumpInfo();
             }
+        }
+    }
+
+
+    private void handleNoNestedSkeleton(Skeleton skt) {
+        // TODO: ...
+    }
+
+    private void handlePointerToPrimitive(Skeleton skt) {
+        Logging.info("Generator", "F = 1 && Offset = 0");
+        skt.dumpInfo();
+        var aps = skt.finalConstraint.fieldAccess.get(0L);
+        Map<DataType, Integer> apCount = new HashMap<>();
+        aps.forEach(ap -> {
+            apCount.putIfAbsent(ap.dataType, 0);
+            apCount.put(ap.dataType, apCount.get(ap.dataType) + 1);
+        });
+
+        /* Find DataType with Max access count */
+        var maxCount = 0;
+        DataType maxDT = null;
+        for (var entry: apCount.entrySet()) {
+            if (entry.getValue() > maxCount) {
+                maxCount = entry.getValue();
+                maxDT = entry.getKey();
+            }
+        }
+
+        var resDT = DataTypeHelper.getPointerDT(maxDT, 1);
+        if (resDT == null) {
+            Logging.error("Generator", "Failed to handle F = 1 && Offset = 0");
+            return;
+        } else {
+            skt.setPrimitiveType(resDT);
         }
     }
 

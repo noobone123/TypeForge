@@ -1,5 +1,6 @@
 package blueprint.utils;
 
+import blueprint.base.dataflow.skeleton.Skeleton;
 import ghidra.program.model.data.*;
 
 import java.util.*;
