@@ -1,6 +1,5 @@
 package blueprint.utils;
 
-import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import ghidra.program.model.data.*;
 
@@ -10,7 +9,8 @@ public class DataTypeHelper {
 
     private static final DataTypeManager dtM = Global.currentProgram.getDataTypeManager();
     private static final Map<String, DataType> nameToDTMap = new HashMap<>();
-    private static final String DEFAULT_BASENAME = "ClayStruct";
+    private static final String DEFAULT_STRUCT_BASENAME = "ClayStruct";
+    private static final String DEFAULT_UNION_BASENAME = "ClayUnion";
     private static final String DEFAULT_CATEGORY = "/TypeClay_structs";
 
 
@@ -93,9 +93,24 @@ public class DataTypeHelper {
      * @return the new Structure
      */
     public static Structure createUniqueStructure(int length) {
-        String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_BASENAME);
+        Logging.info("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(length));
+        String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_STRUCT_BASENAME);
         return new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, length, dtM);
     }
+
+
+    public static Union createUniqueUnion(Set<DataType> components) {
+        Logging.info("Generator", "Creating Union Type");
+        String unionName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_UNION_BASENAME);
+        var unionDT = new UnionDataType(new CategoryPath(DEFAULT_CATEGORY), unionName, dtM);
+        int index = 0;
+        for (var dt: components) {
+            var name = String.format("union_field_%d", index);
+            unionDT.add(dt, dt.getLength(), name, null);
+        }
+        return unionDT;
+    }
+
 
     public static void populateStructure(Structure structDT, Map<Integer, DataType> componentMap, Skeleton skt) {
         for (var entry: componentMap.entrySet()) {

@@ -139,5 +139,11 @@ public class AccessPoints {
         }
         return maxDT;
     }
+
+    public static Set<DataType> getDataTypes(Set<AccessPoints.AP> apSet) {
+        Set<DataType> dataTypes = new HashSet<>();
+        apSet.forEach(ap -> dataTypes.add(ap.dataType));
+        return dataTypes;
+    }
 }
 

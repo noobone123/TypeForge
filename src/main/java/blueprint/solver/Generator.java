@@ -1,16 +1,12 @@
 package blueprint.solver;
 
 import blueprint.base.dataflow.AccessPoints;
-import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
-import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
-import ghidra.program.model.data.PointerDataType;
-import ghidra.program.model.data.Structure;
 
 import java.util.*;
 
@@ -52,7 +48,6 @@ public class Generator {
         findingMayArrayBySlidingWindow();
     }
 
-    // TODO: derived types should not has overlap conflict with skeleton's final Constraint
     // TODO: how to handle nested (multi nested ?)
     //  1. try to merge nested if no conflicts found, if there are multiNested, choose the one with the most field
     //  2. try to scanning using sliding window like independent skeleton, consider nested and reference
@@ -88,6 +83,8 @@ public class Generator {
     private void handleNoNestedSkeleton(Skeleton skt) {
         if (skt.hasPtrReference()) {
             Logging.info("Generator", "No Nested && Has Ptr Reference");
+            handleInconsistencyField(skt);
+            skt.dumpInfo();
         } else {
             Logging.info("Generator", "No Nested && No Ptr Reference");
             if (skt.mayPrimitiveArray()) {
@@ -103,14 +100,40 @@ public class Generator {
                     skt.updateDerivedTypes(ptrToArrayType);
                 }
 
-                var length = skt.getSize();
-                Logging.info("Generator", "Generating Structure Type with Length: " + Integer.toHexString(length));
-                var structDT = DataTypeHelper.createUniqueStructure(length);
-                var componentMap = getComponentMap(skt);
+                var structDT = DataTypeHelper.createUniqueStructure(skt.getSize());
+                var componentMap = getComponentMapByMostAccessed(skt);
                 DataTypeHelper.populateStructure(structDT, componentMap, skt);
-                skt.updateDerivedTypes(structDT);
-
+                skt.updateDerivedTypes(DataTypeHelper.getPointerOfStruct(structDT));
                 skt.dumpInfo();
+            }
+            else {
+                Logging.info("Generator", "No Primitive Array Found");
+                handleInconsistencyField(skt);
+                skt.dumpInfo();
+            }
+        }
+    }
+
+    private void handleInconsistencyField(Skeleton skt) {
+        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var aps = entry.getValue();
+            /* If Contains Ptr Reference, this field should be a ptrReference */
+            if (!AccessPoints.ifAPSetHoldsSameSizeType(aps) &&
+                    !skt.ptrReference.containsKey(offset)) {
+                Logging.info("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
+
+                // Create Union or Find the most accessed data type
+                // TODO: remember to add getPointerOfStruct
+                var structDT_1 = DataTypeHelper.createUniqueStructure(skt.getSize());
+                var componentMap_1 = getComponentMapByMostAccessed(skt);
+                DataTypeHelper.populateStructure(structDT_1, componentMap_1, skt);
+                skt.morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(structDT_1);
+
+                var structDT_2 = DataTypeHelper.createUniqueStructure(skt.getSize());
+                var componentMap_2 = getComponentMapByUnionFields(skt, offset);
+                DataTypeHelper.populateStructure(structDT_2, componentMap_2, skt);
+                skt.morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(structDT_2);
             }
         }
     }
@@ -143,16 +166,55 @@ public class Generator {
      * @param skt the skeleton
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMap(Skeleton skt) {
+    private Map<Integer, DataType> getComponentMapByMostAccessed(Skeleton skt) {
         var componentMap = new TreeMap<Integer, DataType>();
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var offset = entry.getKey().intValue();
+            if (skt.ptrReference.containsKey((long) offset)) {
+                var ptrLevel = skt.ptrLevel.get((long) offset);
+                var dt = DataTypeHelper.getDataTypeByName("void");
+                dt = DataTypeHelper.getPointerDT(dt, ptrLevel);
+                componentMap.put(offset, dt);
+                continue;
+            }
+
             var aps = entry.getValue();
             var mostAccessedDT = AccessPoints.getMostAccessedDT(aps);
             componentMap.put(offset, mostAccessedDT);
         }
         return componentMap;
     }
+
+    /**
+     * Create union at the specified offset, other fields using the most accessed data type
+     * @param skt the skeleton
+     * @param offset the offset to create union
+     * @return the component map
+     */
+    private Map<Integer, DataType> getComponentMapByUnionFields(Skeleton skt, long offset) {
+        var componentMap = new TreeMap<Integer, DataType>();
+        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+            var fieldOffset = entry.getKey().intValue();
+            if (skt.ptrReference.containsKey((long) fieldOffset)) {
+                var ptrLevel = skt.ptrLevel.get((long) fieldOffset);
+                var dt = DataTypeHelper.getDataTypeByName("void");
+                dt = DataTypeHelper.getPointerDT(dt, ptrLevel);
+                componentMap.put(fieldOffset, dt);
+                continue;
+            }
+
+            var aps = entry.getValue();
+            if (fieldOffset == offset) {
+                var unionDT = DataTypeHelper.createUniqueUnion(AccessPoints.getDataTypes(aps));
+                componentMap.put(fieldOffset, unionDT);
+            } else {
+                var mostAccessedDT = AccessPoints.getMostAccessedDT(aps);
+                componentMap.put(fieldOffset, mostAccessedDT);
+            }
+        }
+        return componentMap;
+    }
+
 
     public void explore() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;

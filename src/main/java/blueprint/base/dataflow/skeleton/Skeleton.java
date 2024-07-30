@@ -32,6 +32,10 @@ public class Skeleton {
     public boolean isPointerToPrimitive = false;
     public boolean mayPrimitiveArray = false;
     public boolean singleDerivedType = false;
+
+    /* If there are multiple fields in the Constraint need to generate and assessment (We call it MorphingPoint) In order to reduce time complexity,
+     *  we try to assess each MorphingPoint and choose the best one to generate the final structure. */
+    public Map<Long, Set<DataType>> morphingPoints = new HashMap<>();
     public Set<DataType> derivedTypes;
     public DataType finalType;
 
@@ -263,6 +267,13 @@ public class Skeleton {
         Logging.info("Skeleton", "Constraint:\n " + finalConstraint);
         Logging.info("Skeleton", finalConstraint.dumpLayout(0));
         Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + derivedTypes);
+        Logging.info("Skeleton", "Morphing Points: ");
+        for (var entry: morphingPoints.entrySet()) {
+            Logging.info("Skeleton", "Morphing Offset: 0x" + Long.toHexString(entry.getKey()));
+            for (var dt: entry.getValue()) {
+                Logging.info("Skeleton", dt.toString());
+            }
+        }
 
         Logging.info("Skeleton", " ------------------------------- End --------------------------------- ");
     }
