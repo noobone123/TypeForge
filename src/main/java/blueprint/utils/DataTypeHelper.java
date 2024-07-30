@@ -10,7 +10,7 @@ public class DataTypeHelper {
 
     private static final DataTypeManager dtM = Global.currentProgram.getDataTypeManager();
     private static final Map<String, DataType> nameToDTMap = new HashMap<>();
-    private static final String DEFAULT_BASENAME = "struct_";
+    private static final String DEFAULT_BASENAME = "ClayStruct";
     private static final String DEFAULT_CATEGORY = "/TypeClay_structs";
 
 
@@ -96,6 +96,41 @@ public class DataTypeHelper {
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_BASENAME);
         return new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, length, dtM);
     }
+
+    public static void populateStructure(Structure structDT, Map<Integer, DataType> componentMap, Skeleton skt) {
+        for (var entry: componentMap.entrySet()) {
+            var offset = entry.getKey();
+            var dt = entry.getValue();
+
+            if (structDT.getLength() < (offset + dt.getLength())) {
+                Logging.error("Generator", "Offset + DT Length > Structure Length");
+            }
+
+            try {
+                String name = null;
+                String comment = null;
+                if (skt.ptrReference.containsKey((long) offset)) {
+                    name = String.format("ptr_field_0x%s", Long.toHexString(offset));
+                }
+                else {
+                    name = String.format("field_0x%s", Long.toHexString(offset));
+                }
+                structDT.replaceAtOffset(offset, dt, dt.getLength(), name, comment);
+            }
+            catch (IllegalArgumentException e) {
+                Logging.error("Generator", "Failed to populate structure");
+                return;
+            }
+        }
+        dtM.addDataType(structDT, DataTypeConflictHandler.DEFAULT_HANDLER);
+    }
+
+    public static DataType getPointerOfStruct(Structure structDT) {
+        DataType pointerDT = new PointerDataType(structDT);
+        dtM.addDataType(pointerDT, DataTypeConflictHandler.DEFAULT_HANDLER);
+        return pointerDT;
+    }
+
 
     /**
      * Traverse the category and get all data types in the category.

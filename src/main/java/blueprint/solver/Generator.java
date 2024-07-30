@@ -9,6 +9,7 @@ import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.PointerDataType;
 import ghidra.program.model.data.Structure;
 
 import java.util.*;
@@ -56,8 +57,9 @@ public class Generator {
     //  1. try to merge nested if no conflicts found, if there are multiNested, choose the one with the most field
     //  2. try to scanning using sliding window like independent skeleton, consider nested and reference
     // TODO: handle evil nodes and evil sources
-    // TODO: handle stack variables
+    // TODO: sliding window scan struct and local variables
     // TODO: generate type declaration first, then try to retype and get pseudo-code
+    // TODO: assessing the signed field and unsigned field
     private void findingMayArrayBySlidingWindow() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
@@ -102,10 +104,10 @@ public class Generator {
                 }
 
                 var length = skt.getSize();
-                Logging.info("Generator", "Generating Structure Type with Length: " + length);
+                Logging.info("Generator", "Generating Structure Type with Length: " + Integer.toHexString(length));
                 var structDT = DataTypeHelper.createUniqueStructure(length);
-                var componentMap = skt.getComponentMap();
-                populateStructure(structDT, componentMap);
+                var componentMap = getComponentMap(skt);
+                DataTypeHelper.populateStructure(structDT, componentMap, skt);
                 skt.updateDerivedTypes(structDT);
 
                 skt.dumpInfo();
@@ -136,8 +138,20 @@ public class Generator {
         }
     }
 
-    private void populateStructure(Structure structDT, Map<Long, DataType> componentMap) {
-        // TODO: ...
+    /**
+     * Get the component map of the skeleton, parameter `skt` should not have conflicts
+     * @param skt the skeleton
+     * @return the component map
+     */
+    private Map<Integer, DataType> getComponentMap(Skeleton skt) {
+        var componentMap = new TreeMap<Integer, DataType>();
+        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+            var offset = entry.getKey().intValue();
+            var aps = entry.getValue();
+            var mostAccessedDT = AccessPoints.getMostAccessedDT(aps);
+            componentMap.put(offset, mostAccessedDT);
+        }
+        return componentMap;
     }
 
     public void explore() {
