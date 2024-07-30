@@ -5,6 +5,7 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.utils.DataTypeHelper;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
@@ -109,6 +110,7 @@ public class Generator {
             else {
                 Logging.info("Generator", "No Primitive Array Found");
                 handleInconsistencyField(skt);
+                handlePrimitiveFlatten(skt);
                 skt.dumpInfo();
             }
         }
@@ -134,6 +136,44 @@ public class Generator {
                 var componentMap_2 = getComponentMapByUnionFields(skt, offset);
                 DataTypeHelper.populateStructure(structDT_2, componentMap_2, skt);
                 skt.morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(structDT_2);
+            }
+        }
+    }
+
+    // TODO: check if correct ...
+    private void handlePrimitiveFlatten(Skeleton skt) {
+        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+        for (int i = 0; i < offsets.size(); i++) {
+            var offset = offsets.get(i);
+            var aps = skt.finalConstraint.fieldAccess.get(offset);
+            if (!skt.mustPrimitiveTypeAtOffset(offset)) {
+                continue;
+            }
+
+            var temp = new TreeMap<Long, Integer>();
+            temp.put(offset, AccessPoints.getDataTypeSize(aps));
+
+            for (int j = i + 1; j < offsets.size(); j++) {
+                var offset_j = offsets.get(j);
+                var aps_j = skt.finalConstraint.fieldAccess.get(offset_j);
+                if (!skt.mustPrimitiveTypeAtOffset(offset_j)) {
+                    break;
+                }
+
+                // If current dataType's size equals last dataType's size in temp
+                if (AccessPoints.getDataTypeSize(aps_j) == temp.get(offsets.get(j - 1))) {
+                    temp.put(offset_j, AccessPoints.getDataTypeSize(aps_j));
+                } else {
+                    break;
+                }
+            }
+
+            if (temp.size() > 3 && hasEqualInterval(temp.keySet())) {
+                Logging.info("Generator", String.format("Flatten Primitive Found At 0x%s", Long.toHexString(offset)));
+                skt.dumpInfo();
+
+                // Skip over the window size to avoid redundant checks
+                i += temp.size() - 1;
             }
         }
     }
@@ -213,6 +253,23 @@ public class Generator {
             }
         }
         return componentMap;
+    }
+
+    private boolean hasEqualInterval(Set<Long> offsetArray) {
+        if (offsetArray.size() < 2) {
+            return true;
+        }
+
+        List<Long> offsetList = new ArrayList<>(offsetArray);
+        Collections.sort(offsetList);
+
+        long interval = offsetList.get(1) - offsetList.get(0);
+        for (int i = 1; i < offsetList.size() - 1; i++) {
+            if (offsetList.get(i + 1) - offsetList.get(i) != interval) {
+                return false;
+            }
+        }
+        return true;
     }
 
 

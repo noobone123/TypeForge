@@ -6,7 +6,6 @@ import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
-import jnr.ffi.annotations.In;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -232,6 +231,17 @@ public class Skeleton {
         isPointerToPrimitive = true;
         finalType = dt;
         singleDerivedType = true;
+    }
+
+    public boolean mustPrimitiveTypeAtOffset(long offset) {
+        var aps = finalConstraint.fieldAccess.get(offset);
+        if (ptrReference.containsKey(offset) || mayNestedSkeleton.containsKey(offset) ||
+                !AccessPoints.ifAPSetHoldsSameSizeType(aps) ||
+                AccessPoints.getMostAccessedDT(aps).getLength() >= Global.currentProgram.getDefaultPointerSize()) {
+            return false;
+        } else {
+            return true;
+        }
     }
 
     @Override

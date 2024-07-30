@@ -145,5 +145,12 @@ public class AccessPoints {
         apSet.forEach(ap -> dataTypes.add(ap.dataType));
         return dataTypes;
     }
+
+    public static int getDataTypeSize(Set<AccessPoints.AP> apSet) {
+        if (apSet.isEmpty()) {
+            return 0;
+        }
+        return apSet.iterator().next().dataType.getLength();
+    }
 }
 
