@@ -453,7 +453,7 @@ public class PCodeVisitor {
         for (var loadAddrExpr : loadAddrExprs) {
             var loadedValueExpr = symExprManager.dereference(loadAddrExpr);
 
-            interCtx.addFieldAccessExpr(loadedValueExpr, pcodeOp, outDT, AccessPoints.AccessType.LOAD);
+            interCtx.addFieldAccessExpr(loadedValueExpr, pcodeOp, outDT, AccessPoints.AccessType.LOAD, funcNode.value);
 
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
@@ -487,7 +487,7 @@ public class PCodeVisitor {
 
         for (var storedAddrExpr : intraCtx.getDataFlowFacts(storedAddrVn)) {
             var storedValueExpr = symExprManager.dereference(storedAddrExpr);
-            interCtx.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE);
+            interCtx.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE, funcNode.value);
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));

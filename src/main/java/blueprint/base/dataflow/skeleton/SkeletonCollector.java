@@ -211,6 +211,10 @@ public class SkeletonCollector {
                 var ptrLevel = 1;
                 while (ptrEESkt.isMultiLevelPtr()) {
                     ptrLevel++;
+                    if (ptrEESkt == ptrEESkt.finalPtrReference.get(0L)) {
+                        Logging.warn("SkeletonCollector", "Ptr Reference Loop Detected!");
+                        break;
+                    }
                     ptrEESkt = ptrEESkt.finalPtrReference.get(0L);
                 }
 

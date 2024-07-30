@@ -1,10 +1,12 @@
 package blueprint.base.dataflow.skeleton;
 
+import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
+import jnr.ffi.annotations.In;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -28,8 +30,12 @@ public class Skeleton {
     public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
 
     public boolean isPointerToPrimitive = false;
+    public boolean mayPrimitiveArray = false;
+    public boolean singleDerivedType = false;
     public Set<DataType> derivedTypes;
     public DataType finalType;
+
+    public int size = -1;
 
     public Skeleton() { }
 
@@ -101,6 +107,39 @@ public class Skeleton {
     }
 
     /**
+     * Get the size of current skeleton, we consider the
+     * max of (finalConstraint.fieldAccess.size(), finalConstraint.fieldAccess.size() + nestedSkeleton.size())
+     * @return the size of current skeleton
+     */
+    public int getSize() {
+        if (size != -1) {
+            return size;
+        }
+
+        /* Get the last element of fieldAccess */
+        var maxSize = 0L;
+        for (var entry: finalConstraint.fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var maxSizeAtOffset = AccessPoints.getMaxSizeInAPSet(entry.getValue());
+            if (offset + maxSizeAtOffset > maxSize) {
+                maxSize = offset + maxSizeAtOffset;
+            }
+            /* Consider nested skeletons */
+            if (mayNestedSkeleton.containsKey(offset)) {
+                for (var skt: mayNestedSkeleton.get(offset)) {
+                    var nestedSize = skt.getSize();
+                    if (offset + nestedSize > maxSize) {
+                        maxSize = offset + nestedSize;
+                    }
+                }
+            }
+        }
+
+        size = (int) maxSize;
+        return size;
+    }
+
+    /**
      * If current skeleton has no pointer reference or nested skeletons, it is independent
      * @return true if independent
      */
@@ -133,6 +172,42 @@ public class Skeleton {
         return !mayNestedSkeleton.isEmpty();
     }
 
+    public boolean hasPtrReference() {
+        return !ptrReference.isEmpty();
+    }
+
+    public boolean mayPrimitiveArray() {
+        var fieldAccess = finalConstraint.fieldAccess;
+        var windowSize = 0;
+        var hitCount = 0;
+
+        for (var entry: fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var apSet = entry.getValue();
+            if (!AccessPoints.ifAPSetHoldsSameSizeType(apSet)) {
+                return false;
+            }
+            if (windowSize == 0) {
+                /* we expect that windowSize starts from offset 0x0 */
+                if (offset > 0) {
+                    return false;
+                }
+                windowSize = apSet.iterator().next().dataType.getLength();
+                // TODO: this is a assumption, maybe need to remove in abandoned study.
+                if (windowSize >= Global.currentProgram.getDefaultPointerSize()) {
+                    return false;
+                }
+            }
+            if (windowSize != apSet.iterator().next().dataType.getLength()) {
+                return false;
+            } else {
+                hitCount++;
+            }
+        }
+
+        return hitCount >= 2;
+    }
+
     public boolean hasOneField() {
         return finalConstraint.fieldAccess.size() == 1;
     }
@@ -152,6 +227,7 @@ public class Skeleton {
     public void setPrimitiveType(DataType dt) {
         isPointerToPrimitive = true;
         finalType = dt;
+        singleDerivedType = true;
     }
 
     @Override

@@ -12,6 +12,7 @@ import blueprint.base.node.FunctionNode;
 import blueprint.utils.Logging;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.PcodeOp;
 
 
@@ -57,9 +58,9 @@ public class InterContext {
         return intraCtxMap.get(funcNode);
     }
 
-    public void addFieldAccessExpr(SymbolExpr expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType) {
+    public void addFieldAccessExpr(SymbolExpr expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType, Function function) {
         fieldExprCandidates.add(expr);
-        APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType);
+        APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType, function);
     }
 
     public void addTypeRelation(SymbolExpr from, SymbolExpr to, TypeRelationGraph.EdgeType edgeType) {

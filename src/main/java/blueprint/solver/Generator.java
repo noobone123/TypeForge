@@ -1,5 +1,6 @@
 package blueprint.solver;
 
+import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
@@ -8,6 +9,7 @@ import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.Structure;
 
 import java.util.*;
 
@@ -49,7 +51,6 @@ public class Generator {
         findingMayArrayBySlidingWindow();
     }
 
-    // TODO: handle Independent Skeleton
     // TODO: derived types should not has overlap conflict with skeleton's final Constraint
     // TODO: how to handle nested (multi nested ?)
     //  1. try to merge nested if no conflicts found, if there are multiNested, choose the one with the most field
@@ -82,38 +83,61 @@ public class Generator {
         }
     }
 
-
     private void handleNoNestedSkeleton(Skeleton skt) {
-        // TODO: ...
+        if (skt.hasPtrReference()) {
+            Logging.info("Generator", "No Nested && Has Ptr Reference");
+        } else {
+            Logging.info("Generator", "No Nested && No Ptr Reference");
+            if (skt.mayPrimitiveArray()) {
+                Logging.info("Generator", "May Primitive Array Found");
+                skt.mayPrimitiveArray = true;
+                var aps = skt.finalConstraint.fieldAccess.get(0L);
+                var elementType = AccessPoints.getMostAccessedDT(aps);
+                var ptrToArrayType = generatePointerToPrimitive(elementType);
+                if (ptrToArrayType == null) {
+                    Logging.error("Generator", "Failed to generate array type");
+                    return;
+                } else {
+                    skt.updateDerivedTypes(ptrToArrayType);
+                }
+
+                var length = skt.getSize();
+                Logging.info("Generator", "Generating Structure Type with Length: " + length);
+                var structDT = DataTypeHelper.createUniqueStructure(length);
+                var componentMap = skt.getComponentMap();
+                populateStructure(structDT, componentMap);
+                skt.updateDerivedTypes(structDT);
+
+                skt.dumpInfo();
+            }
+        }
     }
 
     private void handlePointerToPrimitive(Skeleton skt) {
-        Logging.info("Generator", "F = 1 && Offset = 0");
-        skt.dumpInfo();
+        Logging.info("Generator", "Field = 1 && Offset = 0");
         var aps = skt.finalConstraint.fieldAccess.get(0L);
-        Map<DataType, Integer> apCount = new HashMap<>();
-        aps.forEach(ap -> {
-            apCount.putIfAbsent(ap.dataType, 0);
-            apCount.put(ap.dataType, apCount.get(ap.dataType) + 1);
-        });
-
-        /* Find DataType with Max access count */
-        var maxCount = 0;
-        DataType maxDT = null;
-        for (var entry: apCount.entrySet()) {
-            if (entry.getValue() > maxCount) {
-                maxCount = entry.getValue();
-                maxDT = entry.getKey();
-            }
-        }
-
-        var resDT = DataTypeHelper.getPointerDT(maxDT, 1);
-        if (resDT == null) {
+        var mostAccessedDT = AccessPoints.getMostAccessedDT(aps);
+        var pointerType = generatePointerToPrimitive(mostAccessedDT);
+        if (pointerType == null) {
             Logging.error("Generator", "Failed to handle F = 1 && Offset = 0");
             return;
         } else {
-            skt.setPrimitiveType(resDT);
+            skt.setPrimitiveType(pointerType);
         }
+    }
+
+    private DataType generatePointerToPrimitive(DataType primitiveType) {
+        var pointerType = DataTypeHelper.getPointerDT(primitiveType, 1);
+        if (pointerType == null) {
+            Logging.error("Generator", "Failed to generate pointer to primitive type");
+            return null;
+        } else {
+            return pointerType;
+        }
+    }
+
+    private void populateStructure(Structure structDT, Map<Long, DataType> componentMap) {
+        // TODO: ...
     }
 
     public void explore() {
@@ -135,17 +159,5 @@ public class Generator {
         for (var path: skeletonCollector.evilPaths) {
             Logging.info("Generator", path.toString());
         }
-    }
-
-
-    public void buildSkeleton(SymbolExpr expr, TypeConstraint constraint) {
-        constraint.accessOffsets.forEach((ap, offsets) -> {
-            if (offsets.size() > 1) {
-                for (var offset : offsets) {
-                    // If one pcode Access Multiple fields, we should add a tag to the field
-                    constraint.addFieldAttr(offset, TypeConstraint.Attribute.SAME_ACCESS_ON_MULTI_OFFSETS);
-                }
-            }
-        });
     }
 }

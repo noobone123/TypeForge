@@ -1,5 +1,6 @@
 package blueprint.utils;
 
+import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import ghidra.program.model.data.*;
 
@@ -7,8 +8,10 @@ import java.util.*;
 
 public class DataTypeHelper {
 
-    public static DataTypeManager dtM = Global.currentProgram.getDataTypeManager();
-    public static Map<String, DataType> nameToDTMap = new HashMap<>();
+    private static final DataTypeManager dtM = Global.currentProgram.getDataTypeManager();
+    private static final Map<String, DataType> nameToDTMap = new HashMap<>();
+    private static final String DEFAULT_BASENAME = "struct_";
+    private static final String DEFAULT_CATEGORY = "/TypeClay_structs";
 
 
     public static void buildNameToDTMap() {
@@ -85,6 +88,14 @@ public class DataTypeHelper {
         }
     }
 
+    /**
+     * Create a new structure
+     * @return the new Structure
+     */
+    public static Structure createUniqueStructure(int length) {
+        String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_BASENAME);
+        return new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, length, dtM);
+    }
 
     /**
      * Traverse the category and get all data types in the category.

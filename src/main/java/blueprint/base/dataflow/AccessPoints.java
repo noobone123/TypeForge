@@ -3,6 +3,7 @@ package blueprint.base.dataflow;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.PcodeOp;
 
 import java.util.HashSet;
@@ -29,6 +30,7 @@ public class AccessPoints {
     public static class AP {
         public final PcodeOp pcodeOp;
         public final DataType dataType;
+        public final Function func;
 
         /** accessType: including:
          * 0: load
@@ -38,7 +40,7 @@ public class AccessPoints {
          */
         public AccessType accessType;
 
-        public AP(PcodeOp pcodeOp, DataType type, AccessType accessType) {
+        public AP(PcodeOp pcodeOp, DataType type, AccessType accessType, Function func) {
             this.pcodeOp = pcodeOp;
             if (accessType != AccessType.ARGUMENT) {
                 assert type != null;
@@ -48,6 +50,7 @@ public class AccessPoints {
                 this.dataType = null;
             }
             this.accessType = accessType;
+            this.func = func;
         }
 
         @Override
@@ -81,14 +84,60 @@ public class AccessPoints {
         fieldExprToAccessMap = new HashMap<>();
     }
 
-    public void addFieldAccessPoint(SymbolExpr symExpr, PcodeOp op, DataType type, AccessType accessType) {
+    public void addFieldAccessPoint(SymbolExpr symExpr, PcodeOp op, DataType type, AccessType accessType, Function func) {
         fieldExprToAccessMap.putIfAbsent(symExpr, new HashSet<>());
-        fieldExprToAccessMap.get(symExpr).add(new AP(op, type, accessType));
+        fieldExprToAccessMap.get(symExpr).add(new AP(op, type, accessType, func));
         Logging.info("AccessPoints", String.format("Add Field Access %s for [%s] with type [%s]", accessType, symExpr, type.getName()));
     }
 
     public Set<AP> getFieldAccessPoints(SymbolExpr symExpr) {
         return fieldExprToAccessMap.get(symExpr);
+    }
+
+    public static boolean ifAPSetHoldsSameSizeType(Set<AccessPoints.AP> apSet) {
+        if (apSet.isEmpty()) {
+            return false;
+        }
+        var firstAP = apSet.iterator().next();
+        var firstDT = firstAP.dataType;
+        for (var ap : apSet) {
+            if (!(firstDT.getLength() == ap.dataType.getLength())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static int getMaxSizeInAPSet(Set<AccessPoints.AP> apSet) {
+        if (apSet.isEmpty()) {
+            return 0;
+        }
+        var maxSize = 0;
+        for (var ap : apSet) {
+            if (ap.dataType.getLength() > maxSize) {
+                maxSize = ap.dataType.getLength();
+            }
+        }
+        return maxSize;
+    }
+
+    public static DataType getMostAccessedDT(Set<AccessPoints.AP> apSet) {
+        Map<DataType, Integer> apCount = new HashMap<>();
+        apSet.forEach(ap -> {
+            apCount.putIfAbsent(ap.dataType, 0);
+            apCount.put(ap.dataType, apCount.get(ap.dataType) + 1);
+        });
+
+        /* Find DataType with Max access count */
+        var maxCount = 0;
+        DataType maxDT = null;
+        for (var entry: apCount.entrySet()) {
+            if (entry.getValue() > maxCount) {
+                maxCount = entry.getValue();
+                maxDT = entry.getKey();
+            }
+        }
+        return maxDT;
     }
 }
 
