@@ -92,10 +92,12 @@ public class DataTypeHelper {
      * Create a new structure
      * @return the new Structure
      */
-    public static Structure createUniqueStructure(int length) {
-        Logging.info("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(length));
+    public static Structure createUniqueStructure(Skeleton skt, Map<Integer, DataType> componentMap) {
+        Logging.info("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(skt.getSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_STRUCT_BASENAME);
-        return new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, length, dtM);
+        var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, skt.getSize(), dtM);
+        populateStructure(structDT, componentMap, skt);
+        return structDT;
     }
 
 
@@ -109,6 +111,10 @@ public class DataTypeHelper {
             unionDT.add(dt, dt.getLength(), name, null);
         }
         return unionDT;
+    }
+
+    public static Array createArrayOfPrimitive(DataType elementDT, int length) {
+        return new ArrayDataType(elementDT, length, elementDT.getLength(), dtM);
     }
 
 

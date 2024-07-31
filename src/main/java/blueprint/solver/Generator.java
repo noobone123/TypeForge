@@ -5,7 +5,6 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.utils.DataTypeHelper;
-import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
@@ -76,7 +75,6 @@ public class Generator {
             }
             else {
                 Logging.info("Generator", "Normal Skeleton: " + skt);
-                skt.dumpInfo();
             }
         }
     }
@@ -98,13 +96,12 @@ public class Generator {
                     Logging.error("Generator", "Failed to generate array type");
                     return;
                 } else {
-                    skt.updateDerivedTypes(ptrToArrayType);
+                    skt.updateMorphingDataType(ptrToArrayType, -1);
                 }
 
-                var structDT = DataTypeHelper.createUniqueStructure(skt.getSize());
                 var componentMap = getComponentMapByMostAccessed(skt);
-                DataTypeHelper.populateStructure(structDT, componentMap, skt);
-                skt.updateDerivedTypes(DataTypeHelper.getPointerOfStruct(structDT));
+                var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
+                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT), -1);
                 skt.dumpInfo();
             }
             else {
@@ -126,21 +123,19 @@ public class Generator {
                 Logging.info("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
 
                 // Create Union or Find the most accessed data type
-                // TODO: remember to add getPointerOfStruct
-                var structDT_1 = DataTypeHelper.createUniqueStructure(skt.getSize());
                 var componentMap_1 = getComponentMapByMostAccessed(skt);
-                DataTypeHelper.populateStructure(structDT_1, componentMap_1, skt);
-                skt.morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(structDT_1);
+                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
 
-                var structDT_2 = DataTypeHelper.createUniqueStructure(skt.getSize());
                 var componentMap_2 = getComponentMapByUnionFields(skt, offset);
-                DataTypeHelper.populateStructure(structDT_2, componentMap_2, skt);
-                skt.morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(structDT_2);
+                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+
+                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), offset);
+                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset);
             }
         }
     }
 
-    // TODO: check if correct ...
+
     private void handlePrimitiveFlatten(Skeleton skt) {
         List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
         for (int i = 0; i < offsets.size(); i++) {
@@ -150,8 +145,8 @@ public class Generator {
                 continue;
             }
 
-            var temp = new TreeMap<Long, Integer>();
-            temp.put(offset, AccessPoints.getDataTypeSize(aps));
+            var combined = new TreeMap<Long, Set<AccessPoints.AP>>();
+            combined.put(offset, aps);
 
             for (int j = i + 1; j < offsets.size(); j++) {
                 var offset_j = offsets.get(j);
@@ -161,19 +156,42 @@ public class Generator {
                 }
 
                 // If current dataType's size equals last dataType's size in temp
-                if (AccessPoints.getDataTypeSize(aps_j) == temp.get(offsets.get(j - 1))) {
-                    temp.put(offset_j, AccessPoints.getDataTypeSize(aps_j));
+                var prevAPs = combined.get(offsets.get(j - 1));
+                if (AccessPoints.getDataTypeSize(aps_j) == AccessPoints.getDataTypeSize(prevAPs)) {
+                    combined.put(offset_j, aps_j);
                 } else {
                     break;
                 }
             }
 
-            if (temp.size() > 3 && hasEqualInterval(temp.keySet())) {
-                Logging.info("Generator", String.format("Flatten Primitive Found At 0x%s", Long.toHexString(offset)));
-                skt.dumpInfo();
+            if (combined.size() > 3 && hasEqualInterval(combined.keySet())) {
+                Logging.info("Generator", String.format("Flatten Primitive Found At 0x%s with count %d", Long.toHexString(offset), combined.size()));
+
+                /* Find Mosted Accessed DataType in the `combined` */
+                Map<DataType, Integer> dataTypeCount = new HashMap<>();
+                for (var apS : combined.values()) {
+                    for (var ap: apS) {
+                        var dt = ap.dataType;
+                        dataTypeCount.putIfAbsent(dt, 0);
+                        dataTypeCount.put(dt, dataTypeCount.get(dt) + 1);
+                    }
+                }
+                DataType mostCommonDT = dataTypeCount.entrySet().stream()
+                        .max(Map.Entry.comparingByValue())
+                        .get()
+                        .getKey();
+
+                /* Create Component Map */
+                var componentMap_1 = getComponentMapByMostAccessed(skt);
+                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
+                var componentMap_2 = getComponentMapByCombineFlattenFields(skt, offset, mostCommonDT, combined.size());
+                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+
+                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), offset);
+                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset);
 
                 // Skip over the window size to avoid redundant checks
-                i += temp.size() - 1;
+                i += combined.size() - 1;
             }
         }
     }
@@ -211,10 +229,7 @@ public class Generator {
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var offset = entry.getKey().intValue();
             if (skt.ptrReference.containsKey((long) offset)) {
-                var ptrLevel = skt.ptrLevel.get((long) offset);
-                var dt = DataTypeHelper.getDataTypeByName("void");
-                dt = DataTypeHelper.getPointerDT(dt, ptrLevel);
-                componentMap.put(offset, dt);
+                handlePtrReferenceComponent(componentMap, offset, skt.ptrLevel.get((long) offset));
                 continue;
             }
 
@@ -236,10 +251,7 @@ public class Generator {
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey().intValue();
             if (skt.ptrReference.containsKey((long) fieldOffset)) {
-                var ptrLevel = skt.ptrLevel.get((long) fieldOffset);
-                var dt = DataTypeHelper.getDataTypeByName("void");
-                dt = DataTypeHelper.getPointerDT(dt, ptrLevel);
-                componentMap.put(fieldOffset, dt);
+                handlePtrReferenceComponent(componentMap, fieldOffset, skt.ptrLevel.get((long) fieldOffset));
                 continue;
             }
 
@@ -253,6 +265,42 @@ public class Generator {
             }
         }
         return componentMap;
+    }
+
+    /**
+     * Create a structure by combining flatten fields at the specified offset
+     * @param skt the skeleton
+     * @param offset the offset to combine flatten fields
+     * @param elementDT the element data type
+     * @param elementNum the element number
+     * @return the component map
+     */
+    private Map<Integer, DataType> getComponentMapByCombineFlattenFields(Skeleton skt, long offset, DataType elementDT, int elementNum) {
+        var componentMap = new TreeMap<Integer, DataType>();
+        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+            var fieldOffset = entry.getKey().intValue();
+            if (skt.ptrReference.containsKey((long) fieldOffset)) {
+                handlePtrReferenceComponent(componentMap, fieldOffset, skt.ptrLevel.get((long) fieldOffset));
+                continue;
+            }
+
+            var aps = entry.getValue();
+            if (fieldOffset == offset) {
+                var flattenDT = DataTypeHelper.createArrayOfPrimitive(elementDT, elementNum);
+                componentMap.put(fieldOffset, flattenDT);
+            } else {
+                var mostAccessedDT = AccessPoints.getMostAccessedDT(aps);
+                componentMap.put(fieldOffset, mostAccessedDT);
+            }
+        }
+        return componentMap;
+    }
+
+
+    private void handlePtrReferenceComponent(TreeMap<Integer, DataType> componentMap, int offset, int ptrLevel) {
+        var dt = DataTypeHelper.getDataTypeByName("void");
+        dt = DataTypeHelper.getPointerDT(dt, ptrLevel);
+        componentMap.put(offset, dt);
     }
 
     private boolean hasEqualInterval(Set<Long> offsetArray) {

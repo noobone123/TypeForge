@@ -32,10 +32,18 @@ public class Skeleton {
     public boolean mayPrimitiveArray = false;
     public boolean singleDerivedType = false;
 
-    /* If there are multiple fields in the Constraint need to generate and assessment (We call it MorphingPoint) In order to reduce time complexity,
-     *  we try to assess each MorphingPoint and choose the best one to generate the final structure. */
+    /**
+     *  If there are multiple fields in the Constraint need to generate and assessment (We call it MorphingPoint)
+     *  In order to reduce time complexity, we try to assess each MorphingPoint and choose the best one in each MorphingPoint.
+     *  And finally, we will synthesize the final result based on every best choice in each MorphingPoint.
+     */
     public Map<Long, Set<DataType>> morphingPoints = new HashMap<>();
-    public Set<DataType> derivedTypes;
+    /**
+     * Some Composite DataTypes do not have morphing points, they morph in the whole field.
+     */
+    public Set<DataType> totalMorphingTypes = new HashSet<>();
+    public Set<DataType> decompilerInferredTypes;
+
     public DataType finalType;
 
     public int size = -1;
@@ -100,13 +108,6 @@ public class Skeleton {
             }
         }
         return variables;
-    }
-
-    public void updateDerivedTypes(DataType dt) {
-        if (derivedTypes == null) {
-            derivedTypes = new HashSet<>();
-        }
-        derivedTypes.add(dt);
     }
 
     /**
@@ -216,10 +217,10 @@ public class Skeleton {
     }
 
     public boolean decompilerInferredTypesHasComposite() {
-        if (derivedTypes == null) {
+        if (decompilerInferredTypes == null) {
             return false;
         }
-        for (var dt: derivedTypes) {
+        for (var dt: decompilerInferredTypes) {
             if (DataTypeHelper.isPointerToCompositeDataType(dt) || DataTypeHelper.isCompositeOrArray(dt)) {
                 return true;
             }
@@ -231,6 +232,25 @@ public class Skeleton {
         isPointerToPrimitive = true;
         finalType = dt;
         singleDerivedType = true;
+    }
+
+    public void updateMorphingDataType(DataType dt, long offset) {
+        if (offset == -1) {
+            if (mayPrimitiveArray) {
+                totalMorphingTypes.add(dt);
+            } else {
+                Logging.error("Skeleton", "Unexpected morphing data type update");
+            }
+        } else {
+            morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(dt);
+        }
+    }
+
+    public void updateDecompilerInferredTypes(DataType dt) {
+        if (decompilerInferredTypes == null) {
+            decompilerInferredTypes = new HashSet<>();
+        }
+        decompilerInferredTypes.add(dt);
     }
 
     public boolean mustPrimitiveTypeAtOffset(long offset) {
@@ -276,7 +296,8 @@ public class Skeleton {
         Logging.info("Skeleton", "All Variables: " + getVariables());
         Logging.info("Skeleton", "Constraint:\n " + finalConstraint);
         Logging.info("Skeleton", finalConstraint.dumpLayout(0));
-        Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + derivedTypes);
+        Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
+        // TODO: ...
         Logging.info("Skeleton", "Morphing Points: ");
         for (var entry: morphingPoints.entrySet()) {
             Logging.info("Skeleton", "Morphing Offset: 0x" + Long.toHexString(entry.getKey()));

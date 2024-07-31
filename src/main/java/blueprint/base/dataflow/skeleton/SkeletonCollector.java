@@ -352,7 +352,7 @@ public class SkeletonCollector {
             for (var expr: skt.exprs) {
                 if (expr.isVariable()) {
                     var inferredType = exprManager.getInferredType(expr);
-                    inferredType.ifPresent(skt::updateDerivedTypes);
+                    inferredType.ifPresent(skt::updateDecompilerInferredTypes);
                 }
             }
         }
