@@ -29,6 +29,7 @@ public class Skeleton {
     public Map<Long, Integer> ptrLevel = new HashMap<>();
     public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
 
+    public boolean hasDerivedTypes = false;
     public boolean isPointerToPrimitive = false;
     public boolean mayPrimitiveArray = false;
     public boolean singleDerivedType = false;
@@ -130,15 +131,6 @@ public class Skeleton {
             if (offset + maxSizeAtOffset > maxSize) {
                 maxSize = offset + maxSizeAtOffset;
             }
-            /* Consider nested skeletons */
-            if (mayNestedSkeleton.containsKey(offset)) {
-                for (var skt: mayNestedSkeleton.get(offset)) {
-                    var nestedSize = skt.getSize();
-                    if (offset + nestedSize > maxSize) {
-                        maxSize = offset + nestedSize;
-                    }
-                }
-            }
         }
 
         size = (int) maxSize;
@@ -175,7 +167,30 @@ public class Skeleton {
     }
 
     public boolean hasNestedSkeleton() {
-        return !mayNestedSkeleton.isEmpty();
+        if (mayNestedSkeleton.isEmpty()) {
+            return false;
+        }
+
+        boolean shouldNest = true;
+        for (var entry: mayNestedSkeleton.entrySet()) {
+            var offset = entry.getKey();
+            var nestees = entry.getValue();
+            for (var nestee: nestees) {
+                if (this == nestee) {
+                    Logging.warn("Generator", "Recursive Nesting is forbidden!");
+                    shouldNest = false;
+                }
+                else if (offset > getSize()) {
+                    Logging.warn("Generator", "Offset larger than the size of the nester!");
+                    shouldNest = false;
+                }
+                else {
+                    shouldNest = true;
+                }
+            }
+        }
+
+        return shouldNest;
     }
 
     public boolean hasPtrReference() {
@@ -241,7 +256,8 @@ public class Skeleton {
             if (mayPrimitiveArray) {
                 totalMorphingTypes.add(dt);
             } else {
-                Logging.error("Skeleton", "Unexpected morphing data type update");
+                /* If no morphing offset and morphing end, and not a primitive array, we set it as final type */
+                finalType = dt;
             }
         } else {
             morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(dt);
@@ -313,6 +329,7 @@ public class Skeleton {
                 }
             }
         }
+        Logging.info("Skeleton", "Final Type:\n" + finalType);
 
         Logging.info("Skeleton", " ------------------------------- End --------------------------------- ");
     }

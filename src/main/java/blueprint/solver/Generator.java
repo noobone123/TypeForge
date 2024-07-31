@@ -5,6 +5,7 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.utils.DataTypeHelper;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
@@ -46,20 +47,14 @@ public class Generator {
      */
     public void run() {
         /* In rare cases, */
-        findingMayArrayBySlidingWindow();
+        ttt();
     }
 
-    // TODO: how to handle nested (multi nested ?)
-    //  1. try to merge nested if no conflicts found, if there are multiNested, choose the one with the most field
-    //  2. try to scanning using sliding window like independent skeleton, consider nested and reference
-    // TODO: handle evil nodes and evil sources
-    // TODO: sliding window scan struct and local variables
-    // TODO: generate type declaration first, then try to retype and get pseudo-code
-    // TODO: assessing the signed field and unsigned field
-    private void findingMayArrayBySlidingWindow() {
+    private void ttt() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isMultiLevelPtr()) {
+                // TODO: handle multi-level ptr ?
                 Logging.info("Generator", "Multi Level Ptr Skeleton: " + skt);
                 continue;
             }
@@ -74,8 +69,21 @@ public class Generator {
                 Logging.info("Generator", "No Nested Skeleton: " + skt);
                 handleNoNestedSkeleton(skt);
             }
-            else {
-                Logging.info("Generator", "Normal Skeleton: " + skt);
+        }
+
+        // TODO: Handle Nested Skeleton finally
+    }
+
+
+    private void handleNestedSkeleton(Skeleton skt) {
+        for (var offset: skt.mayNestedSkeleton.keySet()) {
+            var nestedSktSet = skt.mayNestedSkeleton.get(offset);
+            if (nestedSktSet.size() == 1) {
+                var nestedSkt = nestedSktSet.iterator().next();
+
+                Logging.info("Generator", String.format("Nested Skeleton Found At 0x%s", Long.toHexString(offset)));
+                skt.dumpInfo();
+                nestedSkt.dumpInfo();
             }
         }
     }
@@ -84,57 +92,29 @@ public class Generator {
         if (skt.hasPtrReference()) {
             Logging.info("Generator", "No Nested && Has Ptr Reference");
             handleInconsistencyField(skt);
-            skt.dumpInfo();
+            handlePrimitiveFlatten(skt);
+            // TODO: Using a larger sliding window size and considering the ptrReference Information
         } else {
             Logging.info("Generator", "No Nested && No Ptr Reference");
             if (skt.mayPrimitiveArray()) {
                 Logging.info("Generator", "May Primitive Array Found");
-                skt.mayPrimitiveArray = true;
-                var aps = skt.finalConstraint.fieldAccess.get(0L);
-                var elementType = aps.mostAccessedDT;
-                var ptrToArrayType = generatePointerToPrimitive(elementType);
-                if (ptrToArrayType == null) {
-                    Logging.error("Generator", "Failed to generate array type");
-                    return;
-                } else {
-                    skt.updateMorphingDataType(ptrToArrayType, -1, -1);
-                }
-
-                var componentMap = getComponentMapByMostAccessed(skt);
-                var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
-                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT), -1, -1);
-                skt.dumpInfo();
+                handleMayPrimitiveArray(skt);
             }
             else {
                 Logging.info("Generator", "No Primitive Array Found");
                 handleInconsistencyField(skt);
                 handlePrimitiveFlatten(skt);
-                skt.dumpInfo();
             }
         }
-    }
 
-    private void handleInconsistencyField(Skeleton skt) {
-        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
-            var offset = entry.getKey();
-            var aps = entry.getValue();
-            /* If Contains Ptr Reference, this field should be a ptrReference */
-            if (!aps.isSameSizeType && !skt.ptrReference.containsKey(offset)) {
-                Logging.info("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
-
-                // Create Union or Find the most accessed data type
-                var componentMap_1 = getComponentMapByMostAccessed(skt);
-                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
-
-                var componentMap_2 = getComponentMapByUnionFields(skt, offset);
-                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
-
-                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), offset, offset);
-                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset, offset);
-            }
+        /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
+        if (!skt.hasDerivedTypes) {
+            Logging.info("Generator", "Stable Skeleton");
+            handleNormalSkeleton(skt);
         }
-    }
 
+        skt.dumpInfo();
+    }
 
     private void handlePrimitiveFlatten(Skeleton skt) {
         List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
@@ -190,11 +170,37 @@ public class Generator {
 
                 skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), offset, combined.lastKey());
                 skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset, combined.lastKey());
+                skt.hasDerivedTypes = true;
 
                 // Skip over the window size to avoid redundant checks
                 i += combined.size() - 1;
             }
         }
+    }
+
+    private void handleNormalSkeleton(Skeleton skt) {
+        var componentMap = getComponentMapByMostAccessed(skt);
+        Logging.info("Generator",componentMap.toString());
+        var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
+        skt.updateMorphingDataType(structDT, -1, -1);
+        skt.hasDerivedTypes = true;
+    }
+
+    private void handleMayPrimitiveArray(Skeleton skt) {
+        skt.mayPrimitiveArray = true;
+        var aps = skt.finalConstraint.fieldAccess.get(0L);
+        var elementType = aps.mostAccessedDT;
+        var ptrToArrayType = generatePointerToPrimitive(elementType);
+        if (ptrToArrayType == null) {
+            Logging.error("Generator", "Failed to generate array type");
+            return;
+        }
+
+        var componentMap = getComponentMapByMostAccessed(skt);
+        var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
+        skt.updateMorphingDataType(ptrToArrayType, -1, -1);
+        skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT), -1, -1);
+        skt.hasDerivedTypes = true;
     }
 
     private void handlePointerToPrimitive(Skeleton skt) {
@@ -207,6 +213,29 @@ public class Generator {
             return;
         } else {
             skt.setPrimitiveType(pointerType);
+            skt.hasDerivedTypes = true;
+        }
+    }
+
+    private void handleInconsistencyField(Skeleton skt) {
+        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var aps = entry.getValue();
+            /* If Contains Ptr Reference, this field should be a ptrReference */
+            if (!aps.isSameSizeType && !skt.ptrReference.containsKey(offset)) {
+                Logging.info("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
+
+                // Create Union or Find the most accessed data type
+                var componentMap_1 = getComponentMapByMostAccessed(skt);
+                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
+
+                var componentMap_2 = getComponentMapByUnionFields(skt, offset);
+                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+
+                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), offset, offset);
+                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset, offset);
+                skt.hasDerivedTypes = true;
+            }
         }
     }
 
@@ -229,13 +258,18 @@ public class Generator {
         var componentMap = new TreeMap<Integer, DataType>();
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var offset = entry.getKey().intValue();
-            if (skt.ptrReference.containsKey((long) offset)) {
-                handlePtrReferenceComponent(componentMap, offset, skt.ptrLevel.get((long) offset));
-                continue;
-            }
-
             var aps = entry.getValue();
             var mostAccessedDT = aps.mostAccessedDT;
+
+            if (skt.ptrReference.containsKey((long) offset)) {
+                if (mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize()) {
+                    handlePtrReferenceComponent(componentMap, offset, skt.ptrLevel.get((long) offset));
+                    continue;
+                } else {
+                    skt.ptrReference.remove((long) offset);
+                }
+            }
+
             componentMap.put(offset, mostAccessedDT);
         }
         return componentMap;
@@ -330,7 +364,6 @@ public class Generator {
         }
         return true;
     }
-
 
     public void explore() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
