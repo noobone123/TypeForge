@@ -103,6 +103,8 @@ public class InterContext {
         Logging.info("InterContext", "Total Graph Number: " + typeRelationManager.getGraphs().size());
         typeRelationManager.buildAllPathManagers();
 
+        Set<Function> evilFunctions = new HashSet<>();
+
         // Remove some redundant edges in the graph
         for (var graph: typeRelationManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
@@ -120,6 +122,20 @@ public class InterContext {
                         graph.pathManager.evilSourceLCSEdges, graph.pathManager.evilSourceEndEdges);
                 collector.updateEvilNodes(graph.pathManager.evilNodes,
                         graph.pathManager.evilNodeEdges);
+                evilFunctions.addAll(graph.pathManager.evilFunction);
+            }
+        }
+
+        // TODO: may be too aggressive ? // Keep parameters and just remove local variables, no one union return value or parameters
+        //  Checking the function's, just mark all local expressions ?
+        for (var graph: typeRelationManager.getGraphs()) {
+            for (var node: graph.getGraph().vertexSet()) {
+                if (evilFunctions.contains(node.function)) {
+                    Logging.info("InterContext", String.format("Found evil node in function %s: %s", node.function, node));
+                    for (var edge: graph.getGraph().edgesOf(node)) {
+                        graph.getGraph().removeEdge(edge);
+                    }
+                }
             }
         }
 

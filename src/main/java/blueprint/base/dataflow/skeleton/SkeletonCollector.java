@@ -117,11 +117,11 @@ public class SkeletonCollector {
 
             if (!skt.hasMultiConstraints) {
                 assert skt.constraints.size() == 1;
-                Logging.info("SkeletonCollector", String.format("Skeleton with single Constraint has Exprs: \n%s", skt.exprs));
+                Logging.info("SkeletonCollector", String.format("%s with single Constraint has Exprs: \n%s", skt.toString(), skt.exprs));
                 Logging.info("SkeletonCollector", String.format("Constraint: \n%s", skt.constraints.iterator().next().dumpLayout(0)));
             } else {
                 assert skt.constraints.size() > 1;
-                Logging.info("SkeletonCollector", String.format("Skeleton with multiple Constraints has Exprs: \n%s", skt.exprs));
+                Logging.info("SkeletonCollector", String.format("%s with multiple Constraints has Exprs: \n%s", skt.toString(), skt.exprs));
                 for (var constraint: skt.constraints) {
                     Logging.info("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
                 }
@@ -367,7 +367,6 @@ public class SkeletonCollector {
         }
     }
 
-
     public void handleCodePtr(Set<SymbolExpr> exprsAsCodePtr) {
         for (var expr: exprsAsCodePtr) {
             if (expr.isDereference()) {
@@ -408,6 +407,7 @@ public class SkeletonCollector {
                     var skt1 = exprToSkeletonMap.get(e);
                     var skt2 = exprToSkeletonMap.get(expr);
                     if (skt1 != skt2) {
+                        // TODO: also checking polyTypes.
                         if (twoSkeletonsConflict(skt1, skt2)) {
                             Logging.warn("SkeletonCollector", String.format("Conflict Type Alias: %s <--> %s", e, expr));
                             continue;
@@ -431,6 +431,8 @@ public class SkeletonCollector {
 
                         if (mergedRes.isPresent()) {
                             newSkeleton = mergedRes.get();
+                            Logging.info("SkeletonCollector", String.format("New Merged %s from type Alias.", newSkeleton));
+                            Logging.info("SkeletonCollector", newSkeleton.exprs.toString());
                             /* update exprToSkeletonMap */
                             for (var e1: newSkeleton.exprs) {
                                 exprToSkeletonMap.put(e1, newSkeleton);

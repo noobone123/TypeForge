@@ -368,6 +368,7 @@ public class Generator {
     public void explore() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            Logging.info("Generator", String.format("Exploring Skeleton: %s", skt));
             if (skt.isMultiLevelPtr()) continue;
             skt.dumpInfo();
         }

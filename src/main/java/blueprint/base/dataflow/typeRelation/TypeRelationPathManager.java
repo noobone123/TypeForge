@@ -8,6 +8,7 @@ import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.base.dataflow.skeleton.TypeConstraint;
 import blueprint.base.dataflow.types.Layout;
 import blueprint.utils.Logging;
+import ghidra.program.model.listing.Function;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
 import java.io.FileWriter;
@@ -29,6 +30,7 @@ public class TypeRelationPathManager<T> {
     public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
     public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
     public final Set<T> evilSource = new HashSet<>();
+    public final Set<Function> evilFunction = new HashSet<>();
     public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
     public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
 
@@ -126,8 +128,11 @@ public class TypeRelationPathManager<T> {
             // If there has conflict when merging different paths from same source, means there maybe wrapper function or some other reasons
             // For soundness, we need to find the longest common subpath in these paths and remove edges
             if (!success) {
+                /* Mark all exprs connect to this source in current function as evil */
                 evilSource.add(src);
-                Logging.info("TypeRelationPathManager", String.format("Evil source found: %s", src));
+                evilFunction.add(((SymbolExpr)src).function);
+                Logging.info("TypeRelationPathManager", String.format("Evil source nodes found: %s", src));
+                Logging.warn("TypeRelationPathManager", String.format("Evil function found: %s", ((SymbolExpr)src).function));
                 for (var path: pathsFromSrc) {
                     Logging.info("TypeRelationPathManager", path.toString());
                 }
@@ -213,6 +218,7 @@ public class TypeRelationPathManager<T> {
                     if (!success) {
                         Logging.warn("TypeRelationPathManager", String.format("Evil nodes found: %s", node));
                         evilNodes.add(node);
+                        evilFunction.add(((SymbolExpr)node).function);
 
                         /* Start debugging */
                         for (var layout: layoutToConstraints.keySet()) {
@@ -227,8 +233,6 @@ public class TypeRelationPathManager<T> {
                         }
                         /* End Debugging */
 
-                        /* Add all edges of current conflict node to mustRemove */
-                        mayRemove.addAll(graph.getGraph().edgesOf(node));
                         evilNodeEdges.put(node, new HashSet<>(graph.getGraph().edgesOf(node)));
                         /* If there has LCS in node's paths, we should keep edges in LCS */
                         var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
@@ -251,9 +255,15 @@ public class TypeRelationPathManager<T> {
         }
     }
 
-
+    /**
+     * Removed edges are mustRemove + (mayRemove - keepEdges)
+     */
     public Set<TypeRelationGraph.TypeRelationEdge> getEdgesToRemove() {
-        /* Removed edges are mustRemove + (mayRemove - keepEdges) */
+        /* Add all edges of current conflict node to mustRemove */
+        for (var node: evilNodes) {
+            mayRemove.addAll(graph.getGraph().edgesOf(node));
+        }
+
         var removedEdges = new HashSet<>(mustRemove);
         for (var edge: mayRemove) {
             if (!keepEdges.contains(edge)) {

@@ -66,6 +66,7 @@ public class InterSolver {
 
         var generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
         generator.run();
+        generator.explore();
     }
 
     public void checkCallSitesInconsistency() {

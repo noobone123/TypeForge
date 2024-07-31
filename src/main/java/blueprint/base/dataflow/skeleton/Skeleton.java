@@ -350,9 +350,11 @@ public class Skeleton {
         newExprs.addAll(skt2.exprs);
 
         if (isStrongMerge) {
+            Logging.info("Skeleton", String.format("Strong merging skeletons %s and %s", skt1, skt2));
             var mergedConstraint = new TypeConstraint();
             var noConflict = true;
             for (var c: newConstraints) {
+                Logging.info("Skeleton", String.format("Merging constraint:\n %s", c.dumpLayout(0)));
                 noConflict = mergedConstraint.tryMerge(c);
                 if (!noConflict) {
                     break;
@@ -364,7 +366,7 @@ public class Skeleton {
                 return Optional.empty();
             }
 
-            Logging.info("Skeleton", String.format("Merged skeletons %s and %s", skt1, skt2));
+
             Logging.info("Skeleton", String.format("Merged constraints:\n %s", mergedConstraint.dumpLayout(0)));
             newConstraints.clear();
             newConstraints.add(mergedConstraint);
@@ -372,6 +374,10 @@ public class Skeleton {
             newSkeleton.hasMultiConstraints = false;
             return Optional.of(newSkeleton);
         } else {
+            Logging.info("Skeleton", String.format("Weak merging skeletons %s and %s", skt1, skt2));
+            for (var c: newConstraints) {
+                Logging.info("Skeleton", c.dumpLayout(0));
+            }
             var newSkeleton = new Skeleton(newConstraints, newExprs);
             newSkeleton.hasMultiConstraints = true;
             return Optional.of(newSkeleton);
