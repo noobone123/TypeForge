@@ -39,7 +39,7 @@ public class Layout {
         intervals = new ArrayList<>();
         constraint.fieldAccess.forEach((offset, aps) -> {
             Set<Integer> sizes = new HashSet<>();
-            for (var ap: aps) {
+            for (var ap: aps.getApSet()) {
                 sizes.add(ap.dataType.getLength());
             }
             intervals.add(new Interval(offset, sizes));

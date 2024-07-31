@@ -35,7 +35,7 @@ public class TypeConstraint {
      * }
      * </code>
      */
-    public final TreeMap<Long, HashSet<AccessPoints.AP>> fieldAccess;
+    public final TreeMap<Long, AccessPoints.APSet> fieldAccess;
     public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
     public final TreeMap<Long, HashSet<SymbolExpr>> fieldExprMap;
 
@@ -68,8 +68,8 @@ public class TypeConstraint {
         this.shortUUID = uuid.toString().substring(0, 8);
 
         this.fieldAccess = new TreeMap<>();
-        for (Map.Entry<Long, HashSet<AccessPoints.AP>> entry : other.fieldAccess.entrySet()) {
-            this.fieldAccess.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        for (Map.Entry<Long, AccessPoints.APSet> entry : other.fieldAccess.entrySet()) {
+            this.fieldAccess.put(entry.getKey(), new AccessPoints.APSet(entry.getValue()));
         }
 
         this.fieldExprMap = new TreeMap<>();
@@ -100,8 +100,8 @@ public class TypeConstraint {
         // update fieldAccess
         accessOffsets.putIfAbsent(ap, new HashSet<>());
         accessOffsets.get(ap).add(offset);
-        fieldAccess.putIfAbsent(offset, new HashSet<>());
-        if (fieldAccess.get(offset).add(ap)) {
+        fieldAccess.putIfAbsent(offset, new AccessPoints.APSet());
+        if (fieldAccess.get(offset).addAP(ap)) {
             Logging.info("TypeConstraint", String.format("Constraint_%s adding field access: 0x%x -> %s", shortUUID, offset, ap.dataType));
         }
     }
@@ -148,7 +148,7 @@ public class TypeConstraint {
 
     public int getFieldMaxSize(long offset) {
         int maxSize = 0;
-        for (AccessPoints.AP ap : fieldAccess.get(offset)) {
+        for (AccessPoints.AP ap : fieldAccess.get(offset).getApSet()) {
             maxSize = Math.max(maxSize, ap.dataType.getLength());
         }
         return maxSize;
@@ -176,8 +176,8 @@ public class TypeConstraint {
     public void mergeOther(TypeConstraint other) {
         // merging fieldAccess
         other.fieldAccess.forEach((offset, aps) -> {
-            this.fieldAccess.putIfAbsent(offset, new HashSet<>());
-            this.fieldAccess.get(offset).addAll(aps);
+            this.fieldAccess.putIfAbsent(offset, new AccessPoints.APSet());
+            this.fieldAccess.get(offset).addAll(aps.getApSet());
         });
 
         // merging fieldAttrs
@@ -243,7 +243,7 @@ public class TypeConstraint {
     public int getAllFieldsAccessCount() {
         int count = 0;
         for (var aps: fieldAccess.values()) {
-            count += aps.size();
+            count += aps.getAPCount();
         }
         return count;
     }
@@ -257,7 +257,7 @@ public class TypeConstraint {
         fieldAccess.forEach((offset, aps) -> {
             /* Group the aps into Map[dataType, accessCount] */
             Map<DataType, Integer> apCount = new HashMap<>();
-            aps.forEach(ap -> {
+            aps.getApSet().forEach(ap -> {
                 apCount.putIfAbsent(ap.dataType, 0);
                 apCount.put(ap.dataType, apCount.get(ap.dataType) + 1);
             });
@@ -290,7 +290,7 @@ public class TypeConstraint {
             var offsetNode = fieldsNode.putObject("0x" + Long.toHexString(offset));
 
             var fieldsArray = offsetNode.putArray("types");
-            fieldAccess.getOrDefault(offset, new HashSet<>()).forEach(ap -> {
+            fieldAccess.getOrDefault(offset, new AccessPoints.APSet()).getApSet().forEach(ap -> {
                 if (ap.dataType != null) {
                     fieldsArray.add(ap.dataType.getName());
                 }

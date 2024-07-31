@@ -129,7 +129,7 @@ public class TCHelper {
             return ends;
         }
 
-        for (var ap : fields) {
+        for (var ap : fields.getApSet()) {
             if (ap.dataType != null) {
                 ends.add(offset + ap.dataType.getLength());
             }

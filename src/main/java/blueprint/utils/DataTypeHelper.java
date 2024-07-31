@@ -114,6 +114,7 @@ public class DataTypeHelper {
     }
 
     public static Array createArrayOfPrimitive(DataType elementDT, int length) {
+        Logging.info("Generator", String.format("Creating Array Type of %s with Length: %d", elementDT.getName(), length));
         return new ArrayDataType(elementDT, length, elementDT.getLength(), dtM);
     }
 
@@ -133,6 +134,9 @@ public class DataTypeHelper {
                 if (skt.ptrReference.containsKey((long) offset)) {
                     name = String.format("ptr_field_0x%s", Long.toHexString(offset));
                 }
+                else if (dt instanceof Array) {
+                    name = String.format("array_field_0x%s", Long.toHexString(offset));
+                }
                 else {
                     name = String.format("field_0x%s", Long.toHexString(offset));
                 }
@@ -150,6 +154,21 @@ public class DataTypeHelper {
         DataType pointerDT = new PointerDataType(structDT);
         dtM.addDataType(pointerDT, DataTypeConflictHandler.DEFAULT_HANDLER);
         return pointerDT;
+    }
+
+    public static DataType getDataTypeInSize(int size) {
+        switch (size) {
+            case 1:
+                return getDataTypeByName("byte");
+            case 2:
+                return getDataTypeByName("word");
+            case 4:
+                return getDataTypeByName("dword");
+            case 8:
+                return getDataTypeByName("qword");
+            default:
+                return getDataTypeByName("undefined");
+        }
     }
 
 

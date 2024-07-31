@@ -1,8 +1,9 @@
 package blueprint.base.dataflow;
 
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
+import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Logging;
-import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.*;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.PcodeOp;
 
@@ -29,8 +30,8 @@ public class AccessPoints {
      */
     public static class AP {
         public final PcodeOp pcodeOp;
-        public final DataType dataType;
         public final Function func;
+        public DataType dataType;
 
         /** accessType: including:
          * 0: load
@@ -71,6 +72,68 @@ public class AccessPoints {
             return false;
         }
     }
+
+    public static class APSet {
+        public final Set<AP> apSet;
+        public boolean isSameSizeType = true;
+        public int maxDTSize = -1;
+        public int DTSize = -1;
+        public DataType mostAccessedDT = null;
+        public Set<DataType> allDTs = new HashSet<>();
+
+        public APSet() {
+            this.apSet = new HashSet<>();
+        }
+
+        public APSet(APSet other) {
+            this.apSet = new HashSet<>(other.apSet);
+            this.isSameSizeType = other.isSameSizeType;
+            this.maxDTSize = other.maxDTSize;
+            this.DTSize = other.DTSize;
+            this.mostAccessedDT = other.mostAccessedDT;
+            this.allDTs = new HashSet<>(other.allDTs);
+        }
+
+        public void addAll(Set<AP> apSet) {
+            this.apSet.addAll(apSet);
+        }
+
+        public boolean addAP(AP ap) {
+            return apSet.add(ap);
+        }
+
+        public Set<AP> getApSet() {
+            return apSet;
+        }
+
+        public int getAPCount() {
+            return apSet.size();
+        }
+
+        public void postHandle() {
+            /* Avoid using undefined data type */
+            for (var ap: apSet) {
+                if (ap.dataType instanceof Undefined || ap.dataType instanceof DefaultDataType) {
+                    ap.dataType = DataTypeHelper.getDataTypeInSize(ap.dataType.getLength());
+                } else if (ap.dataType instanceof Pointer && ((Pointer) ap.dataType).getDataType() instanceof Undefined) {
+                    var dt = DataTypeHelper.getDataTypeInSize(ap.dataType.getLength());
+                    ap.dataType = DataTypeHelper.getPointerDT(dt, 1);
+                }
+            }
+
+            isSameSizeType = AccessPoints.ifAPSetHoldsSameSizeType(apSet);
+            if (isSameSizeType) {
+                DTSize = AccessPoints.getDataTypeSize(apSet);
+                maxDTSize = DTSize;
+            } else {
+                maxDTSize = AccessPoints.getMaxSizeInAPSet(apSet);
+            }
+
+            mostAccessedDT = AccessPoints.getMostAccessedDT(apSet);
+            allDTs = AccessPoints.getDataTypes(apSet);
+        }
+    }
+
 
     /**
      * Each SymbolExpr in function may be accessed by multiple PcodeOps with different types.
@@ -142,7 +205,9 @@ public class AccessPoints {
 
     public static Set<DataType> getDataTypes(Set<AccessPoints.AP> apSet) {
         Set<DataType> dataTypes = new HashSet<>();
-        apSet.forEach(ap -> dataTypes.add(ap.dataType));
+        for (var ap: apSet) {
+            dataTypes.add(ap.dataType);
+        }
         return dataTypes;
     }
 

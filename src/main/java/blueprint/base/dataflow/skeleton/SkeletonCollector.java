@@ -358,6 +358,15 @@ public class SkeletonCollector {
         }
     }
 
+    public void handleAPSets() {
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            for (var offset: skt.finalConstraint.fieldAccess.keySet()) {
+                var APSet = skt.finalConstraint.fieldAccess.get(offset);
+                APSet.postHandle();
+            }
+        }
+    }
+
 
     public void handleCodePtr(Set<SymbolExpr> exprsAsCodePtr) {
         for (var expr: exprsAsCodePtr) {

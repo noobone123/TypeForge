@@ -6,6 +6,7 @@ import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
+import ghidra.program.model.data.Pointer;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -38,6 +39,7 @@ public class Skeleton {
      *  And finally, we will synthesize the final result based on every best choice in each MorphingPoint.
      */
     public Map<Long, Set<DataType>> morphingPoints = new HashMap<>();
+    public Map<Long, Long> morphingPointRange = new HashMap<>();
     /**
      * Some Composite DataTypes do not have morphing points, they morph in the whole field.
      */
@@ -88,7 +90,7 @@ public class Skeleton {
         var constraint = constraints.iterator().next();
         if (constraint.fieldAccess.size() != 1) { return false; }
         if (constraint.fieldAccess.get(0L) == null) { return false; }
-        for (var element: constraint.fieldAccess.get(0L)) {
+        for (var element: constraint.fieldAccess.get(0L).getApSet()) {
             var dataType = element.dataType;
             var size = dataType.getLength();
             if (size != Global.currentProgram.getDefaultPointerSize()) { return false; }
@@ -124,7 +126,7 @@ public class Skeleton {
         var maxSize = 0L;
         for (var entry: finalConstraint.fieldAccess.entrySet()) {
             var offset = entry.getKey();
-            var maxSizeAtOffset = AccessPoints.getMaxSizeInAPSet(entry.getValue());
+            var maxSizeAtOffset = entry.getValue().maxDTSize;
             if (offset + maxSizeAtOffset > maxSize) {
                 maxSize = offset + maxSizeAtOffset;
             }
@@ -188,7 +190,7 @@ public class Skeleton {
         for (var entry: fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var apSet = entry.getValue();
-            if (!AccessPoints.ifAPSetHoldsSameSizeType(apSet)) {
+            if (!apSet.isSameSizeType) {
                 return false;
             }
             if (windowSize == 0) {
@@ -196,13 +198,13 @@ public class Skeleton {
                 if (offset > 0) {
                     return false;
                 }
-                windowSize = apSet.iterator().next().dataType.getLength();
+                windowSize = apSet.getApSet().iterator().next().dataType.getLength();
                 // TODO: this is a assumption, maybe need to remove in abandoned study.
                 if (windowSize >= Global.currentProgram.getDefaultPointerSize()) {
                     return false;
                 }
             }
-            if (windowSize != apSet.iterator().next().dataType.getLength()) {
+            if (windowSize != apSet.getApSet().iterator().next().dataType.getLength()) {
                 return false;
             } else {
                 hitCount++;
@@ -234,8 +236,8 @@ public class Skeleton {
         singleDerivedType = true;
     }
 
-    public void updateMorphingDataType(DataType dt, long offset) {
-        if (offset == -1) {
+    public void updateMorphingDataType(DataType dt, long offset, long end) {
+        if (offset == -1 && end == -1) {
             if (mayPrimitiveArray) {
                 totalMorphingTypes.add(dt);
             } else {
@@ -243,6 +245,7 @@ public class Skeleton {
             }
         } else {
             morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(dt);
+            morphingPointRange.put(offset, end);
         }
     }
 
@@ -256,8 +259,8 @@ public class Skeleton {
     public boolean mustPrimitiveTypeAtOffset(long offset) {
         var aps = finalConstraint.fieldAccess.get(offset);
         if (ptrReference.containsKey(offset) || mayNestedSkeleton.containsKey(offset) ||
-                !AccessPoints.ifAPSetHoldsSameSizeType(aps) ||
-                AccessPoints.getMostAccessedDT(aps).getLength() >= Global.currentProgram.getDefaultPointerSize()) {
+                !aps.isSameSizeType ||
+                (aps.mostAccessedDT.getLength() >= Global.currentProgram.getDefaultPointerSize()) ) {
             return false;
         } else {
             return true;
@@ -297,12 +300,17 @@ public class Skeleton {
         Logging.info("Skeleton", "Constraint:\n " + finalConstraint);
         Logging.info("Skeleton", finalConstraint.dumpLayout(0));
         Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
-        // TODO: ...
+        Logging.info("Skeleton", "Total Morphing Types:\n" + totalMorphingTypes);
         Logging.info("Skeleton", "Morphing Points: ");
         for (var entry: morphingPoints.entrySet()) {
-            Logging.info("Skeleton", "Morphing Offset: 0x" + Long.toHexString(entry.getKey()));
+            Logging.info("Skeleton", String.format("Morphing Range (0x%s ~ 0x%s)", Long.toHexString(entry.getKey()),
+                    Long.toHexString(morphingPointRange.get(entry.getKey()))));
             for (var dt: entry.getValue()) {
-                Logging.info("Skeleton", dt.toString());
+                if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
+                    Logging.info("Skeleton", ((Pointer)dt).getDataType().toString());
+                } else {
+                    Logging.info("Skeleton", "Primitive: " + dt);
+                }
             }
         }
 
