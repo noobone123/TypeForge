@@ -126,14 +126,22 @@ public class InterContext {
             }
         }
 
-        // TODO: may be too aggressive ? // Keep parameters and just remove local variables, no one union return value or parameters
-        //  Checking the function's, just mark all local expressions ?
+        // TODO: may be too aggressive ?
+        //  save parameters and retVal, save Exprs related to parameters and retVal.
+        //  evilNodes, evilSource and following evilNodes should not be evaluated in Layout Recovery.
+        //  distinguish evil source and evil nodes if function, for example, just remove all Exprs do not remove rootSymExpr?
         for (var graph: typeRelationManager.getGraphs()) {
             for (var node: graph.getGraph().vertexSet()) {
                 if (evilFunctions.contains(node.function)) {
-                    Logging.info("InterContext", String.format("Found evil node in function %s: %s", node.function, node));
-                    for (var edge: graph.getGraph().edgesOf(node)) {
-                        graph.getGraph().removeEdge(edge);
+                    /* We don't remove edges of expressions that indicate local variables */
+                    if (node.getRootSymExpr().isParameter || node.getRootSymExpr().isReturnVal || node.isRootSymExpr()) {
+                        continue;
+                    }
+                    else {
+                        Logging.info("InterContext", String.format("Found evil node in function %s: %s", node.function, node));
+                        for (var edge: graph.getGraph().edgesOf(node)) {
+                            graph.getGraph().removeEdge(edge);
+                        }
                     }
                 }
             }

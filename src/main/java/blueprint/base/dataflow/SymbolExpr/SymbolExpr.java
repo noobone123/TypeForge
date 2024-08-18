@@ -1,6 +1,5 @@
 package blueprint.base.dataflow.SymbolExpr;
 
-import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
@@ -27,7 +26,6 @@ public class SymbolExpr {
         CODE_PTR
     }
 
-
     public SymbolExpr baseExpr = null;
     public SymbolExpr indexExpr = null;
     public SymbolExpr scaleExpr = null;
@@ -45,6 +43,9 @@ public class SymbolExpr {
     public boolean isConst = false;
     public boolean isGlobal = false;
     public Address globalAddr = null;
+
+    public boolean isParameter = false;
+    public boolean isReturnVal = false;
 
     public boolean isTemp;
     public Varnode varnode;

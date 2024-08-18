@@ -11,12 +11,10 @@ import blueprint.utils.HighSymbolHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.*;
 import ghidra.program.model.pcode.HighSymbol;
-import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 public class IntraContext {
@@ -43,6 +41,7 @@ public class IntraContext {
 
     public void setReturnExpr(SymbolExpr expr) {
         this.returnExprs.add(expr);
+        expr.isReturnVal = true;
     }
 
     public Set<SymbolExpr> getReturnExpr() {
@@ -111,6 +110,10 @@ public class IntraContext {
                 dt = funcNode.getDecompilerInferredDT(symbol.getStorage());
                 if (dt == null) {
                     dt = symbol.getDataType();
+                }
+
+                if (funcNode.parameters.contains(symbol)) {
+                    expr.isParameter = true;
                 }
             }
             symbolExprManager.addDecompilerInferredType(expr, dt);
