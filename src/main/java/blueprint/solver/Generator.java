@@ -54,7 +54,7 @@ public class Generator {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isMultiLevelPtr()) {
-                // TODO: handle multi-level ptr ?
+                // TODO: handle multi-level ptr， if there skt's exprs has variable.
                 Logging.info("Generator", "Multi Level Ptr Skeleton: " + skt);
                 continue;
             }
@@ -69,12 +69,17 @@ public class Generator {
                 Logging.info("Generator", "No Nested Skeleton: " + skt);
                 handleNoNestedSkeleton(skt);
             }
+            else if (skt.hasNestedSkeleton()) {
+                handleNestedSkeleton(skt);
+            }
         }
-
-        // TODO: Handle Nested Skeleton finally
     }
 
-
+    // TODO: Handle Nested Skeleton finally
+    //  1. If nest or not ?
+    //  2. If nested, we just mark relationship and copy all member from nestee to nester, without create nested structure, because nested structure may has ????
+    //  3. If nested, we utilize size and sliding window to find the flatten.
+    //  4. For other fields that not contained in the nested intervals, we should handle them by `handleInconsistencyField` and `handlePrimitiveFlatten` and `handleComplexFlatten`
     private void handleNestedSkeleton(Skeleton skt) {
         for (var offset: skt.mayNestedSkeleton.keySet()) {
             var nestedSktSet = skt.mayNestedSkeleton.get(offset);
@@ -93,6 +98,7 @@ public class Generator {
             Logging.info("Generator", "No Nested && Has Ptr Reference");
             handleInconsistencyField(skt);
             handlePrimitiveFlatten(skt);
+            // TODO: handle complex flatten
             // TODO: Using a larger sliding window size and considering the ptrReference Information
         } else {
             Logging.info("Generator", "No Nested && No Ptr Reference");
