@@ -30,6 +30,7 @@ public class SkeletonCollector {
     public final Set<SymbolExpr> evilSource = new HashSet<>();
     public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
     public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
+    public final Set<SymbolExpr> injuredNode = new HashSet<>();
 
     public SkeletonCollector(SymbolExprManager exprManager) {
         this.skeletons = new HashSet<>();

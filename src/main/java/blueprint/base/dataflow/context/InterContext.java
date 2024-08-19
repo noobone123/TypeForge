@@ -126,10 +126,6 @@ public class InterContext {
             }
         }
 
-        // TODO: may be too aggressive ?
-        //  save parameters and retVal, save Exprs related to parameters and retVal.
-        //  evilNodes, evilSource and following evilNodes should not be evaluated in Layout Recovery.
-        //  distinguish evil source and evil nodes if function, for example, just remove all Exprs do not remove rootSymExpr?
         for (var graph: typeRelationManager.getGraphs()) {
             for (var node: graph.getGraph().vertexSet()) {
                 if (evilFunctions.contains(node.function)) {
@@ -138,7 +134,8 @@ public class InterContext {
                         continue;
                     }
                     else {
-                        Logging.info("InterContext", String.format("Found evil node in function %s: %s", node.function, node));
+                        Logging.info("InterContext", String.format("Found injured node in function %s: %s", node.function, node));
+                        collector.injuredNode.add(node);
                         for (var edge: graph.getGraph().edgesOf(node)) {
                             graph.getGraph().removeEdge(edge);
                         }
