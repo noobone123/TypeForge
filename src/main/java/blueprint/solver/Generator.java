@@ -123,6 +123,27 @@ public class Generator {
         skt.dumpInfo();
     }
 
+
+    private void handlePrimitiveFlattenT(Skeleton skt) {
+        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+        SlidingWindow windowProcessor = new SlidingWindow(skt, offsets, 1);
+
+        for (int i = 0; i < offsets.size() - 1; i++) {
+            var hasFlatten = windowProcessor.tryMatchingFromCurrentOffset(i);
+            if (!hasFlatten) continue;
+
+            // TODO:
+            List<Object> winElements = windowProcessor.getWindowElements();
+            int flattenCnt = windowProcessor.getFlattenCount();
+            var curOffset = offsets.get(i);
+
+            // TODO: reset the window info
+            // TODO: create componentMap ...
+        }
+
+    }
+
+
     private void handlePrimitiveFlatten(Skeleton skt) {
         List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
         SlidingWindow windowProcessor = new SlidingWindow(skt, offsets, 1);

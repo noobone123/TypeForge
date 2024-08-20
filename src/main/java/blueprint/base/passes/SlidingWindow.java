@@ -15,37 +15,24 @@ public class SlidingWindow {
     public final List<Long> offsetList;
 
     private int currentWindowSize;
-    private int currentOffsetIndex;
-    private int flattenFieldCount;
-    private TreeMap<Long, AccessPoints.APSet> flattenFields;
 
     public SlidingWindow(Skeleton skt, List<Long> offsetList, int initialWindowSize) {
         this.skt = skt;
         this.offsetList = offsetList;
         this.currentWindowSize = initialWindowSize;
-        this.currentOffsetIndex = 0;
-        this.flattenFieldCount = 0;
-        this.flattenFields = new TreeMap<>();
     }
 
-    public boolean hasNextWindow() {
-        return currentOffsetIndex + currentWindowSize < offsetList.size();
-    }
-
-    public void tryMatchingFromCurrentOffset() {
-        // TODO:
-        //  - 从当前 Offset 开始，通过 getWindowAtCurrentOffset 构建 Window 作为一个整体匹配项
-        //  - 从当前 Offset 开始，如果 Window 在 skeleton 连续重复出现超过 3 次，我们就将其视作一个 Flatten Field
-        Optional<List<Object>> windowOpt = getWindowAtOffset(currentOffsetIndex);
+    public boolean tryMatchingFromCurrentOffset(int curOffset) {
+        Optional<List<Object>> windowOpt = getWindowAtOffset(curOffset);
         if (windowOpt.isEmpty()) {
-            return;
+            return false;
         }
 
         List<Object> window = windowOpt.get();
         final int threshold = 3;
         int matchCount = 0;
 
-        for (int i = currentOffsetIndex + currentWindowSize; i < offsetList.size(); i += currentWindowSize) {
+        for (int i = curOffset + currentWindowSize; i < offsetList.size(); i += currentWindowSize) {
             Optional<List<Object>> candidateWindowOpt = getWindowAtOffset(i);
             if (candidateWindowOpt.isEmpty()) {
                 break;
@@ -60,12 +47,21 @@ public class SlidingWindow {
         }
 
         if (matchCount >= threshold) {
-            // TODO: ....
+            // TODO:
+            return true;
+        } else {
+            return false;
         }
     }
 
-    public Optional<List<Object>> getWindowAtOffset(int startIndex) {
-        if (startIndex + currentOffsetIndex > offsetList.size()) {
+
+    public void updateWindowSize(int newWindowSize) {
+        this.currentWindowSize = newWindowSize;
+    }
+
+
+    private Optional<List<Object>> getWindowAtOffset(int startIndex) {
+        if (startIndex + currentWindowSize > offsetList.size()) {
             return Optional.empty();
         }
 
@@ -94,6 +90,19 @@ public class SlidingWindow {
             prevOffset = currentOffset;
         }
         return Optional.of(window);
+    }
+
+
+    private boolean windowsAreEqual(List<Object> w1, List<Object> w2) {
+        if (w1.size() != w2.size()) {
+            return false;
+        }
+        for (int i = 0; i < w1.size(); i ++) {
+            if (!w1.get(i).equals(w2.get(i))) {
+                return false;
+            }
+        }
+        return true;
     }
 
 
