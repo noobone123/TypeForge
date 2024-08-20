@@ -4,6 +4,7 @@ import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
+import blueprint.base.passes.SlidingWindow;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
@@ -124,6 +125,8 @@ public class Generator {
 
     private void handlePrimitiveFlatten(Skeleton skt) {
         List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+        SlidingWindow windowProcessor = new SlidingWindow(skt, offsets, 1);
+
         for (int i = 0; i < offsets.size(); i++) {
             var offset = offsets.get(i);
             var aps = skt.finalConstraint.fieldAccess.get(offset);
@@ -228,8 +231,9 @@ public class Generator {
             var offset = entry.getKey();
             var aps = entry.getValue();
             /* If Contains Ptr Reference, this field should be a ptrReference */
-            if (!aps.isSameSizeType && !skt.ptrReference.containsKey(offset)) {
+            if (!aps.isSameSizeType && !skt.finalPtrReference.containsKey(offset)) {
                 Logging.info("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
+                skt.addInconsistentOffset(offset);
 
                 // Create Union or Find the most accessed data type
                 var componentMap_1 = getComponentMapByMostAccessed(skt);
@@ -267,12 +271,10 @@ public class Generator {
             var aps = entry.getValue();
             var mostAccessedDT = aps.mostAccessedDT;
 
-            if (skt.ptrReference.containsKey((long) offset)) {
+            if (skt.finalPtrReference.containsKey((long) offset)) {
                 if (mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize()) {
                     handlePtrReferenceComponent(componentMap, offset, skt.ptrLevel.get((long) offset));
                     continue;
-                } else {
-                    skt.ptrReference.remove((long) offset);
                 }
             }
 
@@ -291,7 +293,7 @@ public class Generator {
         var componentMap = new TreeMap<Integer, DataType>();
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey().intValue();
-            if (skt.ptrReference.containsKey((long) fieldOffset)) {
+            if (skt.finalPtrReference.containsKey((long) fieldOffset)) {
                 handlePtrReferenceComponent(componentMap, fieldOffset, skt.ptrLevel.get((long) fieldOffset));
                 continue;
             }
@@ -325,7 +327,7 @@ public class Generator {
                 continue;
             }
 
-            if (skt.ptrReference.containsKey((long) fieldOffset)) {
+            if (skt.finalPtrReference.containsKey((long) fieldOffset)) {
                 handlePtrReferenceComponent(componentMap, fieldOffset, skt.ptrLevel.get((long) fieldOffset));
                 continue;
             }

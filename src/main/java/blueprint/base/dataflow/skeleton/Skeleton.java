@@ -29,6 +29,8 @@ public class Skeleton {
     public Map<Long, Integer> ptrLevel = new HashMap<>();
     public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
 
+    public Set<Long> inConsistentOffsets = new HashSet<>();
+
     public boolean hasDerivedTypes = false;
     public boolean isPointerToPrimitive = false;
     public boolean mayPrimitiveArray = false;
@@ -194,7 +196,7 @@ public class Skeleton {
     }
 
     public boolean hasPtrReference() {
-        return !ptrReference.isEmpty();
+        return !finalPtrReference.isEmpty();
     }
 
     public boolean mayPrimitiveArray() {
@@ -281,6 +283,14 @@ public class Skeleton {
         } else {
             return true;
         }
+    }
+
+    public void addInconsistentOffset(long offset) {
+        inConsistentOffsets.add(offset);
+    }
+
+    public boolean isInconsistentOffset(long offset) {
+        return inConsistentOffsets.contains(offset);
     }
 
     @Override
