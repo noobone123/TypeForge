@@ -133,20 +133,18 @@ public class Generator {
             var hasFlatten = windowProcessor.tryMatchingFromCurrentOffset(i);
             if (!hasFlatten) continue;
 
-            List<DataType> winTypes = windowProcessor.getWindowDataTypes(i);
+            DataType winDT = windowProcessor.getWindowDataTypes();
             int flattenCnt = windowProcessor.getFlattenCount();
-            long flattenStartOffset = windowProcessor.getFlattenStartOffset();
-            long flattenEndOffset = windowProcessor.getFlattenEndOffset();
 
             Logging.info("Generator",
                     String.format("Found a match from offset %s with %d elements", Long.toHexString(curOffset), flattenCnt));
             Logging.info("Generator",
-                    String.format("Window:\n%s", winTypes));
+                    String.format("Window's DataType:\n%s", winDT));
 
             var componentMap_1 = getComponentMapByMostAccessed(skt);
             var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
 
-            var componentMap_2 = getComponentMapByRecoverFlatten(skt, curOffset, winTypes, flattenCnt, flattenStartOffset, flattenEndOffset);
+            var componentMap_2 = getComponentMapByRecoverFlatten(skt, curOffset, winDT, flattenCnt);
             var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
 
             // TODO: reset the window info
@@ -349,19 +347,19 @@ public class Generator {
     /**
      * Create a structure by combining flatten fields at the specified offset
      * @param skt the skeleton
-     * @param flattenOffset the start offset of the flatten fields
-     * @param elementDTs the flattened element data types
+     * @param flattenStartOffset the start offset of the flatten fields
+     * @param winDT the flattened element data types
      * @param flattenCnt the count of the flatten fields
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMapByRecoverFlatten(Skeleton skt, long flattenOffset,
-                                                                   List<DataType> elementDTs, int flattenCnt,
-                                                                   long flattenStartOffset, long flattenEndOffset) {
+    private Map<Integer, DataType> getComponentMapByRecoverFlatten(Skeleton skt, long flattenStartOffset,
+                                                                   DataType winDT, int flattenCnt) {
         var componentMap = new TreeMap<Integer, DataType>();
+        long flattenEndOffset = flattenStartOffset + (long) winDT.getLength() * flattenCnt;
 
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey();
-            if (fieldOffset < flattenStartOffset || fieldOffset > flattenEndOffset) {
+            if (fieldOffset < flattenStartOffset || fieldOffset >= flattenEndOffset) {
                 DataType dt;
                 if (skt.finalPtrReference.containsKey(fieldOffset)) {
                     dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
@@ -373,15 +371,8 @@ public class Generator {
             }
 
             /* Handle Flatten */
-            else if (fieldOffset == flattenOffset) {
-                DataType elementDT;
-                /* If Size of elementDTs is 1, which means it's a flattened primitive array */
-                if (elementDTs.size() == 1) {
-                    elementDT = elementDTs.get(0);
-                } else {
-                    // TODO: handle nested structure ...
-                }
-                var flattenDT = DataTypeHelper.createArray(elementDT, flattenCnt);
+            else if (fieldOffset == flattenStartOffset) {
+                var flattenDT = DataTypeHelper.createArray(winDT, flattenCnt);
                 componentMap.put(fieldOffset.intValue(), flattenDT);
             }
         }

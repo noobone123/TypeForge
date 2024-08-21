@@ -7,50 +7,52 @@ import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 public class SlidingWindow {
     public final Skeleton curSkt;
     public final List<Long> offsetList;
 
-    private int currentWindowSize;
-    private List<Object> windowElements;
-    private List<Long> windowElementsOffsets;
+    private int windowCapacity;
+    private Map<Long, Object> windowElements;
+    private long alignedWindowSize;
     private int flattenCnt;
-    private long flattenStartOffset;
-    private long flattenEndOffset;
 
-    public SlidingWindow(Skeleton curSkt, List<Long> offsetList, int initialWindowSize) {
+    public SlidingWindow(Skeleton curSkt, List<Long> offsetList, int initialWindowCapacity) {
         this.curSkt = curSkt;
         this.offsetList = offsetList;
-        this.currentWindowSize = initialWindowSize;
+        this.windowCapacity = initialWindowCapacity;
     }
 
     public boolean tryMatchingFromCurrentOffset(int curOffsetIndex) {
-        Optional<List<Object>> windowOpt = getWindowAtOffset(curOffsetIndex);
+        Optional<Map<Long, Object>> windowOpt = getWindowAtOffset(curOffsetIndex);
         if (windowOpt.isEmpty()) {
             return false;
         }
 
-        List<Object> window = windowOpt.get();
-        final int threshold = 3;
+        Map<Long, Object> window = windowOpt.get();
+        final int threshold = 4;
         int matchCount = 0;
+        alignedWindowSize = getAlignedWindowSize(window);
+        long prevWindowStartOffset = offsetList.get(curOffsetIndex);
 
-        flattenStartOffset = offsetList.get(curOffsetIndex);
-        flattenEndOffset = flattenStartOffset;
-
-        for (int i = curOffsetIndex + currentWindowSize; i < offsetList.size(); i += currentWindowSize) {
-            Optional<List<Object>> candidateWindowOpt = getWindowAtOffset(i);
+        for (int i = curOffsetIndex + windowCapacity; i < offsetList.size(); i += windowCapacity) {
+            Optional<Map<Long, Object>> candidateWindowOpt = getWindowAtOffset(i);
             if (candidateWindowOpt.isEmpty()) {
                 break;
             }
 
-            List<Object> candidateWindow = candidateWindowOpt.get();
+            Map<Long, Object> candidateWindow = candidateWindowOpt.get();
             if (windowsAreEqual(window, candidateWindow)) {
-                matchCount++;
-                flattenEndOffset = offsetList.get(i + currentWindowSize - 1);
+                if ((offsetList.get(i) - prevWindowStartOffset) == alignedWindowSize) {
+                    matchCount++;
+                    prevWindowStartOffset = offsetList.get(i);
+                } else {
+                    Logging.info("SlidingWindow",
+                            String.format("Window equal but not contiguous: \n Window: %s\n Aligned Size: %d\n PrevWindowStart: %s, CurrentWindowStart: %s",
+                                    window, alignedWindowSize, prevWindowStartOffset, offsetList.get(i)));
+                    break;
+                }
             } else {
                 break;
             }
@@ -66,49 +68,32 @@ public class SlidingWindow {
     }
 
     public void updateWindowSize(int newWindowSize) {
-        this.currentWindowSize = newWindowSize;
+        this.windowCapacity = newWindowSize;
     }
 
     public int getFlattenCount() {
         return flattenCnt;
     }
 
-    public long getFlattenStartOffset() {
-        return flattenStartOffset;
+    public long getAlignedWindowSize() {
+        return alignedWindowSize;
     }
 
-    public long getFlattenEndOffset() {
-        return flattenEndOffset;
+    public DataType getWindowDataTypes() {
+        // TODO: create data type from `windowElements`
+        return null;
     }
 
-    public List<DataType> getWindowDataTypes(int offsetIndex) {
-        List<DataType> windowDataTypes = new ArrayList<>();
-        for (int i = 0; i < windowElements.size(); i++) {
-            var offset = offsetList.get(offsetIndex + i);
-            var element = windowElements.get(i);
-            if (element instanceof Skeleton) {
-                var dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
-                        curSkt.ptrLevel.get(offset));
-                windowDataTypes.add(dt);
-            } else if (element instanceof AccessPoints.APSet apSet) {
-                windowDataTypes.add(apSet.mostAccessedDT);
-            } else {
-                Logging.error("SlidingWindow", "Unknown element type in window");
-                System.exit(1);
-            }
-        }
-        return windowDataTypes;
-    }
-
-    private Optional<List<Object>> getWindowAtOffset(int startIndex) {
-        if (startIndex + currentWindowSize > offsetList.size()) {
+    private Optional<Map<Long, Object>> getWindowAtOffset(int startIndex) {
+        if (startIndex + windowCapacity > offsetList.size()) {
             return Optional.empty();
         }
 
-        List<Object> window = new ArrayList<>();
-        Long prevOffset = null;
+        Map<Long, Object> window = new TreeMap<>();
+        long prevOffset = -1;
+        long startOffset = offsetList.get(startIndex);
 
-        for (int i = 0; i < currentWindowSize; i++) {
+        for (int i = 0; i < windowCapacity; i++) {
             var currentOffset = offsetList.get(startIndex + i);
             if (curSkt.isInconsistentOffset(currentOffset)) {
                 return Optional.empty();
@@ -121,24 +106,31 @@ public class SlidingWindow {
                 element = curSkt.finalConstraint.fieldAccess.get(currentOffset);
             }
 
-            if (prevOffset != null && !isContiguous(prevOffset, currentOffset, element)) {
+            if (prevOffset != -1 && !isContiguous(prevOffset, currentOffset, element)) {
                 return Optional.empty();
             }
 
-            window.add(element);
+            window.put(currentOffset - startOffset, element);
             prevOffset = currentOffset;
         }
         return Optional.of(window);
     }
 
 
-    private boolean windowsAreEqual(List<Object> w1, List<Object> w2) {
+    private boolean windowsAreEqual(Map<Long, Object> w1, Map<Long, Object> w2) {
         if (w1.size() != w2.size()) {
             return false;
         }
-        for (int i = 0; i < w1.size(); i ++) {
-            var e1 = w1.get(i);
-            var e2 = w2.get(i);
+
+        if (!w1.keySet().equals(w2.keySet())) {
+            return false;
+        }
+
+        for (var entry1: w1.entrySet()) {
+            var offset = entry1.getKey();
+            Object e1 = entry1.getValue();
+            Object e2 = w2.get(offset);
+
             if (e1 instanceof Skeleton && e2 instanceof Skeleton) {
                 if (!e1.equals(e2)) { return false; }
             } else if (e1 instanceof AccessPoints.APSet s1 && e2 instanceof AccessPoints.APSet s2) {
@@ -148,6 +140,42 @@ public class SlidingWindow {
             }
         }
         return true;
+    }
+
+    /**
+     * Get the Aligned Window's Size
+     * @return aligned window's size
+     */
+    private long getAlignedWindowSize(Map<Long, Object> window) {
+        long totalSize = 0;
+        long maxAlignSize = 1;
+        for (var element: window.values()) {
+            long fieldSize;
+            long fieldAlignSize = 1;
+            if (element instanceof Skeleton) {
+                fieldSize = Global.currentProgram.getDefaultPointerSize();
+                fieldAlignSize = fieldSize;
+            }
+            else {
+                fieldSize = ((AccessPoints.APSet) element).mostAccessedDT.getLength();
+                fieldAlignSize = ((AccessPoints.APSet) element).mostAccessedDT.getAlignment();
+            }
+
+            if (totalSize % fieldAlignSize != 0) {
+                totalSize += fieldAlignSize - (totalSize % fieldAlignSize);
+            }
+
+            totalSize += fieldSize;
+            if (fieldAlignSize > maxAlignSize) {
+                maxAlignSize = fieldAlignSize;
+            }
+        }
+
+        if (totalSize % maxAlignSize != 0) {
+            totalSize += maxAlignSize - (totalSize % maxAlignSize);
+        }
+
+        return totalSize;
     }
 
 
