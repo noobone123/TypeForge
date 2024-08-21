@@ -1,6 +1,5 @@
 package blueprint.base.dataflow.skeleton;
 
-import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
@@ -285,7 +284,7 @@ public class Skeleton {
         }
     }
 
-    public void addInconsistentOffset(long offset) {
+    public void markInconsistentOffset(long offset) {
         inConsistentOffsets.add(offset);
     }
 

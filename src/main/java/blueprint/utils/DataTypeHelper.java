@@ -10,7 +10,9 @@ public class DataTypeHelper {
     private static final DataTypeManager dtM = Global.currentProgram.getDataTypeManager();
     private static final Map<String, DataType> nameToDTMap = new HashMap<>();
     private static final String DEFAULT_STRUCT_BASENAME = "ClayStruct";
+    private static final String DEFAULT_ANON_STRUCT_BASENAME = "ClayAnonStruct";
     private static final String DEFAULT_UNION_BASENAME = "ClayUnion";
+    private static final String DEFAULT_ANON_UNION_BASENAME = "ClayAnonUnion";
     private static final String DEFAULT_CATEGORY = "/TypeClay_structs";
 
 
@@ -101,23 +103,32 @@ public class DataTypeHelper {
     }
 
 
-    public static Union createUniqueUnion(Set<DataType> components) {
+    public static Union createUniqueUnion(Skeleton skt, Long offset) {
         Logging.info("Generator", "Creating Union Type");
-        String unionName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_UNION_BASENAME);
+        String unionName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_UNION_BASENAME);
         var unionDT = new UnionDataType(new CategoryPath(DEFAULT_CATEGORY), unionName, dtM);
         int index = 0;
-        for (var dt: components) {
-            var name = String.format("union_field_%d", index);
+
+        for (var dt: skt.finalConstraint.fieldAccess.get(offset).allDTs) {
+            var name = String.format("union_member_%d", index);
             unionDT.add(dt, dt.getLength(), name, null);
+            index++;
         }
+
+        if (skt.finalPtrReference.containsKey(offset)) {
+            var name = String.format("union_member_%s", skt.finalPtrReference.get(offset).toString());
+            var dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
+                    skt.ptrLevel.get(offset));
+            unionDT.add(dt, Global.currentProgram.getDefaultPointerSize(), name, null);
+        }
+
         return unionDT;
     }
 
-    public static Array createArrayOfPrimitive(DataType elementDT, int length) {
+    public static Array createArray(DataType elementDT, int length) {
         Logging.info("Generator", String.format("Creating Array Type of %s with Length: %d", elementDT.getName(), length));
         return new ArrayDataType(elementDT, length, elementDT.getLength(), dtM);
     }
-
 
     public static void populateStructure(Structure structDT, Map<Integer, DataType> componentMap, Skeleton skt) {
         for (var entry: componentMap.entrySet()) {
@@ -132,7 +143,7 @@ public class DataTypeHelper {
                 String name = null;
                 String comment = null;
                 if (skt.ptrReference.containsKey((long) offset)) {
-                    name = String.format("ptr_field_0x%s", Long.toHexString(offset));
+                    name = String.format("ref_%s_%s", Long.toHexString(offset), skt.finalPtrReference.get((long) offset).toString());
                 }
                 else if (dt instanceof Array) {
                     name = String.format("array_field_0x%s", Long.toHexString(offset));
