@@ -1,6 +1,5 @@
 package blueprint.solver;
 
-import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
@@ -115,20 +114,17 @@ public class Generator {
         }
 
         /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
-        if (!skt.hasDerivedTypes) {
-            Logging.info("Generator", "Stable Skeleton");
+        if (skt.noMorphingTypes() && skt.finalType == null) {
+            Logging.info("Generator", "Normal Skeleton");
             handleNormalSkeleton(skt);
         }
-
-        skt.dumpInfo();
     }
 
     private void handleNormalSkeleton(Skeleton skt) {
         var componentMap = getComponentMapByMostAccessed(skt);
         Logging.info("Generator",componentMap.toString());
         var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
-        skt.updateMorphingDataType(structDT, -1, -1);
-        skt.hasDerivedTypes = true;
+        skt.setFinalType(structDT);
     }
 
     private void handleMayPrimitiveArray(Skeleton skt) {
@@ -143,9 +139,8 @@ public class Generator {
 
         var componentMap = getComponentMapByMostAccessed(skt);
         var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
-        skt.updateMorphingDataType(ptrToArrayType, -1, -1);
-        skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT), -1, -1);
-        skt.hasDerivedTypes = true;
+        skt.updateGlobalMorphingDataType(ptrToArrayType);
+        skt.updateGlobalMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT));
     }
 
     private void handlePointerToPrimitive(Skeleton skt) {
@@ -155,10 +150,8 @@ public class Generator {
         var pointerType = generatePointerToPrimitive(mostAccessedDT);
         if (pointerType == null) {
             Logging.error("Generator", "Failed to handle F = 1 && Offset = 0");
-            return;
         } else {
             skt.setPrimitiveType(pointerType);
-            skt.hasDerivedTypes = true;
         }
     }
 
@@ -178,9 +171,7 @@ public class Generator {
                 var componentMap_2 = getComponentMapByUnionFields(skt, offset);
                 var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
 
-                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), offset, offset);
-                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset, offset);
-                skt.hasDerivedTypes = true;
+                skt.updateRangeMorphingDataType(offset, offset, Set.of(structDT_1, structDT_2));
             }
         }
     }
@@ -206,14 +197,13 @@ public class Generator {
 
             var startOffset = offsets.get(i).intValue();
             var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
-            skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), startOffset, endOffset);
-            skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), startOffset, endOffset);
+            skt.updateRangeMorphingDataType(startOffset, endOffset, Set.of(structDT_1, structDT_2));
 
-            skt.dumpInfo();
             Logging.info("Generator",
-                    String.format("Found a match from offset %s with %d elements", Long.toHexString(curOffset), flattenCnt));
+                    String.format("Found a match from offset 0x%x with %d elements", curOffset, flattenCnt));
             Logging.info("Generator",
                     String.format("Window's DataType:\n%s", winDT));
+            skt.dumpInfo();
 
             windowProcessor.resetFlattenCnt();
         }

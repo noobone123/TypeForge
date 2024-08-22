@@ -1,5 +1,6 @@
 package blueprint.base.dataflow.skeleton;
 
+import blueprint.base.dataflow.Range;
 import blueprint.base.dataflow.SymbolExpr.SymbolExpr;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
@@ -27,25 +28,19 @@ public class Skeleton {
 
     public Set<Long> inConsistentOffsets = new HashSet<>();
 
-    public boolean hasDerivedTypes = false;
     public boolean isPointerToPrimitive = false;
     public boolean mayPrimitiveArray = false;
     public boolean singleDerivedType = false;
 
     /**
      *  If there are multiple fields in the Constraint need to generate and assessment (We call it MorphingPoint)
-     *  In order to reduce time complexity, we try to assess each MorphingPoint and choose the best one in each MorphingPoint.
-     *  And finally, we will synthesize the final result based on every best choice in each MorphingPoint.
+     *  In order to reduce time complexity, we try to assess each morphRange and choose the best one in each morphRange.
+     *  And finally, we will synthesize the final result based on every best choice in each morphRange.
      */
-    public Map<Long, Set<DataType>> morphingPoints = new HashMap<>();
-    public Map<Long, Long> morphingPointRange = new HashMap<>();
-    /**
-     * Some Composite DataTypes do not have morphing points, they morph in the whole field.
-     */
-    public Set<DataType> totalMorphingTypes = new HashSet<>();
+    public Set<DataType> globalMorphingTypes = new HashSet<>();
+    public Map<Range, Set<DataType>> rangeMorpingTypes = new HashMap<>();
     public Set<DataType> decompilerInferredTypes;
-
-    public DataType finalType;
+    public DataType finalType = null;
 
     public int size = -1;
 
@@ -249,17 +244,71 @@ public class Skeleton {
         singleDerivedType = true;
     }
 
-    public void updateMorphingDataType(DataType dt, long offset, long end) {
-        if (offset == -1 && end == -1) {
-            if (mayPrimitiveArray) {
-                totalMorphingTypes.add(dt);
-            } else {
-                /* If no morphing offset and morphing end, and not a primitive array, we set it as final type */
-                finalType = dt;
+    public void setFinalType(DataType dt) {
+        finalType = dt;
+        singleDerivedType = true;
+    }
+
+    public void updateGlobalMorphingDataType(DataType dt) {
+        globalMorphingTypes.add(dt);
+    }
+
+    public boolean noMorphingTypes() {
+        return globalMorphingTypes.isEmpty() && rangeMorpingTypes.isEmpty();
+    }
+
+    /**
+     * Updates the range morphing types map by adding or merging the given DataTypes within the specified range.
+     * This method handles the following scenarios:
+     * 1. If the specified range (fieldStartOffset to fieldEndOffset) does not overlap with any existing range,
+     *    it will be added directly to the rangeMorpingTypes map.
+     * 2. If the specified range overlaps or is interlaced with any existing range, it will be merged with those ranges.
+     * 3. If the specified range is completely contained within an existing range, the DataTypes will be added to that range.
+     * 4. If the specified range completely contains one or more smaller ranges, those ranges will be merged into the new range.
+     *
+     * @param fieldStartOffset The start offset of the field range to be updated.
+     * @param fieldEndOffset The end offset of the field range to be updated.
+     * @param DTs The set of DataTypes to be associated with the specified range.
+     */
+    public void updateRangeMorphingDataType(long fieldStartOffset, long fieldEndOffset, Set<DataType> DTs) {
+        Set<Range> rangesToMerge = new HashSet<>();
+        Range containingRange = null;
+        boolean isContained = false;
+
+        for (var existingRange: rangeMorpingTypes.keySet()) {
+            if (existingRange.getStart() <= fieldStartOffset && existingRange.getEnd() >= fieldEndOffset) {
+                containingRange = existingRange;
+                isContained = true;
+                break;
             }
+            else if (fieldStartOffset <= existingRange.getStart() && fieldEndOffset >= existingRange.getEnd()) {
+                rangesToMerge.add(existingRange);
+            }
+            else if ((fieldStartOffset <= existingRange.getEnd() && fieldEndOffset >= existingRange.getStart()) ||
+                    (existingRange.getStart() <= fieldEndOffset && existingRange.getEnd() >= fieldStartOffset)) {
+                rangesToMerge.add(existingRange);
+            }
+        }
+
+        if (isContained) {
+            rangeMorpingTypes.get(containingRange).addAll(DTs);
+        } else if (!rangesToMerge.isEmpty()) {
+            long newStart = fieldStartOffset;
+            long newEnd = fieldEndOffset;
+            Set<DataType> mergedTypes = new HashSet<>(DTs);
+
+            for (var range: rangesToMerge) {
+                newStart = Math.min(newStart, range.getStart());
+                newEnd = Math.max(newEnd, range.getEnd());
+                mergedTypes.addAll(rangeMorpingTypes.get(range));
+                rangeMorpingTypes.remove(range);
+            }
+
+            Range newRange = new Range(newStart, newEnd);
+            rangeMorpingTypes.put(newRange, mergedTypes);
         } else {
-            morphingPoints.computeIfAbsent(offset, k -> new HashSet<>()).add(dt);
-            morphingPointRange.put(offset, end);
+            Range newRange = new Range(fieldStartOffset, fieldEndOffset);
+            rangeMorpingTypes.put(newRange, DTs);
         }
     }
 
@@ -345,16 +394,18 @@ public class Skeleton {
             }
             layout.append("\n");
         }
-        Logging.info("Skeleton", "Layout:\n" + layout.toString());
+        Logging.info("Skeleton", "Layout:\n" + layout);
         /* end */
 
         Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
-        Logging.info("Skeleton", "Total Morphing Types:\n" + totalMorphingTypes);
-        Logging.info("Skeleton", "Morphing Points: ");
-        for (var entry: morphingPoints.entrySet()) {
-            Logging.info("Skeleton", String.format("Morphing Range (0x%s ~ 0x%s)", Long.toHexString(entry.getKey()),
-                    Long.toHexString(morphingPointRange.get(entry.getKey()))));
-            for (var dt: entry.getValue()) {
+        Logging.info("Skeleton", "Final Type:\n" + finalType);
+        Logging.info("Skeleton", "Global Morphing Types:\n" + globalMorphingTypes);
+        Logging.info("Skeleton", "Range Morphing Types:");
+        for (var entry: rangeMorpingTypes.entrySet()) {
+            var range = entry.getKey();
+            var types = entry.getValue();
+            Logging.info("Skeleton", String.format("Morphing Range (0x%x ~ 0x%x)", range.getStart(), range.getEnd()));
+            for (var dt: types) {
                 if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
                     Logging.info("Skeleton", ((Pointer)dt).getDataType().toString());
                 } else {
@@ -362,8 +413,6 @@ public class Skeleton {
                 }
             }
         }
-        Logging.info("Skeleton", "Final Type:\n" + finalType);
-
         Logging.info("Skeleton", " ------------------------------- End --------------------------------- ");
     }
 

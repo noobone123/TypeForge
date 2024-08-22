@@ -29,7 +29,7 @@ public class SlidingWindowProcessor {
 
         var window = windowOpt.get();
         final int threshold = 4;
-        int matchCount = 0;
+        int matchCount = 1;
         int alignedWindowSize = window.getAlignedWindowSize();
         long prevWindowStartOffset = offsetList.get(curOffsetIndex);
 
@@ -84,6 +84,11 @@ public class SlidingWindowProcessor {
 
         long prevOffset = -1;
         var startOffset = offsetList.get(startIndex);
+
+        if (windowCapacity == 1 &&
+                (curSkt.finalConstraint.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
+            return Optional.empty();
+        }
 
         for (int i = 0; i < windowCapacity; i++) {
             var currentOffset = offsetList.get(startIndex + i);
