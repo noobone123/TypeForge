@@ -188,6 +188,18 @@ public class DataTypeHelper {
         dtM.addDataType(structDT, DataTypeConflictHandler.DEFAULT_HANDLER);
     }
 
+    public static int getStructDTHash(Structure structDT) {
+        int hash = 1;
+        for (var component: structDT.getComponents()) {
+            int fieldHash = component.getDataType().hashCode();
+            fieldHash = 31 * fieldHash + component.getOrdinal();
+            fieldHash = 31 * fieldHash + component.getOffset();
+
+            hash = 31 * hash + fieldHash;
+        }
+        return hash;
+    }
+
     public static DataType getPointerOfStruct(Structure structDT) {
         DataType pointerDT = new PointerDataType(structDT);
         dtM.addDataType(pointerDT, DataTypeConflictHandler.DEFAULT_HANDLER);

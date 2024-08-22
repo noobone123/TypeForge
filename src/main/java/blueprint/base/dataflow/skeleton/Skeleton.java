@@ -38,7 +38,8 @@ public class Skeleton {
      *  And finally, we will synthesize the final result based on every best choice in each morphRange.
      */
     public Set<DataType> globalMorphingTypes = new HashSet<>();
-    public Map<Range, Set<DataType>> rangeMorpingTypes = new HashMap<>();
+    public Map<Range, Set<DataType>> rangeMorphingTypes = new HashMap<>();
+    public Map<Range, Set<Integer>> rangeMorphingTypeHash = new HashMap<>();
     public Set<DataType> decompilerInferredTypes;
     public DataType finalType = null;
 
@@ -254,62 +255,67 @@ public class Skeleton {
     }
 
     public boolean noMorphingTypes() {
-        return globalMorphingTypes.isEmpty() && rangeMorpingTypes.isEmpty();
+        return globalMorphingTypes.isEmpty() && rangeMorphingTypes.isEmpty();
     }
 
     /**
      * Updates the range morphing types map by adding or merging the given DataTypes within the specified range.
      * This method handles the following scenarios:
-     * 1. If the specified range (fieldStartOffset to fieldEndOffset) does not overlap with any existing range,
+     * 1. If the specified range (startOffset to endOffset) does not overlap with any existing range,
      *    it will be added directly to the rangeMorpingTypes map.
      * 2. If the specified range overlaps or is interlaced with any existing range, it will be merged with those ranges.
      * 3. If the specified range is completely contained within an existing range, the DataTypes will be added to that range.
      * 4. If the specified range completely contains one or more smaller ranges, those ranges will be merged into the new range.
      *
-     * @param fieldStartOffset The start offset of the field range to be updated.
-     * @param fieldEndOffset The end offset of the field range to be updated.
+     * @param startOffset The start offset of the field range to be updated.
+     * @param endOffset The end offset of the field range to be updated. It's important to note that the endOffset indicates the end of current field.
      * @param DTs The set of DataTypes to be associated with the specified range.
      */
-    public void updateRangeMorphingDataType(long fieldStartOffset, long fieldEndOffset, Set<DataType> DTs) {
+    public void updateRangeMorphingDataType(long startOffset, long endOffset, Set<DataType> DTs) {
         Set<Range> rangesToMerge = new HashSet<>();
         Range containingRange = null;
         boolean isContained = false;
 
-        for (var existingRange: rangeMorpingTypes.keySet()) {
-            if (existingRange.getStart() <= fieldStartOffset && existingRange.getEnd() >= fieldEndOffset) {
+        for (var existingRange: rangeMorphingTypes.keySet()) {
+            /* If new Range is completely contained within an existing range */
+            if (existingRange.getStart() <= startOffset && existingRange.getEnd() >= endOffset) {
                 containingRange = existingRange;
                 isContained = true;
                 break;
             }
-            else if (fieldStartOffset <= existingRange.getStart() && fieldEndOffset >= existingRange.getEnd()) {
+            /* If new Range fully contains an existing range */
+            else if (startOffset < existingRange.getStart() && endOffset > existingRange.getEnd()) {
                 rangesToMerge.add(existingRange);
             }
-            else if ((fieldStartOffset <= existingRange.getEnd() && fieldEndOffset >= existingRange.getStart()) ||
-                    (existingRange.getStart() <= fieldEndOffset && existingRange.getEnd() >= fieldStartOffset)) {
+            /* If intersection exists */
+            else if ((startOffset < existingRange.getEnd() && startOffset > existingRange.getStart()) ||
+                    (endOffset > existingRange.getStart() && endOffset < existingRange.getEnd())) {
                 rangesToMerge.add(existingRange);
             }
         }
 
         if (isContained) {
-            rangeMorpingTypes.get(containingRange).addAll(DTs);
+            rangeMorphingTypes.get(containingRange).addAll(DTs);
         } else if (!rangesToMerge.isEmpty()) {
-            long newStart = fieldStartOffset;
-            long newEnd = fieldEndOffset;
+            long newStart = startOffset;
+            long newEnd = endOffset;
             Set<DataType> mergedTypes = new HashSet<>(DTs);
 
             for (var range: rangesToMerge) {
                 newStart = Math.min(newStart, range.getStart());
                 newEnd = Math.max(newEnd, range.getEnd());
-                mergedTypes.addAll(rangeMorpingTypes.get(range));
-                rangeMorpingTypes.remove(range);
+                mergedTypes.addAll(rangeMorphingTypes.get(range));
+                rangeMorphingTypes.remove(range);
             }
 
             Range newRange = new Range(newStart, newEnd);
-            rangeMorpingTypes.put(newRange, mergedTypes);
+            rangeMorphingTypes.put(newRange, mergedTypes);
         } else {
-            Range newRange = new Range(fieldStartOffset, fieldEndOffset);
-            rangeMorpingTypes.put(newRange, DTs);
+            Range newRange = new Range(startOffset, endOffset);
+            rangeMorphingTypes.put(newRange, DTs);
         }
+
+
     }
 
     public void updateDecompilerInferredTypes(DataType dt) {
@@ -401,7 +407,7 @@ public class Skeleton {
         Logging.info("Skeleton", "Final Type:\n" + finalType);
         Logging.info("Skeleton", "Global Morphing Types:\n" + globalMorphingTypes);
         Logging.info("Skeleton", "Range Morphing Types:");
-        for (var entry: rangeMorpingTypes.entrySet()) {
+        for (var entry: rangeMorphingTypes.entrySet()) {
             var range = entry.getKey();
             var types = entry.getValue();
             Logging.info("Skeleton", String.format("Morphing Range (0x%x ~ 0x%x)", range.getStart(), range.getEnd()));

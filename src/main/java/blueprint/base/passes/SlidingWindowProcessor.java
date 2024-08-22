@@ -4,7 +4,6 @@ import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
-import ghidra.program.model.data.DataType;
 
 import java.util.*;
 
@@ -63,8 +62,8 @@ public class SlidingWindowProcessor {
         }
     }
 
-    public void setWindowSize(int newWindowSize) {
-        this.windowCapacity = newWindowSize;
+    public void setWindowCapacity(int newWindowCapacity) {
+        this.windowCapacity = newWindowCapacity;
     }
 
     public void resetFlattenCnt() {

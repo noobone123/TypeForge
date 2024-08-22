@@ -47,6 +47,8 @@ public class Generator {
     public void run() {
         /* In rare cases, */
         ttt();
+        // TODO: IMPORTANT - post handle struct declarations in the skt's morphing types.
+        //  Because some different structure Object may have the fully same layout (including member's type name)
     }
 
     private void ttt() {
@@ -71,6 +73,8 @@ public class Generator {
             else if (skt.hasNestedSkeleton()) {
                 handleNestedSkeleton(skt);
             }
+
+            // TODO: populate empty (not padding) intervals with char[]
         }
     }
 
@@ -97,19 +101,18 @@ public class Generator {
             Logging.info("Generator", "No Nested && Has Ptr Reference");
             handleInconsistencyField(skt);
             handlePrimitiveFlatten(skt);
-            // TODO: handle complex flatten
-            // TODO: Using a larger sliding window size and considering the ptrReference Information
-            // TODO: When using a large sliding window, if elements in current window's size is equal, we do not build this window.
+            handleComplexFlatten(skt);
         } else {
             Logging.info("Generator", "No Nested && No Ptr Reference");
-            if (skt.mayPrimitiveArray()) {
-                Logging.info("Generator", "May Primitive Array Found");
-                handleMayPrimitiveArray(skt);
-            }
-            else {
+            if (!skt.mayPrimitiveArray()) {
                 Logging.info("Generator", "No Primitive Array Found");
                 handleInconsistencyField(skt);
                 handlePrimitiveFlatten(skt);
+                handleComplexFlatten(skt);
+            }
+            else {
+                Logging.info("Generator", "May Primitive Array Found");
+                handleMayPrimitiveArray(skt);
             }
         }
 
@@ -165,13 +168,17 @@ public class Generator {
                 skt.markInconsistentOffset(offset);
 
                 // Create Union or Find the most accessed data type
-                var componentMap_1 = getComponentMapByMostAccessed(skt);
-                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
+                var componentMap_u = getComponentMapByUnionFields(skt, offset);
+                var structDT_u = DataTypeHelper.createUniqueStructure(skt, componentMap_u);
+                var DTs = new HashSet<DataType>(Set.of(structDT_u));
 
-                var componentMap_2 = getComponentMapByUnionFields(skt, offset);
-                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+                for (var dt: aps.allDTs) {
+                    var componentMap = getComponentMapBySpecifyDT(skt, offset, dt);
+                    var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
+                    DTs.add(structDT);
+                }
 
-                skt.updateRangeMorphingDataType(offset, offset, Set.of(structDT_1, structDT_2));
+                skt.updateRangeMorphingDataType(offset, offset + aps.maxDTSize, DTs);
             }
         }
     }
@@ -197,15 +204,27 @@ public class Generator {
 
             var startOffset = offsets.get(i).intValue();
             var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
-            skt.updateRangeMorphingDataType(startOffset, endOffset, Set.of(structDT_1, structDT_2));
+            skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2)));
 
             Logging.info("Generator",
-                    String.format("Found a match from offset 0x%x with %d elements", curOffset, flattenCnt));
+                    String.format("Found a match of primitive flatten from offset 0x%x with %d elements", curOffset, flattenCnt));
             Logging.info("Generator",
                     String.format("Window's DataType:\n%s", winDT));
             skt.dumpInfo();
 
             windowProcessor.resetFlattenCnt();
+        }
+    }
+
+    private void handleComplexFlatten(Skeleton skt) {
+        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+        SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 2);
+
+        for (int i = 0; i < offsets.size() - 1; i++) {
+            for (int capacity = 2; ((offsets.size() - i) / capacity) >= 2; capacity ++) {
+                windowProcessor.setWindowCapacity(capacity);
+                // TODO: ...
+            }
         }
     }
 
@@ -239,6 +258,29 @@ public class Generator {
             }
 
             componentMap.put(offset.intValue(), mostAccessedDT);
+        }
+        return componentMap;
+    }
+
+    private Map<Integer, DataType> getComponentMapBySpecifyDT(Skeleton skt, long specOffset, DataType specDT) {
+        var componentMap = new TreeMap<Integer, DataType>();
+        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var aps = entry.getValue();
+
+            if (skt.finalPtrReference.containsKey(offset)) {
+                var dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
+                        skt.ptrLevel.get(offset));
+                componentMap.put(offset.intValue(), dt);
+                continue;
+            }
+
+            if (offset != specOffset) {
+                var mostAccessedDT = aps.mostAccessedDT;
+                componentMap.put(offset.intValue(), mostAccessedDT);
+            } else {
+                componentMap.put(offset.intValue(), specDT);
+            }
         }
         return componentMap;
     }
