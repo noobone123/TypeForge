@@ -104,8 +104,8 @@ public class SlidingWindowProcessor {
 
             var relativeOffset = currentOffset.intValue() - startOffset.intValue();
             window.addElement(relativeOffset, element);
-            if (element instanceof Skeleton skt) {
-                window.addPtrLevel(relativeOffset, skt.ptrLevel.get(currentOffset));
+            if (element instanceof Skeleton) {
+                window.addPtrLevel(relativeOffset, curSkt.ptrLevel.get(currentOffset));
             }
 
             prevOffset = currentOffset;

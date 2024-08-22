@@ -110,6 +110,15 @@ public class AccessPoints {
             return apSet.size();
         }
 
+        public Map<DataType, Integer> getTypeFreq() {
+            Map<DataType, Integer> typeFreq = new HashMap<>();
+            for (var ap: apSet) {
+                typeFreq.putIfAbsent(ap.dataType, 0);
+                typeFreq.put(ap.dataType, typeFreq.get(ap.dataType) + 1);
+            }
+            return typeFreq;
+        }
+
         public void postHandle() {
             /* Avoid using undefined data type */
             for (var ap: apSet) {

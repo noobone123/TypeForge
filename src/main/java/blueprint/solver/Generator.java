@@ -198,11 +198,6 @@ public class Generator {
             DataType winDT = window.getWindowDT();
             int flattenCnt = windowProcessor.getFlattenCount();
 
-            Logging.info("Generator",
-                    String.format("Found a match from offset %s with %d elements", Long.toHexString(curOffset), flattenCnt));
-            Logging.info("Generator",
-                    String.format("Window's DataType:\n%s", winDT));
-
             var componentMap_1 = getComponentMapByMostAccessed(skt);
             var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
 
@@ -213,6 +208,12 @@ public class Generator {
             var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
             skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), startOffset, endOffset);
             skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), startOffset, endOffset);
+
+            skt.dumpInfo();
+            Logging.info("Generator",
+                    String.format("Found a match from offset %s with %d elements", Long.toHexString(curOffset), flattenCnt));
+            Logging.info("Generator",
+                    String.format("Window's DataType:\n%s", winDT));
 
             windowProcessor.resetFlattenCnt();
         }
@@ -316,23 +317,6 @@ public class Generator {
         }
 
         return componentMap;
-    }
-
-    private boolean hasEqualInterval(Set<Long> offsetArray) {
-        if (offsetArray.size() < 2) {
-            return true;
-        }
-
-        List<Long> offsetList = new ArrayList<>(offsetArray);
-        Collections.sort(offsetList);
-
-        long interval = offsetList.get(1) - offsetList.get(0);
-        for (int i = 1; i < offsetList.size() - 1; i++) {
-            if (offsetList.get(i + 1) - offsetList.get(i) != interval) {
-                return false;
-            }
-        }
-        return true;
     }
 
     public void explore() {

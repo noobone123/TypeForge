@@ -256,22 +256,16 @@ public class TypeConstraint {
         sb.append(prefixTab).append("PolyTypes: ").append(polymorphicTypes).append("\n");
         fieldAccess.forEach((offset, aps) -> {
             /* Group the aps into Map[dataType, accessCount] */
-            Map<DataType, Integer> apCount = new HashMap<>();
-            aps.getApSet().forEach(ap -> {
-                apCount.putIfAbsent(ap.dataType, 0);
-                apCount.put(ap.dataType, apCount.get(ap.dataType) + 1);
-            });
             sb.append(prefixTab).append("\t");
             sb.append(String.format("0x%x: ", offset));
             sb.append("\t");
-            apCount.forEach((dataType, count) -> {
+            aps.getTypeFreq().forEach((dataType, count) -> {
                 sb.append(String.format("%s(%d) ", dataType.getName(), count));
             });
             sb.append("\n");
         });
         return sb.toString();
     }
-
 
     public JsonNode getJsonObj(ObjectMapper mapper) {
         var rootNode = mapper.createObjectNode();

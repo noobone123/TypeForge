@@ -94,6 +94,11 @@ public class Window {
     }
 
     @Override
+    public String toString() {
+        return windowElements.toString() + " " + "Size: " + getAlignedWindowSize();
+    }
+
+    @Override
     public boolean equals(Object other) {
         if (!(other instanceof Window otherWindow)) {
             return false;

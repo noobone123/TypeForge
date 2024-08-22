@@ -7,11 +7,8 @@ import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.Pointer;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Optional;
-import java.util.Set;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Stream;
 
 public class Skeleton {
     public final java.util.UUID uuid = java.util.UUID.randomUUID();
@@ -322,8 +319,35 @@ public class Skeleton {
         Logging.info("Skeleton", "All Exprs: " + exprs);
         Logging.info("Skeleton", "Associated Variables Count: " + getVariables().size());
         Logging.info("Skeleton", "All Variables: " + getVariables());
-        Logging.info("Skeleton", "Constraint:\n " + finalConstraint);
-        Logging.info("Skeleton", finalConstraint.dumpLayout(0));
+
+        /* dump Layout */
+        List<Long> sortedOffsets = Stream.of(finalConstraint.fieldAccess.keySet(), finalPtrReference.keySet(), mayNestedSkeleton.keySet())
+                .flatMap(Collection::stream)
+                .distinct()
+                .sorted()
+                .toList();
+        StringBuilder layout = new StringBuilder();
+        for (var offset: sortedOffsets) {
+            layout.append(String.format("0x%x: ", offset));
+            if (finalConstraint.fieldAccess.containsKey(offset)) {
+                layout.append("\t");
+                finalConstraint.fieldAccess.get(offset).getTypeFreq().forEach((dt, cnt) -> {
+                    layout.append(String.format("%s(%d) ", dt.getName(), cnt));
+                });
+            }
+            if (finalPtrReference.containsKey(offset)) {
+                layout.append("\t");
+                layout.append(String.format("Ptr Ref -> %s (%d)", finalPtrReference.get(offset), ptrLevel.get(offset)));
+            }
+            if (mayNestedSkeleton.containsKey(offset)) {
+                layout.append("\t");
+                layout.append(String.format("MayNested -> %s", mayNestedSkeleton.get(offset)));
+            }
+            layout.append("\n");
+        }
+        Logging.info("Skeleton", "Layout:\n" + layout.toString());
+        /* end */
+
         Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
         Logging.info("Skeleton", "Total Morphing Types:\n" + totalMorphingTypes);
         Logging.info("Skeleton", "Morphing Points: ");
