@@ -1,6 +1,8 @@
 package blueprint.utils;
 
+import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.skeleton.Skeleton;
+import blueprint.base.passes.Window;
 import ghidra.program.model.data.*;
 
 import java.util.*;
@@ -88,6 +90,31 @@ public class DataTypeHelper {
             Logging.warn("DataTypeHelper", "Unexpected data type: " + dt.getName());
             return dt;
         }
+    }
+
+
+    public static Structure createAnonStructureFromWindow(Window window) {
+        Logging.info("Generator", "Creating Anon Structure Type with Length: 0x" + Integer.toHexString(window.getAlignedWindowSize()));
+        String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_STRUCT_BASENAME);
+        var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, window.getAlignedWindowSize(), dtM);
+        var winElements = window.getWindowElements();
+        var ptrLevel = window.getPtrLevel();
+        for (var entry: winElements.entrySet()) {
+            var offset = entry.getKey();
+            var element = entry.getValue();
+            DataType dt;
+            String name;
+            String comment = null;
+            if (element instanceof Skeleton skt) {
+                dt = getPointerDT(DataTypeHelper.getDataTypeByName("void"), ptrLevel.get(offset));
+                name = String.format("ref_%s_%s", Long.toHexString(offset), skt.toString());
+            } else {
+                dt = ((AccessPoints.APSet) element).mostAccessedDT;
+                name = String.format("field_0x%s", Long.toHexString(offset));
+            }
+            structDT.replaceAtOffset(offset, dt, dt.getLength(), name, comment);
+        }
+        return structDT;
     }
 
     /**

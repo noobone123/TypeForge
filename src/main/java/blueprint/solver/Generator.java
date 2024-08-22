@@ -4,7 +4,7 @@ import blueprint.base.dataflow.AccessPoints;
 import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
-import blueprint.base.passes.SlidingWindow;
+import blueprint.base.passes.SlidingWindowProcessor;
 import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
@@ -123,101 +123,6 @@ public class Generator {
         skt.dumpInfo();
     }
 
-
-    private void handlePrimitiveFlattenT(Skeleton skt) {
-        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
-        SlidingWindow windowProcessor = new SlidingWindow(skt, offsets, 1);
-
-        for (int i = 0; i < offsets.size() - 1; i++) {
-            var curOffset = offsets.get(i);
-            var hasFlatten = windowProcessor.tryMatchingFromCurrentOffset(i);
-            if (!hasFlatten) continue;
-
-            DataType winDT = windowProcessor.getWindowDataTypes();
-            int flattenCnt = windowProcessor.getFlattenCount();
-
-            Logging.info("Generator",
-                    String.format("Found a match from offset %s with %d elements", Long.toHexString(curOffset), flattenCnt));
-            Logging.info("Generator",
-                    String.format("Window's DataType:\n%s", winDT));
-
-            var componentMap_1 = getComponentMapByMostAccessed(skt);
-            var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
-
-            var componentMap_2 = getComponentMapByRecoverFlatten(skt, curOffset, winDT, flattenCnt);
-            var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
-
-            // TODO: reset the window info
-            // TODO: create componentMap ...
-        }
-
-    }
-
-
-    private void handlePrimitiveFlatten(Skeleton skt) {
-        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
-        SlidingWindow windowProcessor = new SlidingWindow(skt, offsets, 1);
-
-        for (int i = 0; i < offsets.size(); i++) {
-            var offset = offsets.get(i);
-            var aps = skt.finalConstraint.fieldAccess.get(offset);
-            if (!skt.mustPrimitiveTypeAtOffset(offset)) {
-                continue;
-
-            }
-
-            var combined = new TreeMap<Long, AccessPoints.APSet>();
-            combined.put(offset, aps);
-
-            for (int j = i + 1; j < offsets.size(); j++) {
-                var offset_j = offsets.get(j);
-                var aps_j = skt.finalConstraint.fieldAccess.get(offset_j);
-                if (!skt.mustPrimitiveTypeAtOffset(offset_j)) {
-                    break;
-                }
-
-                // If current dataType's size equals last dataType's size in temp
-                var prevAPs = combined.get(offsets.get(j - 1));
-                if (aps_j.DTSize == prevAPs.DTSize) {
-                    combined.put(offset_j, aps_j);
-                } else {
-                    break;
-                }
-            }
-
-            if (combined.size() > 3 && hasEqualInterval(combined.keySet())) {
-                Logging.info("Generator", String.format("Flatten Primitive Found At 0x%s with count %d", Long.toHexString(offset), combined.size()));
-
-                /* Find Mosted Accessed DataType in the `combined` */
-                Map<DataType, Integer> dataTypeCount = new HashMap<>();
-                for (var apS : combined.values()) {
-                    for (var ap: apS.getApSet()) {
-                        var dt = ap.dataType;
-                        dataTypeCount.putIfAbsent(dt, 0);
-                        dataTypeCount.put(dt, dataTypeCount.get(dt) + 1);
-                    }
-                }
-                DataType mostCommonDT = dataTypeCount.entrySet().stream()
-                        .max(Map.Entry.comparingByValue())
-                        .get()
-                        .getKey();
-
-                /* Create Component Map */
-                var componentMap_1 = getComponentMapByMostAccessed(skt);
-                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
-                var componentMap_2 = getComponentMapByCombineFlattenFields(skt, offset, mostCommonDT, combined);
-                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
-
-                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), offset, combined.lastKey());
-                skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset, combined.lastKey());
-                skt.hasDerivedTypes = true;
-
-                // Skip over the window size to avoid redundant checks
-                i += combined.size() - 1;
-            }
-        }
-    }
-
     private void handleNormalSkeleton(Skeleton skt) {
         var componentMap = getComponentMapByMostAccessed(skt);
         Logging.info("Generator",componentMap.toString());
@@ -277,6 +182,39 @@ public class Generator {
                 skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), offset, offset);
                 skt.hasDerivedTypes = true;
             }
+        }
+    }
+
+    private void handlePrimitiveFlatten(Skeleton skt) {
+        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+        SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 1);
+
+        for (int i = 0; i < offsets.size() - 1; i++) {
+            var curOffset = offsets.get(i);
+            var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i);
+            if (hasFlattenWindow.isEmpty()) { continue; }
+
+            var window = hasFlattenWindow.get();
+            DataType winDT = window.getWindowDT();
+            int flattenCnt = windowProcessor.getFlattenCount();
+
+            Logging.info("Generator",
+                    String.format("Found a match from offset %s with %d elements", Long.toHexString(curOffset), flattenCnt));
+            Logging.info("Generator",
+                    String.format("Window's DataType:\n%s", winDT));
+
+            var componentMap_1 = getComponentMapByMostAccessed(skt);
+            var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
+
+            var componentMap_2 = getComponentMapByRecoverFlatten(skt, curOffset, winDT, flattenCnt);
+            var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+
+            var startOffset = offsets.get(i).intValue();
+            var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
+            skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_1), startOffset, endOffset);
+            skt.updateMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT_2), startOffset, endOffset);
+
+            windowProcessor.resetFlattenCnt();
         }
     }
 
