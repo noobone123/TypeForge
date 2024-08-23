@@ -169,7 +169,7 @@ public class DataTypeHelper {
             try {
                 String name = null;
                 String comment = null;
-                if (skt.ptrReference.containsKey((long) offset)) {
+                if (skt.finalPtrReference.containsKey((long) offset)) {
                     name = String.format("ref_%s_%s", Long.toHexString(offset), skt.finalPtrReference.get((long) offset).toString());
                 }
                 else if (dt instanceof Array) {

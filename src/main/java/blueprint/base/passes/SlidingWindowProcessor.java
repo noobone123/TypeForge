@@ -20,17 +20,17 @@ public class SlidingWindowProcessor {
         this.windowCapacity = initialWindowCapacity;
     }
 
-    public Optional<Window> tryMatchingFromCurrentOffset(int curOffsetIndex) {
+    public Optional<Window> tryMatchingFromCurrentOffset(int curOffsetIndex, final int threshold) {
         Optional<Window> windowOpt = getWindowAtOffset(curOffsetIndex);
         if (windowOpt.isEmpty()) {
             return Optional.empty();
         }
 
         var window = windowOpt.get();
-        final int threshold = 4;
         int matchCount = 1;
         int alignedWindowSize = window.getAlignedWindowSize();
         long prevWindowStartOffset = offsetList.get(curOffsetIndex);
+        var prevWindow = window;
 
         for (int i = curOffsetIndex + windowCapacity; i < offsetList.size(); i += windowCapacity) {
             Optional<Window> candidateWindowOpt = getWindowAtOffset(i);
@@ -43,10 +43,13 @@ public class SlidingWindowProcessor {
                 if ((offsetList.get(i) - prevWindowStartOffset) == alignedWindowSize) {
                     matchCount++;
                     prevWindowStartOffset = offsetList.get(i);
+                    prevWindow = candidateWindow;
                 } else {
+                    Logging.info("SlidingWindowProcessor", "Window equal but not contiguous");
                     Logging.info("SlidingWindowProcessor",
-                            String.format("Window equal but not contiguous: \n Window: %s\n Aligned Size: %d\n PrevWindowStart: %s, CurrentWindowStart: %s",
-                                    window, alignedWindowSize, prevWindowStartOffset, offsetList.get(i)));
+                            String.format("Previous Window:\nStart: 0x%x\n%s", prevWindowStartOffset, prevWindow));
+                    Logging.info("SlidingWindowProcessor",
+                            String.format("Current Window:\nStart: 0x%x\n%s", offsetList.get(i), candidateWindow));
                     break;
                 }
             } else {
@@ -79,15 +82,17 @@ public class SlidingWindowProcessor {
             return Optional.empty();
         }
 
-        var window = new Window();
-
-        long prevOffset = -1;
         var startOffset = offsetList.get(startIndex);
 
+        /* We don't consider windows with only one element if the element is a pointer */
         if (windowCapacity == 1 &&
                 (curSkt.finalConstraint.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
             return Optional.empty();
         }
+
+        var window = new Window();
+
+        long prevOffset = -1;
 
         for (int i = 0; i < windowCapacity; i++) {
             var currentOffset = offsetList.get(startIndex + i);
@@ -102,6 +107,7 @@ public class SlidingWindowProcessor {
                 element = curSkt.finalConstraint.fieldAccess.get(currentOffset);
             }
 
+            /* Check if fields in the window are contiguous (consider padding) */
             if (prevOffset != -1 && !isContiguous(prevOffset, currentOffset, element)) {
                 return Optional.empty();
             }
@@ -114,6 +120,12 @@ public class SlidingWindowProcessor {
 
             prevOffset = currentOffset;
         }
+
+        /* Check if all the elements in the window are of the same type (excluded capacity 1) */
+        if (window.isHomogeneous()) {
+            return Optional.empty();
+        }
+
         return Optional.of(window);
     }
 

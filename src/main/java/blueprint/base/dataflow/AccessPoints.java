@@ -77,6 +77,7 @@ public class AccessPoints {
         public final Set<AP> apSet;
         public boolean isSameSizeType = true;
         public int maxDTSize = -1;
+        public int minDTSize = -1;
         public int DTSize = -1;
         public DataType mostAccessedDT = null;
         public Set<DataType> allDTs = new HashSet<>();
@@ -89,6 +90,7 @@ public class AccessPoints {
             this.apSet = new HashSet<>(other.apSet);
             this.isSameSizeType = other.isSameSizeType;
             this.maxDTSize = other.maxDTSize;
+            this.minDTSize = other.minDTSize;
             this.DTSize = other.DTSize;
             this.mostAccessedDT = other.mostAccessedDT;
             this.allDTs = new HashSet<>(other.allDTs);
@@ -134,8 +136,10 @@ public class AccessPoints {
             if (isSameSizeType) {
                 DTSize = AccessPoints.getDataTypeSize(apSet);
                 maxDTSize = DTSize;
+                minDTSize = DTSize;
             } else {
                 maxDTSize = AccessPoints.getMaxSizeInAPSet(apSet);
+                minDTSize = AccessPoints.getMinSizeInAPSet(apSet);
             }
 
             mostAccessedDT = AccessPoints.getMostAccessedDT(apSet);
@@ -191,6 +195,19 @@ public class AccessPoints {
             }
         }
         return maxSize;
+    }
+
+    public static int getMinSizeInAPSet(Set<AccessPoints.AP> apSet) {
+        if (apSet.isEmpty()) {
+            return 0;
+        }
+        var minSize = Integer.MAX_VALUE;
+        for (var ap : apSet) {
+            if (ap.dataType.getLength() < minSize) {
+                minSize = ap.dataType.getLength();
+            }
+        }
+        return minSize;
     }
 
     public static DataType getMostAccessedDT(Set<AccessPoints.AP> apSet) {

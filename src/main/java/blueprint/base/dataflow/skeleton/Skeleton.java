@@ -344,6 +344,17 @@ public class Skeleton {
         return inConsistentOffsets.contains(offset);
     }
 
+    public boolean isInMorphingRange(long offset) {
+        for (var range: rangeMorphingTypes.keySet()) {
+            var start = range.getStart();
+            var end = range.getEnd();
+            if (offset >= start && offset < end) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Override
     public int hashCode() {
         return uuid.hashCode();

@@ -5,6 +5,7 @@ import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.base.passes.SlidingWindowProcessor;
 import blueprint.utils.DataTypeHelper;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
@@ -36,9 +37,6 @@ public class Generator {
     public Generator(SkeletonCollector skeletonCollector, SymbolExprManager exprManager) {
         this.skeletonCollector = skeletonCollector;
         this.exprManager = exprManager;
-
-        skeletonCollector.handleAPSets();
-        skeletonCollector.handleDecompilerInferredTypes();
     }
 
     /**
@@ -100,15 +98,15 @@ public class Generator {
         if (skt.hasPtrReference()) {
             Logging.info("Generator", "No Nested && Has Ptr Reference");
             handleInconsistencyField(skt);
+            // handleComplexFlatten(skt);
             handlePrimitiveFlatten(skt);
-            handleComplexFlatten(skt);
         } else {
             Logging.info("Generator", "No Nested && No Ptr Reference");
             if (!skt.mayPrimitiveArray()) {
                 Logging.info("Generator", "No Primitive Array Found");
                 handleInconsistencyField(skt);
                 handlePrimitiveFlatten(skt);
-                handleComplexFlatten(skt);
+                // handleComplexFlatten(skt);
             }
             else {
                 Logging.info("Generator", "May Primitive Array Found");
@@ -189,7 +187,7 @@ public class Generator {
 
         for (int i = 0; i < offsets.size() - 1; i++) {
             var curOffset = offsets.get(i);
-            var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i);
+            var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i, 4);
             if (hasFlattenWindow.isEmpty()) { continue; }
 
             var window = hasFlattenWindow.get();
@@ -223,7 +221,17 @@ public class Generator {
         for (int i = 0; i < offsets.size() - 1; i++) {
             for (int capacity = 2; ((offsets.size() - i) / capacity) >= 2; capacity ++) {
                 windowProcessor.setWindowCapacity(capacity);
-                // TODO: ...
+                var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i, 2);
+                if (hasFlattenWindow.isEmpty()) { continue; }
+
+                var window = hasFlattenWindow.get();
+                DataType winDT = window.getWindowDT();
+
+                Logging.info("Generator",
+                        String.format("Found a match of primitive flatten from offset 0x%x with %d elements"));
+                Logging.info("Generator",
+                        String.format("Window's DataType:\n%s", winDT));
+                skt.dumpInfo();
             }
         }
     }

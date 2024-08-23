@@ -6,6 +6,8 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.typeRelation.TypeRelationPath;
+import blueprint.utils.DataTypeHelper;
+import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.utils.TCHelper;
 
@@ -236,6 +238,42 @@ public class SkeletonCollector {
             }
         }
     }
+
+    /**
+     * In Type Skeleton, some member may have conflict point to reference, we need to handle it.
+     */
+    public void handleMemberConflict() {
+        var ptrSize = Global.currentProgram.getDefaultPointerSize();
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+            Collections.sort(offsets);
+
+            for (int i = 0; i < offsets.size(); i++) {
+                var offset = offsets.get(i);
+                var aps = skt.finalConstraint.fieldAccess.get(offset);
+
+                long nextOffset = -1;
+                if (i < offsets.size() - 1) {
+                    nextOffset = offsets.get(i + 1);
+                }
+
+                if (skt.finalPtrReference.containsKey(offset)) {
+                    if (nextOffset != -1 && (nextOffset - offset) < ptrSize) {
+                        skt.finalPtrReference.remove(offset);
+                        Logging.info("SkeletonCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
+                    }
+                } else {
+                    var maxDTSize = aps.maxDTSize;
+                    if (nextOffset != -1 && (nextOffset - offset) < maxDTSize) {
+                        Logging.info("SkeletonCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
+                        Logging.info("SkeletonCollector", String.format("MaxDTSize = %d", maxDTSize));
+                        Logging.info("SkeletonCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
+                    }
+                }
+            }
+        }
+    }
+
 
     /**
      * Similar to `handleMemoryAlias`, if `*(a+0x8)` and `*(b+0x8)` has different Skeleton but `a` and `b` has same Skeleton.

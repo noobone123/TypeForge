@@ -93,9 +93,51 @@ public class Window {
         return ptrLevel;
     }
 
+    public boolean isHomogeneous() {
+        if (windowElements.size() == 1) {
+            return false;
+        }
+
+        var firstElement = windowElements.get(0);
+        if (firstElement instanceof Skeleton skt) {
+            for (var element: windowElements.values()) {
+                if (!(element instanceof Skeleton) || !element.equals(skt)) {
+                    return false;
+                }
+            }
+            return true;
+        } else if (firstElement instanceof AccessPoints.APSet apSet) {
+            for (var element: windowElements.values()) {
+                if (!(element instanceof AccessPoints.APSet)) {
+                    return false;
+                }
+                var otherAPSet = (AccessPoints.APSet) element;
+                if (apSet.DTSize != otherAPSet.DTSize) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        return false;
+    }
+
     @Override
     public String toString() {
-        return windowElements.toString() + " " + "Size: " + getAlignedWindowSize();
+        StringBuilder sb = new StringBuilder();
+        for (var entry: windowElements.entrySet()) {
+            int offset = entry.getKey();
+            Object element = entry.getValue();
+            sb.append(String.format("0x%x", offset)).append(": ");
+            if (element instanceof Skeleton skt) {
+                sb.append(skt.toString());
+            } else if (element instanceof AccessPoints.APSet apSet) {
+                sb.append(apSet.mostAccessedDT.getName());
+            }
+            sb.append("\n");
+        }
+        sb.append("Size: ").append(getAlignedWindowSize());
+        return sb.toString();
     }
 
     @Override
