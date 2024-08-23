@@ -411,12 +411,7 @@ public class SkeletonCollector {
                 /* These types are considered as pointers to primitive types and no need to assess and ranking */
                 Logging.info("SkeletonCollector", "Pointer to Primitive Detected: " + skt);
                 var aps = skt.finalConstraint.fieldAccess.get(0L);
-                var pointerType = DataTypeHelper.getPointerDT(aps.mostAccessedDT, 1);
-                if (pointerType == null) {
-                    Logging.error("SkeletonCollector", "Failed to handle Pointer to Primitive");
-                } else {
-                    skt.setPrimitiveType(pointerType);
-                }
+                skt.setPrimitiveType(aps.mostAccessedDT);
             }
         }
 

@@ -244,9 +244,7 @@ public class Generator {
             var mostAccessedDT = aps.mostAccessedDT;
 
             if (skt.finalPtrReference.containsKey(offset)) {
-                var dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
-                        skt.ptrLevel.get(offset));
-                componentMap.put(offset.intValue(), dt);
+                createPtrRefMember(skt, componentMap, offset);
                 continue;
             }
 
@@ -262,9 +260,7 @@ public class Generator {
             var aps = entry.getValue();
 
             if (skt.finalPtrReference.containsKey(offset)) {
-                var dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
-                        skt.ptrLevel.get(offset));
-                componentMap.put(offset.intValue(), dt);
+                createPtrRefMember(skt, componentMap, offset);
                 continue;
             }
 
@@ -288,10 +284,9 @@ public class Generator {
         var componentMap = new TreeMap<Integer, DataType>();
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey().intValue();
+
             if (skt.finalPtrReference.containsKey((long) fieldOffset)) {
-                var dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
-                        skt.ptrLevel.get((long) fieldOffset));
-                componentMap.put(fieldOffset, dt);
+                createPtrRefMember(skt, componentMap, (long) fieldOffset);
                 continue;
             }
 
@@ -326,14 +321,12 @@ public class Generator {
             if (fieldOffset < flattenStartOffset || fieldOffset >= flattenEndOffset) {
                 DataType dt;
                 if (skt.finalPtrReference.containsKey(fieldOffset)) {
-                    dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
-                            skt.ptrLevel.get(fieldOffset));
+                    createPtrRefMember(skt, componentMap, fieldOffset);
                 } else {
                     dt = entry.getValue().mostAccessedDT;
+                    componentMap.put(fieldOffset.intValue(), dt);
                 }
-                componentMap.put(fieldOffset.intValue(), dt);
             }
-
             /* Handle Flatten */
             else if (fieldOffset == flattenStartOffset) {
                 var flattenDT = DataTypeHelper.createArray(winDT, flattenCnt);
@@ -342,6 +335,19 @@ public class Generator {
         }
 
         return componentMap;
+    }
+
+    private void createPtrRefMember(Skeleton skt, Map<Integer, DataType> componentMap, Long offset) {
+        var ptrEE = skt.finalPtrReference.get(offset);
+        DataType dt;
+        if (ptrEE.isPointerToPrimitive) {
+            dt = DataTypeHelper.getPointerDT(ptrEE.finalType, skt.ptrLevel.get(offset));
+        } else {
+            dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
+                    skt.ptrLevel.get(offset));
+        }
+        componentMap.put(offset.intValue(), dt);
+        return;
     }
 
     public void explore() {
