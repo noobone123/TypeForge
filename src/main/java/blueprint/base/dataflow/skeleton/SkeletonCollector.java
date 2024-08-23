@@ -6,6 +6,7 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.typeRelation.TypeRelationPath;
+import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.utils.TCHelper;
@@ -395,6 +396,64 @@ public class SkeletonCollector {
             }
         }
     }
+
+    /**
+     * Mark MayPrimitiveType for Skeletons and handle reference and nested mayPrimitiveType skeletons.
+     */
+    public void handleUnreasonableSkeleton() {
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.isMultiLevelMidPtr()) {
+                Logging.info("SkeletonCollector", "Multi Level Mid Ptr Skeleton: " + skt);
+                skt.isMultiLevelMidPtr = true;
+            } else if (skt.isIndependent() && skt.hasOneField() &&
+                    !skt.decompilerInferredTypesHasComposite() &&
+                    (skt.finalConstraint.fieldAccess.get(0L) != null)) {
+                /* These types are considered as pointers to primitive types and no need to assess and ranking */
+                Logging.info("SkeletonCollector", "Pointer to Primitive Detected: " + skt);
+                var aps = skt.finalConstraint.fieldAccess.get(0L);
+                var pointerType = DataTypeHelper.getPointerDT(aps.mostAccessedDT, 1);
+                if (pointerType == null) {
+                    Logging.error("SkeletonCollector", "Failed to handle Pointer to Primitive");
+                } else {
+                    skt.setPrimitiveType(pointerType);
+                }
+            }
+        }
+
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.hasPtrReference()) {
+                for (var offset: skt.finalPtrReference.keySet()) {
+                    var ptrEE = skt.finalPtrReference.get(offset);
+                    if (ptrEE.isMultiLevelMidPtr) {
+                        skt.finalPtrReference.remove(offset);
+                        skt.ptrLevel.remove(offset);
+                        Logging.info("SkeletonCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
+                    }
+                }
+            }
+
+            if (skt.hasNestedSkeleton()) {
+                var iterator = skt.mayNestedSkeleton.keySet().iterator();
+                while (iterator.hasNext()) {
+                    var offset = iterator.next();
+                    var removeCandidates = new HashSet<Skeleton>();
+                    for (var s: skt.mayNestedSkeleton.get(offset)) {
+                        if (s.isMultiLevelMidPtr || s.isPointerToPrimitive || skt == s) {
+                            removeCandidates.add(s);
+                        }
+                    }
+                    if (!removeCandidates.isEmpty()) {
+                        skt.mayNestedSkeleton.get(offset).removeAll(removeCandidates);
+                        if (skt.mayNestedSkeleton.get(offset).isEmpty()) {
+                            iterator.remove();
+                        }
+                        Logging.info("SkeletonCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
+                    }
+                }
+            }
+        }
+    }
+
 
     public void handleAPSets() {
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {

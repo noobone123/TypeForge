@@ -162,21 +162,21 @@ public class Skeleton {
     }
 
     public boolean hasNestedSkeleton() {
-        if (mayNestedSkeleton.isEmpty()) {
-            return false;
-        }
+        return !mayNestedSkeleton.isEmpty();
+    }
 
+    public boolean shouldNestSkeleton() {
         boolean shouldNest = true;
         for (var entry: mayNestedSkeleton.entrySet()) {
             var offset = entry.getKey();
             var nestees = entry.getValue();
             for (var nestee: nestees) {
                 if (this == nestee) {
-                    Logging.warn("Generator", "Recursive Nesting is forbidden!");
+                    Logging.warn("Skeleton", "Recursive Nesting is forbidden!");
                     shouldNest = false;
                 }
                 else if (offset > getSize()) {
-                    Logging.warn("Generator", "Offset larger than the size of the nester!");
+                    Logging.warn("Skeleton", "Offset larger than the size of the nester!");
                     shouldNest = false;
                 }
                 else {
@@ -184,7 +184,6 @@ public class Skeleton {
                 }
             }
         }
-
         return shouldNest;
     }
 

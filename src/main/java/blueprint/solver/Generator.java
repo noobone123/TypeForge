@@ -50,20 +50,6 @@ public class Generator {
 
     private void ttt() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
-        /* Mark Pointer to Primitive First */
-        // TODO: these should be moved into SkeletonCollector's handler.
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.isMultiLevelMidPtr()) {
-                Logging.info("Generator", "Multi Level Mid Ptr Skeleton: " + skt);
-                skt.isMultiLevelMidPtr = true;
-            } else if (skt.isIndependent() && skt.hasOneField() &&
-                    !skt.decompilerInferredTypesHasComposite() &&
-                    (skt.finalConstraint.fieldAccess.get(0L) != null)) {
-                /* These types are considered as pointers to primitive types and no need to assess and ranking */
-                handlePointerToPrimitive(skt);
-            }
-        }
-
         // TODO: If there is ptrReference or Nested Skeleton related to Pointer to Primitive
 
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
@@ -143,18 +129,6 @@ public class Generator {
         var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
         skt.updateGlobalMorphingDataType(ptrToArrayType);
         skt.updateGlobalMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT));
-    }
-
-    private void handlePointerToPrimitive(Skeleton skt) {
-        Logging.info("Generator", "Field = 1 && Offset = 0");
-        var aps = skt.finalConstraint.fieldAccess.get(0L);
-        var mostAccessedDT = aps.mostAccessedDT;
-        var pointerType = generatePointerToPrimitive(mostAccessedDT);
-        if (pointerType == null) {
-            Logging.error("Generator", "Failed to handle F = 1 && Offset = 0");
-        } else {
-            skt.setPrimitiveType(pointerType);
-        }
     }
 
     private void handleInconsistencyField(Skeleton skt) {
