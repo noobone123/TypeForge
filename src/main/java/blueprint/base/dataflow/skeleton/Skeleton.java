@@ -29,6 +29,7 @@ public class Skeleton {
     public Set<Long> inConsistentOffsets = new HashSet<>();
 
     public boolean isPointerToPrimitive = false;
+    public boolean isMultiLevelMidPtr = false;
     public boolean mayPrimitiveArray = false;
     public boolean singleDerivedType = false;
 
@@ -80,7 +81,7 @@ public class Skeleton {
         ptrReference.computeIfAbsent(ptr, k -> new HashSet<>()).add(skt);
     }
 
-    public boolean isMultiLevelPtr() {
+    public boolean isMultiLevelMidPtr() {
         if (constraints.size() > 1) { return false; }
         var constraint = constraints.iterator().next();
         if (constraint.fieldAccess.size() != 1) { return false; }
@@ -90,7 +91,7 @@ public class Skeleton {
             var size = dataType.getLength();
             if (size != Global.currentProgram.getDefaultPointerSize()) { return false; }
         }
-        if (ptrReference.get(0L) == null) { return false; }
+        if (finalPtrReference.get(0L) == null) { return false; }
         return true;
     }
 

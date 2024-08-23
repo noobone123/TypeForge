@@ -5,7 +5,6 @@ import blueprint.base.dataflow.skeleton.Skeleton;
 import blueprint.base.dataflow.skeleton.SkeletonCollector;
 import blueprint.base.passes.SlidingWindowProcessor;
 import blueprint.utils.DataTypeHelper;
-import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import ghidra.program.model.data.DataType;
 
@@ -51,44 +50,46 @@ public class Generator {
 
     private void ttt() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
+        /* Mark Pointer to Primitive First */
+        // TODO: these should be moved into SkeletonCollector's handler.
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.isMultiLevelPtr()) {
-                // TODO: handle multi-level ptr， if there skt's exprs has variable.
-                Logging.info("Generator", "Multi Level Ptr Skeleton: " + skt);
-                continue;
-            }
-            else if (skt.isIndependent() && skt.hasOneField() &&
+            if (skt.isMultiLevelMidPtr()) {
+                Logging.info("Generator", "Multi Level Mid Ptr Skeleton: " + skt);
+                skt.isMultiLevelMidPtr = true;
+            } else if (skt.isIndependent() && skt.hasOneField() &&
                     !skt.decompilerInferredTypesHasComposite() &&
                     (skt.finalConstraint.fieldAccess.get(0L) != null)) {
                 /* These types are considered as pointers to primitive types and no need to assess and ranking */
                 handlePointerToPrimitive(skt);
             }
-            else if (!skt.hasNestedSkeleton()) {
+        }
+
+        // TODO: If there is ptrReference or Nested Skeleton related to Pointer to Primitive
+
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (!skt.hasNestedSkeleton()) {
                 /* If No Nested Skeleton Found */
                 Logging.info("Generator", "No Nested Skeleton: " + skt);
                 handleNoNestedSkeleton(skt);
             }
             else if (skt.hasNestedSkeleton()) {
+                Logging.info("Generator", "Has Nested Skeleton: " + skt);
                 handleNestedSkeleton(skt);
             }
-
             // TODO: populate empty (not padding) intervals with char[]
         }
     }
 
     // TODO: Handle Nested Skeleton finally
-    //  1. If nest or not ?
+    //  1. should nested or not.
     //  2. If nested, we just mark relationship and copy all member from nestee to nester, without create nested structure, because nested structure may has ????
-    //  3. If nested, we utilize size and sliding window to find the flatten.
     //  4. For other fields that not contained in the nested intervals, we should handle them by `handleInconsistencyField` and `handlePrimitiveFlatten` and `handleComplexFlatten`
     private void handleNestedSkeleton(Skeleton skt) {
+        skt.dumpInfo();
         for (var offset: skt.mayNestedSkeleton.keySet()) {
             var nestedSktSet = skt.mayNestedSkeleton.get(offset);
-            if (nestedSktSet.size() == 1) {
-                var nestedSkt = nestedSktSet.iterator().next();
-
-                Logging.info("Generator", String.format("Nested Skeleton Found At 0x%s", Long.toHexString(offset)));
-                skt.dumpInfo();
+            Logging.info("Generator", String.format("Nested Skeletons Found At 0x%s", Long.toHexString(offset)));
+            for (var nestedSkt: nestedSktSet) {
                 nestedSkt.dumpInfo();
             }
         }
@@ -370,10 +371,11 @@ public class Generator {
     }
 
     public void explore() {
+        // TODO: update explore function
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             Logging.info("Generator", String.format("Exploring Skeleton: %s", skt));
-            if (skt.isMultiLevelPtr()) continue;
+            if (skt.isMultiLevelMidPtr()) continue;
             skt.dumpInfo();
         }
 

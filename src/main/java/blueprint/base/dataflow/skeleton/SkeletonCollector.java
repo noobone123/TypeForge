@@ -6,7 +6,6 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.typeRelation.TypeRelationPath;
-import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.utils.TCHelper;
@@ -212,7 +211,7 @@ public class SkeletonCollector {
             for (var offset: skt.finalPtrReference.keySet()) {
                 var ptrEESkt = skt.finalPtrReference.get(offset);
                 var ptrLevel = 1;
-                while (ptrEESkt.isMultiLevelPtr()) {
+                while (ptrEESkt.isMultiLevelMidPtr()) {
                     ptrLevel++;
                     if (ptrEESkt == ptrEESkt.finalPtrReference.get(0L)) {
                         Logging.warn("SkeletonCollector", "Ptr Reference Loop Detected!");
