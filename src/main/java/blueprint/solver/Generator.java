@@ -43,22 +43,31 @@ public class Generator {
      */
     public void run() {
         /* In rare cases, */
-        ttt();
+        generation();
         // TODO: IMPORTANT - post handle struct declarations in the skt's morphing types.
         //  Because some different structure Object may have the fully same layout (including member's type name)
     }
 
-    private void ttt() {
+    private void generation() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         // TODO: If there is ptrReference or Nested Skeleton related to Pointer to Primitive
 
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.isPointerToPrimitive) {
+                Logging.info("Generator", "Pointer to Primitive Found");
+                continue;
+            }
+            if (skt.isMultiLevelMidPtr) {
+                Logging.info("Generator", "Multi-Level Mid Pointer Found");
+                continue;
+            }
+
             if (!skt.hasNestedSkeleton()) {
                 /* If No Nested Skeleton Found */
                 Logging.info("Generator", "No Nested Skeleton: " + skt);
                 handleNoNestedSkeleton(skt);
             }
-            else if (skt.hasNestedSkeleton()) {
+            else {
                 Logging.info("Generator", "Has Nested Skeleton: " + skt);
                 handleNestedSkeleton(skt);
             }
@@ -72,6 +81,10 @@ public class Generator {
     //  4. For other fields that not contained in the nested intervals, we should handle them by `handleInconsistencyField` and `handlePrimitiveFlatten` and `handleComplexFlatten`
     private void handleNestedSkeleton(Skeleton skt) {
         skt.dumpInfo();
+        if (!skt.shouldNestSkeleton()) {
+            return;
+        }
+
         for (var offset: skt.mayNestedSkeleton.keySet()) {
             var nestedSktSet = skt.mayNestedSkeleton.get(offset);
             Logging.info("Generator", String.format("Nested Skeletons Found At 0x%s", Long.toHexString(offset)));
@@ -110,7 +123,6 @@ public class Generator {
 
     private void handleNormalSkeleton(Skeleton skt) {
         var componentMap = getComponentMapByMostAccessed(skt);
-        Logging.info("Generator",componentMap.toString());
         var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
         skt.setFinalType(structDT);
     }
