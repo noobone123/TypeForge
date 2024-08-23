@@ -132,7 +132,7 @@ public class InterContext {
         for (var graph: typeRelationManager.getGraphs()) {
             for (var node: graph.getGraph().vertexSet()) {
                 if (evilFunctions.contains(node.function)) {
-                    /* We don't remove edges of expressions that indicate local variables */
+                    /* We don't remove edges of expressions that indicate parameters and local variables */
                     if (node.getRootSymExpr().isParameter || node.getRootSymExpr().isReturnVal || node.isRootSymExpr()) {
                         continue;
                     }

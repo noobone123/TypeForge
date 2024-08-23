@@ -98,15 +98,15 @@ public class Generator {
         if (skt.hasPtrReference()) {
             Logging.info("Generator", "No Nested && Has Ptr Reference");
             handleInconsistencyField(skt);
-            // handleComplexFlatten(skt);
+            handleComplexFlatten(skt);
             handlePrimitiveFlatten(skt);
         } else {
             Logging.info("Generator", "No Nested && No Ptr Reference");
             if (!skt.mayPrimitiveArray()) {
                 Logging.info("Generator", "No Primitive Array Found");
                 handleInconsistencyField(skt);
+                handleComplexFlatten(skt);
                 handlePrimitiveFlatten(skt);
-                // handleComplexFlatten(skt);
             }
             else {
                 Logging.info("Generator", "May Primitive Array Found");
@@ -205,7 +205,7 @@ public class Generator {
             skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2)));
 
             Logging.info("Generator",
-                    String.format("Found a match of primitive flatten from offset 0x%x with %d elements", curOffset, flattenCnt));
+                    String.format("Found a match of primitive flatten from offset 0x%x with %d count", curOffset, flattenCnt));
             Logging.info("Generator",
                     String.format("Window's DataType:\n%s", winDT));
             skt.dumpInfo();
@@ -226,9 +226,19 @@ public class Generator {
 
                 var window = hasFlattenWindow.get();
                 DataType winDT = window.getWindowDT();
+                int flattenCnt = windowProcessor.getFlattenCount();
+
+                var componentMap_1 = getComponentMapByMostAccessed(skt);
+                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
+                var componentMap_2 = getComponentMapByRecoverFlatten(skt, offsets.get(i), winDT, flattenCnt);
+                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+
+                var startOffset = offsets.get(i).intValue();
+                var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
+                skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2)));
 
                 Logging.info("Generator",
-                        String.format("Found a match of primitive flatten from offset 0x%x with %d elements"));
+                        String.format("Found a match of complex flatten (%d) from offset 0x%x with %d count", capacity, offsets.get(i), flattenCnt));
                 Logging.info("Generator",
                         String.format("Window's DataType:\n%s", winDT));
                 skt.dumpInfo();
