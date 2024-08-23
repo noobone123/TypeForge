@@ -88,6 +88,9 @@ public class Generator {
         for (var offset: skt.mayNestedSkeleton.keySet()) {
             var nestedSktSet = skt.mayNestedSkeleton.get(offset);
             Logging.info("Generator", String.format("Nested Skeletons Found At 0x%s", Long.toHexString(offset)));
+            // TODO: if there is multiple nested, we should choose the type which has most associated variable (most member)
+            // TODO: Just fill each other (nester and nestee), fill should not out of the largest member offset of the nester
+            // TODO: if there is multiple nested and one skeleton has decompiler inferred type, choose it.
             for (var nestedSkt: nestedSktSet) {
                 nestedSkt.dumpInfo();
             }
