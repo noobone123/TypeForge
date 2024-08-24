@@ -50,7 +50,6 @@ public class Generator {
 
     private void generation() {
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
-        // TODO: If there is ptrReference or Nested Skeleton related to Pointer to Primitive
 
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isPointerToPrimitive) {

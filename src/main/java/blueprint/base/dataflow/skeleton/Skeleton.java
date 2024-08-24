@@ -411,7 +411,7 @@ public class Skeleton {
         Logging.info("Skeleton", "All Variables: " + getVariables());
 
         /* dump Layout */
-        List<Long> sortedOffsets = Stream.of(finalConstraint.fieldAccess.keySet(), finalPtrReference.keySet(), mayNestedSkeleton.keySet())
+        List<Long> sortedOffsets = Stream.of(finalConstraint.fieldAccess.keySet(), finalPtrReference.keySet(), finalNestedSkeleton.keySet())
                 .flatMap(Collection::stream)
                 .distinct()
                 .sorted()
@@ -429,9 +429,9 @@ public class Skeleton {
                 layout.append("\t");
                 layout.append(String.format("Ptr Ref -> %s (%d)", finalPtrReference.get(offset), ptrLevel.get(offset)));
             }
-            if (mayNestedSkeleton.containsKey(offset)) {
+            if (finalNestedSkeleton.containsKey(offset)) {
                 layout.append("\t");
-                layout.append(String.format("MayNested -> %s", mayNestedSkeleton.get(offset)));
+                layout.append(String.format("Nested -> %s", finalNestedSkeleton.get(offset)));
             }
             layout.append("\n");
         }

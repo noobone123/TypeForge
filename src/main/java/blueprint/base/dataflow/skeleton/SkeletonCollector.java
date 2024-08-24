@@ -274,13 +274,16 @@ public class SkeletonCollector {
                     if (nextOffset != -1 && (nextOffset - offset) < ptrSize) {
                         skt.finalPtrReference.remove(offset);
                         Logging.info("SkeletonCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
+                        skt.dumpInfo();
                     }
                 } else {
-                    var maxDTSize = aps.maxDTSize;
-                    if (nextOffset != -1 && (nextOffset - offset) < maxDTSize) {
+                    var size = aps.mostAccessedDT.getLength();
+                    if (nextOffset != -1 && (nextOffset - offset) < size) {
+                        // TODO: ... remove current field
                         Logging.info("SkeletonCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
-                        Logging.info("SkeletonCollector", String.format("MaxDTSize = %d", maxDTSize));
+                        Logging.info("SkeletonCollector", String.format("MostAccessedDTSize = %d", size));
                         Logging.info("SkeletonCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
+                        skt.dumpInfo();
                     }
                 }
             }
@@ -361,9 +364,6 @@ public class SkeletonCollector {
                 var nestedSkts = entry.getValue();
                 Skeleton finalNestedCandidate = null;
                 for (var nestedSkt: nestedSkts) {
-                    // TODO: if there is multiple nested, we should choose the type which has most associated variable (most member)
-                    // TODO: Just fill each other (nester and nestee), fill should not out of the largest member offset of the nester
-                    // TODO: if there is multiple nested and one skeleton has decompiler inferred type, choose it.
                     tryPopulateNester(skt, offset, nestedSkt);
                     if (finalNestedCandidate == null) {
                         finalNestedCandidate = nestedSkt;
@@ -460,27 +460,22 @@ public class SkeletonCollector {
 
 
     private void tryPopulateNester(Skeleton nester, Long nestStartOffset, Skeleton nestee) {
-        var maxNestedSize = nestee.getSize();
-        var nestEndOffset = nestStartOffset + maxNestedSize;
-        for (var offset: nester.finalConstraint.fieldAccess.keySet()) {
-            if (offset >= nestStartOffset && offset < nestEndOffset) {
-                var nesteeOff = offset - nestStartOffset;
-                var nesteeAPS = nestee.finalConstraint.fieldAccess.get(nesteeOff);
-                var nesteePtrRef = nestee.finalPtrReference.get(nesteeOff);
+        for (var offset: nestee.finalConstraint.fieldAccess.keySet()) {
+            var nesterOffset = nestStartOffset + offset;
+            var nesterAPS = nester.finalConstraint.fieldAccess.get(nesterOffset);
+            var nesteeAPS = nestee.finalConstraint.fieldAccess.get(offset);
 
-                if (nesteeAPS != null) {
-                    var nesterAPS = nester.finalConstraint.fieldAccess.get(offset);
-                    if (nesterAPS != null && nesterAPS.maxDTSize >= nesteeAPS.maxDTSize) {
-                        nesterAPS.update(nesteeAPS);
-                    } else if (nesterAPS == null) {
-                        nester.finalConstraint.fieldAccess.put(offset, nesteeAPS);
-                    }
-                }
-
-                if (nesteePtrRef != null) {
-                    nester.finalPtrReference.putIfAbsent(offset, nesteePtrRef);
-                }
+            if (nesterAPS == null) {
+                nester.finalConstraint.fieldAccess.put(nesterOffset, nesteeAPS);
+            } else if (nesterAPS.maxDTSize >= nesteeAPS.maxDTSize) {
+                nesterAPS.update(nesteeAPS);
             }
+        }
+
+        for (var offset: nestee.finalPtrReference.keySet()) {
+            var nesterOffset = nestStartOffset + offset;
+            var nesteePtrRef = nestee.finalPtrReference.get(offset);
+            nester.finalPtrReference.putIfAbsent(nesterOffset, nesteePtrRef);
         }
     }
 
