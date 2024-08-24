@@ -81,10 +81,6 @@ public class Generator {
     //  4. For other fields that not contained in the nested intervals, we should handle them by `handleInconsistencyField` and `handlePrimitiveFlatten` and `handleComplexFlatten`
     private void handleNestedSkeleton(Skeleton skt) {
         skt.dumpInfo();
-        if (!skt.shouldNestSkeleton()) {
-            return;
-        }
-
         for (var offset: skt.mayNestedSkeleton.keySet()) {
             var nestedSktSet = skt.mayNestedSkeleton.get(offset);
             Logging.info("Generator", String.format("Nested Skeletons Found At 0x%s", Long.toHexString(offset)));

@@ -25,6 +25,7 @@ public class Skeleton {
     public Map<Long, Skeleton> finalPtrReference = new HashMap<>();
     public Map<Long, Integer> ptrLevel = new HashMap<>();
     public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
+    public Map<Long, Set<Skeleton>> finalNestedSkeleton = new HashMap<>();
 
     public Set<Long> inConsistentOffsets = new HashSet<>();
 
@@ -163,28 +164,6 @@ public class Skeleton {
 
     public boolean hasNestedSkeleton() {
         return !mayNestedSkeleton.isEmpty();
-    }
-
-    public boolean shouldNestSkeleton() {
-        boolean shouldNest = true;
-        for (var entry: mayNestedSkeleton.entrySet()) {
-            var offset = entry.getKey();
-            var nestees = entry.getValue();
-            for (var nestee: nestees) {
-                if (this == nestee) {
-                    Logging.warn("Skeleton", "Recursive Nesting is forbidden!");
-                    shouldNest = false;
-                }
-                else if (offset > getSize()) {
-                    Logging.warn("Skeleton", "Offset larger than the size of the nester!");
-                    shouldNest = false;
-                }
-                else {
-                    shouldNest = true;
-                }
-            }
-        }
-        return shouldNest;
     }
 
     public boolean hasPtrReference() {

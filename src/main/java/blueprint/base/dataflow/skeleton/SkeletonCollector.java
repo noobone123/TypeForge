@@ -6,7 +6,6 @@ import blueprint.base.dataflow.SymbolExpr.SymbolExprManager;
 import blueprint.base.dataflow.UnionFind;
 import blueprint.base.dataflow.typeRelation.TypeRelationGraph;
 import blueprint.base.dataflow.typeRelation.TypeRelationPath;
-import blueprint.utils.DataTypeHelper;
 import blueprint.utils.Global;
 import blueprint.utils.Logging;
 import blueprint.utils.TCHelper;
@@ -237,12 +236,26 @@ public class SkeletonCollector {
                 }
             }
         }
+
+        /* Remove Ptr Reference which points to a multiLevelMidPtr */
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.hasPtrReference()) {
+                for (var offset: skt.finalPtrReference.keySet()) {
+                    var ptrEE = skt.finalPtrReference.get(offset);
+                    if (ptrEE.isMultiLevelMidPtr) {
+                        skt.finalPtrReference.remove(offset);
+                        skt.ptrLevel.remove(offset);
+                        Logging.info("SkeletonCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
+                    }
+                }
+            }
+        }
     }
 
     /**
      * In Type Skeleton, some member may have conflict point to reference, we need to handle it.
      */
-    public void handleMemberConflict() {
+    public void handleMemberAndPtrRefConflict() {
         var ptrSize = Global.currentProgram.getDefaultPointerSize();
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
@@ -298,6 +311,7 @@ public class SkeletonCollector {
      * @param exprsAsArgument SymbolExpr that used as arguments in callSite.
      */
     public void handleNesting(Set<SymbolExpr> exprsAsArgument) {
+        /* Add MayNestedSkeleton */
         for (var expr: exprsAsArgument) {
             if (!exprToSkeletonMap.containsKey(expr)) continue;
             /* If expr is a SymbolExpr like `base + offset`, we seem it as a may nested expr */
@@ -308,6 +322,34 @@ public class SkeletonCollector {
                     var baseSkt = exprToSkeletonMap.get(base);
                     baseSkt.mayNestedSkeleton.computeIfAbsent(offset, k -> new HashSet<>())
                             .add(exprToSkeletonMap.get(expr));
+                }
+            }
+        }
+
+        /* Remove skeletons that should not be nested */
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.hasNestedSkeleton()) {
+                var iterator = skt.mayNestedSkeleton.keySet().iterator();
+                while (iterator.hasNext()) {
+                    var offset = iterator.next();
+                    if (offset > skt.getSize()) {
+                        iterator.remove();
+                        Logging.info("SkeletonCollector", "Offset larger than the size of the nester!");
+                    } else {
+                        var removeCandidates = new HashSet<Skeleton>();
+                        for (var s: skt.mayNestedSkeleton.get(offset)) {
+                            if (s.isMultiLevelMidPtr || s.isPointerToPrimitive || skt == s) {
+                                removeCandidates.add(s);
+                            }
+                        }
+                        if (!removeCandidates.isEmpty()) {
+                            skt.mayNestedSkeleton.get(offset).removeAll(removeCandidates);
+                            if (skt.mayNestedSkeleton.get(offset).isEmpty()) {
+                                iterator.remove();
+                            }
+                            Logging.info("SkeletonCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
+                        }
+                    }
                 }
             }
         }
@@ -382,7 +424,6 @@ public class SkeletonCollector {
         }
     }
 
-
     /**
      * This method should be called after all skeletons are successfully handled.
      */
@@ -414,39 +455,6 @@ public class SkeletonCollector {
                 skt.setPrimitiveType(aps.mostAccessedDT);
             }
         }
-
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.hasPtrReference()) {
-                for (var offset: skt.finalPtrReference.keySet()) {
-                    var ptrEE = skt.finalPtrReference.get(offset);
-                    if (ptrEE.isMultiLevelMidPtr) {
-                        skt.finalPtrReference.remove(offset);
-                        skt.ptrLevel.remove(offset);
-                        Logging.info("SkeletonCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
-                    }
-                }
-            }
-
-            if (skt.hasNestedSkeleton()) {
-                var iterator = skt.mayNestedSkeleton.keySet().iterator();
-                while (iterator.hasNext()) {
-                    var offset = iterator.next();
-                    var removeCandidates = new HashSet<Skeleton>();
-                    for (var s: skt.mayNestedSkeleton.get(offset)) {
-                        if (s.isMultiLevelMidPtr || s.isPointerToPrimitive || skt == s) {
-                            removeCandidates.add(s);
-                        }
-                    }
-                    if (!removeCandidates.isEmpty()) {
-                        skt.mayNestedSkeleton.get(offset).removeAll(removeCandidates);
-                        if (skt.mayNestedSkeleton.get(offset).isEmpty()) {
-                            iterator.remove();
-                        }
-                        Logging.info("SkeletonCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
-                    }
-                }
-            }
-        }
     }
 
 
@@ -455,18 +463,6 @@ public class SkeletonCollector {
             for (var offset: skt.finalConstraint.fieldAccess.keySet()) {
                 var APSet = skt.finalConstraint.fieldAccess.get(offset);
                 APSet.postHandle();
-            }
-        }
-    }
-
-    public void handleCodePtr(Set<SymbolExpr> exprsAsCodePtr) {
-        for (var expr: exprsAsCodePtr) {
-            if (expr.isDereference()) {
-                var parsed = ParsedExpr.parseFieldAccessExpr(expr);
-                if (parsed.isEmpty()) { return; }
-                var base = parsed.get().base;
-                var offset = parsed.get().offsetValue;
-                // TODO: add attr to skeleton?
             }
         }
     }
