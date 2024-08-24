@@ -260,7 +260,7 @@ public class SkeletonCollector {
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
             Collections.sort(offsets);
-
+            List<Long> removeCandidate = new ArrayList<>();
             for (int i = 0; i < offsets.size(); i++) {
                 var offset = offsets.get(i);
                 var aps = skt.finalConstraint.fieldAccess.get(offset);
@@ -279,13 +279,17 @@ public class SkeletonCollector {
                 } else {
                     var size = aps.mostAccessedDT.getLength();
                     if (nextOffset != -1 && (nextOffset - offset) < size) {
-                        // TODO: ... remove current field
+                        removeCandidate.add(offset);
                         Logging.info("SkeletonCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
                         Logging.info("SkeletonCollector", String.format("MostAccessedDTSize = %d", size));
                         Logging.info("SkeletonCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
                         skt.dumpInfo();
                     }
                 }
+            }
+
+            for (var offset: removeCandidate) {
+                skt.finalConstraint.fieldAccess.remove(offset);
             }
         }
     }
