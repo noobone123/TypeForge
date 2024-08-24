@@ -25,7 +25,7 @@ public class Skeleton {
     public Map<Long, Skeleton> finalPtrReference = new HashMap<>();
     public Map<Long, Integer> ptrLevel = new HashMap<>();
     public Map<Long, Set<Skeleton>> mayNestedSkeleton = new HashMap<>();
-    public Map<Long, Set<Skeleton>> finalNestedSkeleton = new HashMap<>();
+    public Map<Long, Skeleton> finalNestedSkeleton = new HashMap<>();
 
     public Set<Long> inConsistentOffsets = new HashSet<>();
 
@@ -42,6 +42,7 @@ public class Skeleton {
     public Set<DataType> globalMorphingTypes = new HashSet<>();
     public Map<Range, Set<DataType>> rangeMorphingTypes = new HashMap<>();
     public Map<Range, Set<Integer>> rangeMorphingTypeHash = new HashMap<>();
+    public Set<Range> nestedRange = new HashSet<>();
     public Set<DataType> decompilerInferredTypes;
     public DataType finalType = null;
 
@@ -293,9 +294,53 @@ public class Skeleton {
             Range newRange = new Range(startOffset, endOffset);
             rangeMorphingTypes.put(newRange, DTs);
         }
-
-
     }
+
+    /**
+     * Similar to function `updateRangeMorphingDataType`
+     * @param startOffset nest relationship's start offset
+     * @param endOffset nest relationship's end offset
+     */
+    public void updateNestedRange(Long startOffset, Long endOffset) {
+        Set<Range> rangesToMerge = new HashSet<>();
+        boolean isContained = false;
+
+        for (var existingRange: nestedRange) {
+            /* If new Range is completely contained within an existing range */
+            if (existingRange.getStart() <= startOffset && existingRange.getEnd() >= endOffset) {
+                isContained = true;
+                break;
+            }
+            /* If new Range fully contains an existing range */
+            else if (startOffset < existingRange.getStart() && endOffset > existingRange.getEnd()) {
+                rangesToMerge.add(existingRange);
+            }
+            /* If intersection exists */
+            else if ((startOffset < existingRange.getEnd() && startOffset > existingRange.getStart()) ||
+                    (endOffset > existingRange.getStart() && endOffset < existingRange.getEnd())) {
+                rangesToMerge.add(existingRange);
+            }
+        }
+
+        if (isContained) {
+            return;
+        } else if (!rangesToMerge.isEmpty()) {
+            long newStart = startOffset;
+            long newEnd = endOffset;
+
+            for (var range: rangesToMerge) {
+                newStart = Math.min(newStart, range.getStart());
+                newEnd = Math.max(newEnd, range.getEnd());
+                nestedRange.remove(range);
+            }
+            Range newRange = new Range(newStart, newEnd);
+            nestedRange.add(newRange);
+        } else {
+            Range newRange = new Range(startOffset, endOffset);
+            nestedRange.add(newRange);
+        }
+    }
+
 
     public void updateDecompilerInferredTypes(DataType dt) {
         if (decompilerInferredTypes == null) {

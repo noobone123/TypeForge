@@ -97,9 +97,9 @@ public class InterContext {
         skeletonCollector.handleAPSets();
         skeletonCollector.handleUnreasonableSkeleton();
         skeletonCollector.handlePtrReference();
-        skeletonCollector.handleMemberAndPtrRefConflict();
         skeletonCollector.handleDecompilerInferredTypes();
         skeletonCollector.handleNesting(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT));
+        skeletonCollector.handleMemberConflict();
         // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
 

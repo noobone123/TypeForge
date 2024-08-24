@@ -255,7 +255,7 @@ public class SkeletonCollector {
     /**
      * In Type Skeleton, some member may have conflict point to reference, we need to handle it.
      */
-    public void handleMemberAndPtrRefConflict() {
+    public void handleMemberConflict() {
         var ptrSize = Global.currentProgram.getDefaultPointerSize();
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
@@ -354,18 +354,27 @@ public class SkeletonCollector {
             }
         }
 
-        /* For Debugging */
+        /* Handling mayNested Skeleton and build the finalNestedSkeleton */
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             for (var entry: skt.mayNestedSkeleton.entrySet()) {
                 var offset = entry.getKey();
                 var nestedSkts = entry.getValue();
-                Logging.info("SkeletonCollector", String.format("%s has May Nested Skeletons at 0x%s: %s", skt, Long.toHexString(offset), nestedSkts));
-                Logging.info("SkeletonCollector", skt.exprs.toString());
-                Logging.info("SkeletonCollector", skt.finalConstraint.dumpLayout(0));
+                Skeleton finalNestedCandidate = null;
                 for (var nestedSkt: nestedSkts) {
-                    Logging.info("SkeletonCollector", nestedSkt.exprs.toString());
-                    Logging.info("SkeletonCollector", nestedSkt.finalConstraint.dumpLayout(0));
+                    // TODO: if there is multiple nested, we should choose the type which has most associated variable (most member)
+                    // TODO: Just fill each other (nester and nestee), fill should not out of the largest member offset of the nester
+                    // TODO: if there is multiple nested and one skeleton has decompiler inferred type, choose it.
+                    tryPopulateNester(skt, offset, nestedSkt);
+                    if (finalNestedCandidate == null) {
+                        finalNestedCandidate = nestedSkt;
+                    } else {
+                        if (nestedSkt.variables.size() >= finalNestedCandidate.variables.size()) {
+                            finalNestedCandidate = nestedSkt;
+                        }
+                    }
                 }
+                skt.finalNestedSkeleton.put(offset, finalNestedCandidate);
+                skt.updateNestedRange(offset, offset + (long) finalNestedCandidate.getSize());
             }
         }
     }
@@ -401,24 +410,6 @@ public class SkeletonCollector {
                 for (var offset: skt.ptrReference.keySet()) {
                     var ptrEE = skt.ptrReference.get(offset).iterator().next();
                     skt.finalPtrReference.put(offset, ptrEE);
-                }
-            }
-        }
-    }
-
-    public void handleMultiNestedSkeleton() {
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.hasMultiNestedSkeleton()) {
-                Logging.warn("SkeletonCollector", String.format("Multi Nested Skeleton Detected: \n%s", skt));
-                skt.dumpInfo();
-                for (var offset: skt.mayNestedSkeleton.keySet()) {
-                    var nestedSkts = skt.mayNestedSkeleton.get(offset);
-                    if (nestedSkts.size() > 1) {
-                        Logging.warn("SkeletonCollector", String.format("At 0x%s: %s", Long.toHexString(offset), nestedSkts));
-                        for (var nestedSkt: nestedSkts) {
-                            nestedSkt.dumpInfo();
-                        }
-                    }
                 }
             }
         }
@@ -466,6 +457,33 @@ public class SkeletonCollector {
             }
         }
     }
+
+
+    private void tryPopulateNester(Skeleton nester, Long nestStartOffset, Skeleton nestee) {
+        var maxNestedSize = nestee.getSize();
+        var nestEndOffset = nestStartOffset + maxNestedSize;
+        for (var offset: nester.finalConstraint.fieldAccess.keySet()) {
+            if (offset >= nestStartOffset && offset < nestEndOffset) {
+                var nesteeOff = offset - nestStartOffset;
+                var nesteeAPS = nestee.finalConstraint.fieldAccess.get(nesteeOff);
+                var nesteePtrRef = nestee.finalPtrReference.get(nesteeOff);
+
+                if (nesteeAPS != null) {
+                    var nesterAPS = nester.finalConstraint.fieldAccess.get(offset);
+                    if (nesterAPS != null && nesterAPS.maxDTSize >= nesteeAPS.maxDTSize) {
+                        nesterAPS.update(nesteeAPS);
+                    } else if (nesterAPS == null) {
+                        nester.finalConstraint.fieldAccess.put(offset, nesteeAPS);
+                    }
+                }
+
+                if (nesteePtrRef != null) {
+                    nester.finalPtrReference.putIfAbsent(offset, nesteePtrRef);
+                }
+            }
+        }
+    }
+
 
     private void parseAndSetTypeAlias(SymbolExpr expr, UnionFind<SymbolExpr> aliasMap) {
         // IMPORTANT: this algorithm is not perfect, it didn't run until a fixed point is reached.

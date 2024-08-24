@@ -75,18 +75,11 @@ public class Generator {
         }
     }
 
-    // TODO: Handle Nested Skeleton finally
-    //  1. should nested or not.
-    //  2. If nested, we just mark relationship and copy all member from nestee to nester, without create nested structure, because nested structure may has ????
-    //  4. For other fields that not contained in the nested intervals, we should handle them by `handleInconsistencyField` and `handlePrimitiveFlatten` and `handleComplexFlatten`
     private void handleNestedSkeleton(Skeleton skt) {
         skt.dumpInfo();
         for (var offset: skt.mayNestedSkeleton.keySet()) {
             var nestedSktSet = skt.mayNestedSkeleton.get(offset);
             Logging.info("Generator", String.format("Nested Skeletons Found At 0x%s", Long.toHexString(offset)));
-            // TODO: if there is multiple nested, we should choose the type which has most associated variable (most member)
-            // TODO: Just fill each other (nester and nestee), fill should not out of the largest member offset of the nester
-            // TODO: if there is multiple nested and one skeleton has decompiler inferred type, choose it.
             for (var nestedSkt: nestedSktSet) {
                 nestedSkt.dumpInfo();
             }

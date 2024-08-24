@@ -100,6 +100,11 @@ public class AccessPoints {
             this.apSet.addAll(apSet);
         }
 
+        public void update(APSet other) {
+            this.apSet.addAll(other.apSet);
+            postHandle();
+        }
+
         public boolean addAP(AP ap) {
             return apSet.add(ap);
         }
