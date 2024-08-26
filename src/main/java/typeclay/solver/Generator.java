@@ -73,6 +73,7 @@ public class Generator {
         }
 
         // TODO: add FieldAccess's Expr to locate the function
+        // TODO: add TypeConstraint's fieldExprMap into Skeleton
     }
 
     private void generation() {

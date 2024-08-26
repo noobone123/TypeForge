@@ -265,41 +265,4 @@ public class TypeConstraint {
         });
         return sb.toString();
     }
-
-    public JsonNode getJsonObj(ObjectMapper mapper) {
-        var rootNode = mapper.createObjectNode();
-
-        // dump all totalSize and elementSize
-        var sizeNode = rootNode.putArray("TotalSize");
-        totalSize.forEach(size -> sizeNode.add("0x" + Long.toHexString(size)));
-        var elementSizeNode = rootNode.putArray("ElementSize");
-        elementSize.forEach(size -> elementSizeNode.add("0x" + Long.toHexString(size)));
-        rootNode.put("GlobalAttrs", globalAttrs.toString());
-
-
-        var fieldsNode = rootNode.putObject("fields");
-        List<Long> offsets = collectFieldOffsets();
-        offsets.forEach(offset -> {
-            var offsetNode = fieldsNode.putObject("0x" + Long.toHexString(offset));
-
-            var fieldsArray = offsetNode.putArray("types");
-            fieldAccess.getOrDefault(offset, new AccessPoints.APSet()).getApSet().forEach(ap -> {
-                if (ap.dataType != null) {
-                    fieldsArray.add(ap.dataType.getName());
-                }
-            });
-
-            var tagsArray = offsetNode.putArray("Attrs");
-            fieldAttrs.getOrDefault(offset, new HashSet<>()).forEach(tag -> tagsArray.add(tag.toString()));
-
-            var exprsArray = offsetNode.putArray("Exprs");
-            fieldExprMap.getOrDefault(offset, new HashSet<>()).forEach(expr -> exprsArray.add(expr.toString()));
-        });
-
-        // dump polymorphicTypes
-        var polymorphicTypesNode = rootNode.putArray("PolymorphicTypes");
-        polymorphicTypes.forEach(type -> polymorphicTypesNode.add(type.getName()));
-
-        return rootNode;
-    }
 }
