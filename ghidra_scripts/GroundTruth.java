@@ -21,7 +21,7 @@ public class GroundTruth extends GhidraScript {
     private ObjectMapper objMapper;
     private ObjectNode typeLibJsonRoot;
     private ObjectNode varTypeJsonRoot;
-    private final Set<DataType> usedCompositeDT = new HashSet<>();
+    private final Set<DataType> userDefinedCompositeDT = new HashSet<>();
     private final Map<Function, HighFunction> highFuncMap = new HashMap<>();
 
     @Override
@@ -42,16 +42,15 @@ public class GroundTruth extends GhidraScript {
 
         // Function node and CallGraph statistics
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
-        getVariableType(meaningfulFunctions);
         getTypeLib();
-
+        getVariableType(meaningfulFunctions);
         // check if all composite data type appears in the variable type.
         sanityCheck();
     }
 
-
     private void getTypeLib() {
-        for (var type: usedCompositeDT) {
+        userDefinedCompositeDT.addAll(DataTypeHelper.getAllUserDefinedCompositeTypes());
+        for (var type: userDefinedCompositeDT) {
             if (type instanceof Structure) {
                 var structObj = typeLibJsonRoot.get("struct");
                 processStructure((Structure) type, (ObjectNode) structObj);
@@ -65,7 +64,6 @@ public class GroundTruth extends GhidraScript {
         saveJsonToFile(Global.outputDirectory + "/" + Global.currentProgram.getName() + "_typeLib.json", typeLibJsonRoot);
     }
 
-
     private void getVariableType(Set<Function> meaningfulFunctions) {
         /* Decompile these functions */
         DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
@@ -78,10 +76,10 @@ public class GroundTruth extends GhidraScript {
             for (var func : meaningfulFunctions) {
                 DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
                 if (!decompileRes.decompileCompleted()) {
-                    Logging.error("CallGraph", "Decompile failed for function " + func.getName());
+                    Logging.error("GhidraScript", "Decompile failed for function " + func.getName());
                 } else {
                     highFuncMap.put(func, decompileRes.getHighFunction());
-                    Logging.info("CallGraph", "Decompile function " + func.getName());
+                    Logging.info("GhidraScript", "Decompile function " + func.getName());
                 }
             }
         } finally {
@@ -160,7 +158,7 @@ public class GroundTruth extends GhidraScript {
 
         if (!missingTypes.isEmpty()) {
             for (var missingType : missingTypes) {
-                Logging.error("sanityCheck", "Missing composite type in totalDT: " + missingType);
+                Logging.warn("sanityCheck", "May Library Composite type: " + missingType);
             }
         } else {
             Logging.info("sanityCheck", "All composite types are accounted for.");
@@ -173,7 +171,7 @@ public class GroundTruth extends GhidraScript {
             String typeName = varNode.get("type").asText();
 
             // Check if the type exists in totalDT
-            boolean typeExists = usedCompositeDT.stream().anyMatch(dt -> dt.getName().equals(typeName));
+            boolean typeExists = userDefinedCompositeDT.stream().anyMatch(dt -> dt.getName().equals(typeName));
             if (!typeExists) {
                 missingTypes.add(typeName);
             }
@@ -210,10 +208,8 @@ public class GroundTruth extends GhidraScript {
             }
             if (dataType instanceof Structure) {
                 result.put("desc", "PointerToStruct");
-                usedCompositeDT.add(dataType);
             } else if (dataType instanceof Union) {
                 result.put("desc", "PointerToUnion");
-                usedCompositeDT.add(dataType);
             } else {
                 result.put("desc", "PointerToPrimitive");
             }
@@ -222,11 +218,9 @@ public class GroundTruth extends GhidraScript {
         } else if (dataType instanceof Structure) {
             result.put("desc", "Struct");
             result.put("type", dataType.getName());
-            usedCompositeDT.add(dataType);
         } else if (dataType instanceof Union) {
             result.put("desc", "Union");
             result.put("type", dataType.getName());
-            usedCompositeDT.add(dataType);
         } else {
             result.put("desc", "Primitive");
             result.put("type", dataType.getName());

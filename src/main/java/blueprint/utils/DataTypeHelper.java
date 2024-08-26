@@ -246,11 +246,12 @@ public class DataTypeHelper {
      * Get all built-in common types used in lib functions.
      * @return a set of built-in common types
      */
-    public static Set<DataType> getBuiltInLibTypes() {
+    public static Set<DataType> getLibraryTypes() {
         Set <DataType> result = new HashSet<>();
         var dtm = Global.currentProgram.getDataTypeManager();
         var rootCategory = dtm.getRootCategory();
         for (var category : rootCategory.getCategories()) {
+            Logging.info("DataTypeHelper", "Category: " + category.getName());
             if (!category.getName().equals("DWARF")) {
                 traverseTypeCategory(result, category);
             }
@@ -265,9 +266,9 @@ public class DataTypeHelper {
      * @return a set of User defined types
      */
     public static Set<DataType> getAllUserDefinedTypes() {
-        Set<DataType> builtInLibTypes = getBuiltInLibTypes();
+        Set<DataType> libTypes = getLibraryTypes();
         Set<String> builtInLibTypeNames = new HashSet<>();
-        for (var dt : builtInLibTypes) {
+        for (var dt : libTypes) {
             builtInLibTypeNames.add(dt.getName());
         }
 
@@ -300,7 +301,7 @@ public class DataTypeHelper {
      * so we need to filter them out.
      * @return a set of User defined complex types
      */
-    public static Set<DataType> getAllUserDefinedComplexTypes() {
+    public static Set<DataType> getAllUserDefinedCompositeTypes() {
         Set<DataType> result = new HashSet<>();
         var allUserDefinedTypes = getAllUserDefinedTypes();
         for (var dt : allUserDefinedTypes) {

@@ -48,7 +48,7 @@ public class statistics extends GhidraScript {
         int parameterCount = 0;
         int complexDataTypeAwareParameterCount = 0;
         int functionWithComplexTypeParamCounter = 0;
-        var allUserDefinedComplexTypes = DataTypeHelper.getAllUserDefinedComplexTypes();
+        var allUserDefinedComplexTypes = DataTypeHelper.getAllUserDefinedCompositeTypes();
         Set<DataType> visited = new HashSet<>();
 
         for (var func : cg.functionNodes) {
