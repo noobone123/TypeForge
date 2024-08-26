@@ -7,6 +7,7 @@ import ghidra.program.model.data.*;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
+import ghidra.program.model.pcode.HighLocal;
 import typeclay.utils.*;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;
@@ -115,9 +116,9 @@ public class GroundTruth extends GhidraScript {
                 if (sym.getStorage().isStackStorage()) {
                     localObj.set(String.format("Stack[%d]", sym.getStorage().getStackOffset()), varEntry);
                 } else if (sym.getStorage().isRegisterStorage()) {
-                    localObj.set(String.format("Register[%s]", sym.getStorage().getRegister()), varEntry);
+                    localObj.set(String.format("Register[%s]", sym.getPCAddress()), varEntry);
                 } else if (sym.getStorage().isUniqueStorage()) {
-                    localObj.set(String.format("Unique[%s]", sym.getStorage().getSerializationString()), varEntry);
+                    localObj.set(String.format("Unique[%s]", sym.getPCAddress()), varEntry);
                 }
             }
 
