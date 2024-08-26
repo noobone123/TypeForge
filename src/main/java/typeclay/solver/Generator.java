@@ -46,6 +46,7 @@ public class Generator {
         generation();
         // TODO: IMPORTANT - post handle struct declarations in the skt's morphing types.
         //  Because some different structure Object may have the fully same layout (including member's type name)
+        // TODO: add FieldAccess's Expr to locate the function
     }
 
     private void generation() {
@@ -61,55 +62,48 @@ public class Generator {
                 continue;
             }
 
+            if (!skt.hasNestedSkeleton() && !skt.hasPtrReference() && skt.mayPrimitiveArray()) {
+                Logging.info("Generator", "May Primitive Array Found");
+                handleMayPrimitiveArray(skt);
+                continue;
+            }
             if (!skt.hasNestedSkeleton()) {
                 /* If No Nested Skeleton Found */
                 Logging.info("Generator", "No Nested Skeleton: " + skt);
                 handleNoNestedSkeleton(skt);
-            }
-            else {
+            } else {
+                /* If Nested Skeleton Found */
                 Logging.info("Generator", "Has Nested Skeleton: " + skt);
                 handleNestedSkeleton(skt);
             }
             // TODO: populate empty (not padding) intervals with char[]
         }
+
+        /* Handle Stable Skeletons */
+        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
+                continue;
+            }
+            /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
+            if (skt.noMorphingTypes() && skt.finalType == null) {
+                Logging.info("Generator", "Is Stable Skeleton");
+                handleNormalSkeleton(skt);
+            } else {
+                Logging.info("Generator", "Unstable Skeleton");
+            }
+        }
     }
 
     private void handleNestedSkeleton(Skeleton skt) {
-        skt.dumpInfo();
-        for (var offset: skt.mayNestedSkeleton.keySet()) {
-            var nestedSktSet = skt.mayNestedSkeleton.get(offset);
-            Logging.info("Generator", String.format("Nested Skeletons Found At 0x%s", Long.toHexString(offset)));
-            for (var nestedSkt: nestedSktSet) {
-                nestedSkt.dumpInfo();
-            }
-        }
+        handleInconsistencyField(skt);
+        handleComplexFlatten(skt);
+        handlePrimitiveFlatten(skt);
     }
 
     private void handleNoNestedSkeleton(Skeleton skt) {
-        if (skt.hasPtrReference()) {
-            Logging.info("Generator", "No Nested && Has Ptr Reference");
-            handleInconsistencyField(skt);
-            handleComplexFlatten(skt);
-            handlePrimitiveFlatten(skt);
-        } else {
-            Logging.info("Generator", "No Nested && No Ptr Reference");
-            if (!skt.mayPrimitiveArray()) {
-                Logging.info("Generator", "No Primitive Array Found");
-                handleInconsistencyField(skt);
-                handleComplexFlatten(skt);
-                handlePrimitiveFlatten(skt);
-            }
-            else {
-                Logging.info("Generator", "May Primitive Array Found");
-                handleMayPrimitiveArray(skt);
-            }
-        }
-
-        /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
-        if (skt.noMorphingTypes() && skt.finalType == null) {
-            Logging.info("Generator", "Normal Skeleton");
-            handleNormalSkeleton(skt);
-        }
+        handleInconsistencyField(skt);
+        handleComplexFlatten(skt);
+        handlePrimitiveFlatten(skt);
     }
 
     private void handleNormalSkeleton(Skeleton skt) {
@@ -138,6 +132,11 @@ public class Generator {
         for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
+
+            if (skt.hasNestedSkeleton() && skt.isInNestedRange(offset)) {
+                continue;
+            }
+
             /* If Contains Ptr Reference, this field should be a ptrReference */
             if (!aps.isSameSizeType && !skt.finalPtrReference.containsKey(offset)) {
                 Logging.info("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
@@ -175,7 +174,7 @@ public class Generator {
             var componentMap_1 = getComponentMapByMostAccessed(skt);
             var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
 
-            var componentMap_2 = getComponentMapByRecoverFlatten(skt, curOffset, winDT, flattenCnt);
+            var componentMap_2 = getComponentMapByRecoverFlattenToArray(skt, curOffset, winDT, flattenCnt);
             var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
 
             var startOffset = offsets.get(i).intValue();
@@ -199,7 +198,7 @@ public class Generator {
         for (int i = 0; i < offsets.size() - 1; i++) {
             for (int capacity = 2; ((offsets.size() - i) / capacity) >= 2; capacity ++) {
                 windowProcessor.setWindowCapacity(capacity);
-                var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i, 2);
+                var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i, 3);
                 if (hasFlattenWindow.isEmpty()) { continue; }
 
                 var window = hasFlattenWindow.get();
@@ -208,12 +207,14 @@ public class Generator {
 
                 var componentMap_1 = getComponentMapByMostAccessed(skt);
                 var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
-                var componentMap_2 = getComponentMapByRecoverFlatten(skt, offsets.get(i), winDT, flattenCnt);
+                var componentMap_2 = getComponentMapByRecoverFlattenToArray(skt, offsets.get(i), winDT, flattenCnt);
                 var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+                var componentMap_3 = getComponentMapByRecoverFlattenToNest(skt, offsets.get(i), winDT, flattenCnt);
+                var structDT_3 = DataTypeHelper.createUniqueStructure(skt, componentMap_3);
 
                 var startOffset = offsets.get(i).intValue();
                 var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
-                skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2)));
+                skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2, structDT_3)));
 
                 Logging.info("Generator",
                         String.format("Found a match of complex flatten (%d) from offset 0x%x with %d count", capacity, offsets.get(i), flattenCnt));
@@ -307,15 +308,15 @@ public class Generator {
 
 
     /**
-     * Create a structure by combining flatten fields at the specified offset
+     * Create a structure by combining flatten fields into array at the specified offset
      * @param skt the skeleton
      * @param flattenStartOffset the start offset of the flatten fields
      * @param winDT the flattened element data types
      * @param flattenCnt the count of the flatten fields
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMapByRecoverFlatten(Skeleton skt, long flattenStartOffset,
-                                                                   DataType winDT, int flattenCnt) {
+    private Map<Integer, DataType> getComponentMapByRecoverFlattenToArray(Skeleton skt, long flattenStartOffset,
+                                                                          DataType winDT, int flattenCnt) {
         var componentMap = new TreeMap<Integer, DataType>();
         long flattenEndOffset = flattenStartOffset + (long) winDT.getLength() * flattenCnt;
 
@@ -340,14 +341,51 @@ public class Generator {
         return componentMap;
     }
 
+
+    /**
+     * Create a structure by combining flatten fields into series of nested structures at the specified offset
+     * @param skt the skeleton
+     * @param flattenStartOffset the start offset of the flatten fields
+     * @param winDT the flattened element data types
+     * @param flattenCnt the count of the flatten fields
+     * @return the component map
+     */
+    private Map<Integer, DataType> getComponentMapByRecoverFlattenToNest(Skeleton skt, long flattenStartOffset,
+                                                                        DataType winDT, int flattenCnt) {
+        var componentMap = new TreeMap<Integer, DataType>();
+        long flattenEndOffset = flattenStartOffset + (long) winDT.getLength() * flattenCnt;
+
+        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+            var fieldOffset = entry.getKey();
+            if (fieldOffset < flattenStartOffset || fieldOffset >= flattenEndOffset) {
+                DataType dt;
+                if (skt.finalPtrReference.containsKey(fieldOffset)) {
+                    createPtrRefMember(skt, componentMap, fieldOffset);
+                } else {
+                    dt = entry.getValue().mostAccessedDT;
+                    componentMap.put(fieldOffset.intValue(), dt);
+                }
+            }
+            /* Handle Flatten */
+            else if (fieldOffset == flattenStartOffset) {
+                for (int i = 0; i < flattenCnt; i++) {
+                    componentMap.put(fieldOffset.intValue() + i * winDT.getLength(), winDT);
+                }
+            }
+        }
+
+        return componentMap;
+    }
+
+
     private void createPtrRefMember(Skeleton skt, Map<Integer, DataType> componentMap, Long offset) {
         var ptrEE = skt.finalPtrReference.get(offset);
         DataType dt;
         if (ptrEE.isPointerToPrimitive) {
-            dt = DataTypeHelper.getPointerDT(ptrEE.finalType, skt.ptrLevel.get(offset));
+            dt = DataTypeHelper.getPointerDT(ptrEE.finalType, skt.ptrLevel.get(offset) != null ? skt.ptrLevel.get(offset) : 1);
         } else {
             dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
-                    skt.ptrLevel.get(offset));
+                    skt.ptrLevel.get(offset) != null ? skt.ptrLevel.get(offset) : 1);
         }
         componentMap.put(offset.intValue(), dt);
         return;

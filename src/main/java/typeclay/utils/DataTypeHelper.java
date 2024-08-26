@@ -92,7 +92,6 @@ public class DataTypeHelper {
         }
     }
 
-
     public static Structure createAnonStructureFromWindow(Window window) {
         Logging.info("Generator", "Creating Anon Structure Type with Length: 0x" + Integer.toHexString(window.getAlignedWindowSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_STRUCT_BASENAME);
@@ -107,7 +106,7 @@ public class DataTypeHelper {
             String comment = null;
             if (element instanceof Skeleton skt) {
                 dt = getPointerDT(DataTypeHelper.getDataTypeByName("void"), ptrLevel.get(offset));
-                name = String.format("ref_%s_%s", Long.toHexString(offset), skt.toString());
+                name = String.format("ref_0x%s_%s", Long.toHexString(offset), skt.toString());
             } else {
                 dt = ((AccessPoints.APSet) element).mostAccessedDT;
                 name = String.format("field_0x%s", Long.toHexString(offset));
@@ -170,7 +169,7 @@ public class DataTypeHelper {
                 String name = null;
                 String comment = null;
                 if (skt.finalPtrReference.containsKey((long) offset)) {
-                    name = String.format("ref_%s_%s", Long.toHexString(offset), skt.finalPtrReference.get((long) offset).toString());
+                    name = String.format("ref_0x%s_%s", Long.toHexString(offset), skt.finalPtrReference.get((long) offset).toString());
                 }
                 else if (dt instanceof Array) {
                     name = String.format("array_field_0x%s", Long.toHexString(offset));

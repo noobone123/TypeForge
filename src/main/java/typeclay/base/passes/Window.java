@@ -93,6 +93,42 @@ public class Window {
         return ptrLevel;
     }
 
+    public boolean isContiguous() {
+        if (windowElements.size() == 1) {
+            return true;
+        }
+
+        int previousEndOffset = 0;
+        /* Check if the window is contiguous by element's aligned size */
+        for (var entry: windowElements.entrySet()) {
+            int offset = entry.getKey();
+            Object element = entry.getValue();
+            int fieldSize;
+            int fieldAlignSize = 1;
+
+            if (element instanceof Skeleton) {
+                fieldSize = Global.currentProgram.getDefaultPointerSize();
+                fieldAlignSize = fieldSize;
+            } else {
+                fieldSize = ((AccessPoints.APSet) element).mostAccessedDT.getLength();
+                fieldAlignSize = ((AccessPoints.APSet) element).mostAccessedDT.getAlignment();
+            }
+
+            if (previousEndOffset % fieldAlignSize != 0) {
+                previousEndOffset += fieldAlignSize - (previousEndOffset % fieldAlignSize);
+            }
+
+            if (offset != previousEndOffset) {
+                return false;
+            }
+
+            previousEndOffset += fieldSize;
+        }
+
+        return true;
+    }
+
+
     public boolean isHomogeneous() {
         if (windowElements.size() == 1) {
             return false;

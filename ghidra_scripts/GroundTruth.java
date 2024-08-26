@@ -36,31 +36,37 @@ public class GroundTruth extends GhidraScript {
         objMapper = new ObjectMapper();
         typeLibJsonRoot = objMapper.createObjectNode();
         varTypeJsonRoot = objMapper.createObjectNode();
-        typeLibJsonRoot.set("struct", objMapper.createObjectNode());
-        typeLibJsonRoot.set("union", objMapper.createObjectNode());
+        typeLibJsonRoot.set("UD_Struct", objMapper.createObjectNode());
+        typeLibJsonRoot.set("UD_Union", objMapper.createObjectNode());
+        typeLibJsonRoot.set("Lib_Struct", objMapper.createObjectNode());
+        typeLibJsonRoot.set("Lib_Union", objMapper.createObjectNode());
+        typeLibJsonRoot.set("TypeDef", objMapper.createObjectNode());
 
-        // Function node and CallGraph Statistics
+        DataTypeHelper.buildNameToDTMap();
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
-        getTypeLib();
-        getVariableType(meaningfulFunctions);
-        // check if all composite data type appears in the variable type.
-        sanityCheck();
-    }
 
-    private void getTypeLib() {
-        userDefinedCompositeDT.addAll(DataTypeHelper.getAllUserDefinedCompositeTypes());
-        for (var type: userDefinedCompositeDT) {
-            if (type instanceof Structure) {
-                var structObj = typeLibJsonRoot.get("struct");
-                processStructure((Structure) type, (ObjectNode) structObj);
-            } else if (type instanceof Union) {
-                var unionObj = typeLibJsonRoot.get("union");
-                processUnion((Union) type, (ObjectNode) unionObj);
-            }
-        }
+        getUserDefinedTypeLib();
+        getVariableType(meaningfulFunctions);
+        getLibCompositeType();
 
         /* Save JSON to file: output/[binary_name]_typeLib.json */
         saveJsonToFile(Global.outputDirectory + "/" + Global.currentProgram.getName() + "_typeLib.json", typeLibJsonRoot);
+        /* Save JSON to file: output/[binary_name]_varType.json */
+        saveJsonToFile(Global.outputDirectory + "/" + Global.currentProgram.getName() + "_varType.json", varTypeJsonRoot);
+    }
+
+    private void getUserDefinedTypeLib() {
+        /* all Types in userDefinedCompositeDT are base type (no typedef) */
+        userDefinedCompositeDT.addAll(DataTypeHelper.getAllUserDefinedCompositeTypes());
+        for (var type: userDefinedCompositeDT) {
+            if (type instanceof Structure) {
+                var structObj = typeLibJsonRoot.get("UD_Struct");
+                processStructure((Structure) type, (ObjectNode) structObj);
+            } else if (type instanceof Union) {
+                var unionObj = typeLibJsonRoot.get("UD_Union");
+                processUnion((Union) type, (ObjectNode) unionObj);
+            }
+        }
     }
 
     private void getVariableType(Set<Function> meaningfulFunctions) {
@@ -115,17 +121,15 @@ public class GroundTruth extends GhidraScript {
                 }
             }
 
+            funcObj.put("Name", func.getName());
             funcObj.set("Parameters", paramObj);
             funcObj.set("LocalVariables", localObj);
-            varTypeJsonRoot.set(func.getName(), funcObj);
+            varTypeJsonRoot.set("0x" + func.getEntryPoint().toString(), funcObj);
         }
-
-        /* Save JSON to file: output/[binary_name]_varType.json */
-        saveJsonToFile(Global.outputDirectory + "/" + Global.currentProgram.getName() + "_varType.json", varTypeJsonRoot);
     }
 
-    private void sanityCheck() {
-        Set<String> missingTypes = new HashSet<>();
+    private void getLibCompositeType() {
+        Set<String> libTypes = new HashSet<>();
 
         var functionNames = varTypeJsonRoot.fieldNames();
         while (functionNames.hasNext()) {
@@ -139,7 +143,7 @@ public class GroundTruth extends GhidraScript {
                 while (paramNames.hasNext()) {
                     var paramName = paramNames.next();
                     var param = paramObj.get(paramName);
-                    checkDataType((ObjectNode) param, missingTypes);
+                    checkDataType((ObjectNode) param, libTypes);
                 }
             }
 
@@ -150,29 +154,56 @@ public class GroundTruth extends GhidraScript {
                 while (localNames.hasNext()) {
                     var localName = localNames.next();
                     var localVar = localObj.get(localName);
-                    checkDataType((ObjectNode) localVar, missingTypes);
+                    checkDataType((ObjectNode) localVar, libTypes);
                 }
             }
         }
 
-        if (!missingTypes.isEmpty()) {
-            for (var missingType : missingTypes) {
-                Logging.warn("sanityCheck", "May Library Composite type: " + missingType);
+        if (!libTypes.isEmpty()) {
+            for (var libT : libTypes) {
+                Logging.warn("sanityCheck", "May Library Composite type: " + libT);
             }
         } else {
             Logging.info("sanityCheck", "All composite types are accounted for.");
         }
+
+        for (var libDT: libTypes) {
+            var dt = DataTypeHelper.getDataTypeByName(libDT);
+            if (dt instanceof TypeDef typeDef) {
+                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
+                dt = typeDef.getBaseDataType();
+            }
+            if (dt instanceof Structure) {
+                var structObj = typeLibJsonRoot.get("Lib_Struct");
+                processStructure((Structure) dt, (ObjectNode) structObj);
+            } else if (dt instanceof Union) {
+                var unionObj = typeLibJsonRoot.get("Lib_Union");
+                processUnion((Union) dt, (ObjectNode) unionObj);
+            }
+        }
     }
 
-    private void checkDataType(ObjectNode varNode, Set<String> missingTypes) {
+    private void checkDataType(ObjectNode varNode, Set<String> LibTypes) {
         String desc = varNode.get("desc").asText();
         if (desc.contains("Struct") || desc.contains("Union")) {
             String typeName = varNode.get("type").asText();
+            String baseTypeName = typeName;
+            /* Check if the typeName exists in the Typedef */
+            if (typeLibJsonRoot.get("TypeDef").has(typeName)) {
+                baseTypeName = typeLibJsonRoot.get("TypeDef").get(typeName).asText();
+            }
 
-            // Check if the type exists in totalDT
-            boolean typeExists = userDefinedCompositeDT.stream().anyMatch(dt -> dt.getName().equals(typeName));
+            /* Check if the baseTypeName exists in the userDefinedCompositeDT */
+            boolean typeExists = false;
+            for (var type : userDefinedCompositeDT) {
+                if (type.getName().equals(baseTypeName)) {
+                    typeExists = true;
+                    break;
+                }
+            }
+
             if (!typeExists) {
-                missingTypes.add(typeName);
+                LibTypes.add(typeName);
             }
         }
     }
@@ -190,34 +221,40 @@ public class GroundTruth extends GhidraScript {
     private ObjectNode handleHighSymbol(HighSymbol highSymbol) {
         var result = objMapper.createObjectNode();
         var dataType = highSymbol.getDataType();
+        var baseType = dataType;
         var name = highSymbol.getName();
 
         result.put("Name", name);
         if (dataType instanceof TypeDef typeDef) {
-            dataType = typeDef.getBaseDataType();
+            baseType = typeDef.getBaseDataType();
+            ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), baseType.getName());
         }
+
         if (dataType instanceof Pointer) {
             var ptrLevel = 0;
+            DataType ptrEEBase;
             while (dataType instanceof Pointer ptrDT) {
                 dataType = ptrDT.getDataType();
                 ptrLevel ++;
             }
+            ptrEEBase = dataType;
             if (dataType instanceof TypeDef typeDef) {
-                dataType = typeDef.getBaseDataType();
+                ptrEEBase = typeDef.getBaseDataType();
+                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), ptrEEBase.getName());
             }
-            if (dataType instanceof Structure) {
+            if (ptrEEBase instanceof Structure) {
                 result.put("desc", "PointerToStruct");
-            } else if (dataType instanceof Union) {
+            } else if (ptrEEBase instanceof Union) {
                 result.put("desc", "PointerToUnion");
             } else {
                 result.put("desc", "PointerToPrimitive");
             }
             result.put("type", dataType.getName());
             result.put("ptrLevel", ptrLevel);
-        } else if (dataType instanceof Structure) {
+        } else if (baseType instanceof Structure) {
             result.put("desc", "Struct");
             result.put("type", dataType.getName());
-        } else if (dataType instanceof Union) {
+        } else if (baseType instanceof Union) {
             result.put("desc", "Union");
             result.put("type", dataType.getName());
         } else {
@@ -242,6 +279,7 @@ public class GroundTruth extends GhidraScript {
 
             if (dataType instanceof TypeDef typeDef) {
                 Logging.info("GhidraScript", String.format("TypeDef detected at offset 0x%x", offset));
+                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
                 dataType = typeDef.getBaseDataType();
                 finalComponentMap.put(offset, dataType);
             } else {
@@ -284,7 +322,8 @@ public class GroundTruth extends GhidraScript {
                     ptrLevel ++;
                 }
 
-                if (ptrEE instanceof TypeDef) {
+                if (ptrEE instanceof TypeDef typeDef) {
+                    ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
                     ptrEE = ((TypeDef) ptrEE).getBaseDataType();
                 }
                 if (ptrEE instanceof Structure || ptrEE instanceof Union) {
@@ -319,6 +358,7 @@ public class GroundTruth extends GhidraScript {
 
             if (dataType instanceof TypeDef typeDef) {
                 Logging.info("GhidraScript", "TypeDef detected");
+                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
                 dataType = typeDef.getBaseDataType();
             }
 

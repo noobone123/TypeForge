@@ -1,5 +1,6 @@
 package typeclay.base.passes;
 
+import com.googlecode.d2j.reader.Op;
 import typeclay.base.dataflow.AccessPoints;
 import typeclay.base.dataflow.skeleton.Skeleton;
 import typeclay.utils.Global;
@@ -99,17 +100,15 @@ public class SlidingWindowProcessor {
             if (curSkt.isInconsistentOffset(currentOffset)) {
                 return Optional.empty();
             }
+            if (curSkt.hasNestedSkeleton() && curSkt.isInNestedRange(currentOffset)) {
+                return Optional.empty();
+            }
 
             Object element = null;
             if (curSkt.finalPtrReference.containsKey(currentOffset)) {
                 element = curSkt.finalPtrReference.get(currentOffset);
             } else {
                 element = curSkt.finalConstraint.fieldAccess.get(currentOffset);
-            }
-
-            /* Check if fields in the window are contiguous (consider padding) */
-            if (prevOffset != -1 && !isContiguous(prevOffset, currentOffset, element)) {
-                return Optional.empty();
             }
 
             var relativeOffset = currentOffset.intValue() - startOffset.intValue();
@@ -122,23 +121,10 @@ public class SlidingWindowProcessor {
         }
 
         /* Check if all the elements in the window are of the same type (excluded capacity 1) */
-        if (window.isHomogeneous()) {
+        if (window.isHomogeneous() || (!window.isContiguous())) {
             return Optional.empty();
         }
 
         return Optional.of(window);
-    }
-
-    private boolean isContiguous(long prevOffset, long curOffset, Object element) {
-        long size;
-        if (element instanceof Skeleton) {
-            size = Global.currentProgram.getDefaultPointerSize();
-        } else if (element instanceof AccessPoints.APSet apset) {
-            size = apset.mostAccessedDT.getLength();
-        } else {
-            return false;
-        }
-
-        return prevOffset >= (curOffset - size) && prevOffset < curOffset;
     }
 }
