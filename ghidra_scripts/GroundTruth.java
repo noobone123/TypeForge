@@ -7,11 +7,10 @@ import ghidra.program.model.data.*;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
-import blueprint.utils.*;
+import typeclay.utils.*;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.util.task.TaskMonitor;
-import org.apache.commons.io.FileUtils;
 
 import java.io.IOException;
 import java.util.*;
@@ -40,7 +39,7 @@ public class GroundTruth extends GhidraScript {
         typeLibJsonRoot.set("struct", objMapper.createObjectNode());
         typeLibJsonRoot.set("union", objMapper.createObjectNode());
 
-        // Function node and CallGraph statistics
+        // Function node and CallGraph Statistics
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
         getTypeLib();
         getVariableType(meaningfulFunctions);

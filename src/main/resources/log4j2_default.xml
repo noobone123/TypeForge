@@ -6,7 +6,7 @@
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="BluePrint" level="debug" additivity="false">>
+        <Logger name="TypeClay" level="debug" additivity="false">>
             <AppenderRef ref="Console"/>
         </Logger>
         <Root level="warn">
