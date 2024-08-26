@@ -387,12 +387,6 @@ public class GroundTruth extends GhidraScript {
                 Logging.error("GhidraScript", "Failed to create output directory");
                 System.exit(1);
             }
-        } else {
-            try {
-                FileUtils.cleanDirectory(outputDir);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 }
