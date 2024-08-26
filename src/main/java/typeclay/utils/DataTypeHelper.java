@@ -52,6 +52,17 @@ public class DataTypeHelper {
         return result;
     }
 
+    public static int calculateLayoutHash(Structure structure) {
+        int hash = 1;
+        for (var component: structure.getComponents()) {
+            int fieldHash = component.getDataType().hashCode();
+            fieldHash = 31 * fieldHash + component.getOrdinal();
+            fieldHash = 31 * fieldHash + component.getOffset();
+            fieldHash = 31 * fieldHash + component.getLength();
+            hash = 31 * hash + fieldHash;
+        }
+        return hash;
+    }
 
     /**
      * Check if the data type is a complex type or a pointer pointing to a complex type.

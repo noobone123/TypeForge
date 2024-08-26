@@ -1,5 +1,6 @@
 package typeclay.solver;
 
+import ghidra.program.model.data.Structure;
 import typeclay.base.dataflow.SymbolExpr.SymbolExprManager;
 import typeclay.base.dataflow.skeleton.Skeleton;
 import typeclay.base.dataflow.skeleton.SkeletonCollector;
@@ -42,10 +43,35 @@ public class Generator {
      * Generate all possible structure declarations for each skeleton.
      */
     public void run() {
-        /* In rare cases, */
+        /* Generation Morphing Types */
         generation();
-        // TODO: IMPORTANT - post handle struct declarations in the skt's morphing types.
-        //  Because some different structure Object may have the fully same layout (including member's type name)
+
+        /* Post Processing: remove redundant types */
+        for (var skt: new HashSet<>(skeletonCollector.exprToSkeletonMap.values())) {
+            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
+                continue;
+            }
+            if (skt.noMorphingTypes() && skt.finalType != null) {
+                Logging.info("Generator", "Found Stable Skeleton with Final Type");
+            } else {
+                Logging.info("Generator", "Found Unstable Skeleton with Morphing Types");
+                for (var entry: new HashMap<>(skt.rangeMorphingTypes).entrySet()) {
+                    var range = entry.getKey();
+                    var morphingTypes = entry.getValue();
+                    Map<Integer, DataType> layoutHashToDT = new HashMap<>();
+                    for (var morphingType: morphingTypes) {
+                        var layoutHash = DataTypeHelper.calculateLayoutHash((Structure) morphingType);
+                        if (layoutHashToDT.containsKey(layoutHash)) {
+                            Logging.info("Generator", "Found Same Type Declaration with Different Name");
+                        } else {
+                            layoutHashToDT.put(layoutHash, morphingType);
+                        }
+                    }
+                    skt.rangeMorphingTypes.put(range, new HashSet<>(layoutHashToDT.values()));
+                }
+            }
+        }
+
         // TODO: add FieldAccess's Expr to locate the function
     }
 

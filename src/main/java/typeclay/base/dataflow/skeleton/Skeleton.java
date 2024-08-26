@@ -41,7 +41,6 @@ public class Skeleton {
      */
     public Set<DataType> globalMorphingTypes = new HashSet<>();
     public Map<Range, Set<DataType>> rangeMorphingTypes = new HashMap<>();
-    public Map<Range, Set<Integer>> rangeMorphingTypeHash = new HashMap<>();
     public Set<Range> nestedRange = new HashSet<>();
     public Set<DataType> decompilerInferredTypes;
     public DataType finalType = null;
