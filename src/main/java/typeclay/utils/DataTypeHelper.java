@@ -173,7 +173,10 @@ public class DataTypeHelper {
             var dt = entry.getValue();
 
             if (structDT.getLength() < (offset + dt.getLength())) {
-                Logging.error("Generator", "Offset + DT Length > Structure Length");
+                skt.dumpInfo();
+                Logging.error("Generator", String.format("Offset + DT Length (0x%x + 0x%x) > Structure Length (0x%x)",
+                        offset, dt.getLength(), structDT.getLength()));
+                return;
             }
 
             try {

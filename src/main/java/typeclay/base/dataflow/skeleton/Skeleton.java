@@ -115,10 +115,6 @@ public class Skeleton {
      * @return the size of current skeleton
      */
     public int getSize() {
-        if (size != -1) {
-            return size;
-        }
-
         /* Get the last element of fieldAccess */
         var maxSize = 0L;
         for (var entry: finalConstraint.fieldAccess.entrySet()) {
