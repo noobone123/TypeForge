@@ -133,7 +133,6 @@ public class PCodeVisitor {
      * c = *(a + 4) or *(a + 4) = c, then we can say that `a` is a base address of a structure.
      * @param pcodeOp the PCodeOpAST
      */
-    // TODO: handle sub symbolExpr
     private void handleAddOrSub(PcodeOpAST pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
@@ -204,7 +203,6 @@ public class PCodeVisitor {
      * and input2 is element size.
      * @param pcodeOp The PCodeOp
      */
-    // TODO: if input2 is 0x1, just ignore it.
     private void handlePtrAdd(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
 
@@ -619,8 +617,6 @@ public class PCodeVisitor {
         var externalFuncName = calleeNode.value.getName();
         Logging.info("PCodeVisitor", "External function call: " + externalFuncName);
 
-        // TODO: handle memOp External function's wrapper
-        // TODO: hold expr's constant value intra-procedural, which can be used to add constraints related to the memOp functions
         switch (externalFuncName) {
             case "memset" -> {
                 var lengthArg = pcodeOp.getInput(3);
