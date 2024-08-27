@@ -389,6 +389,18 @@ public class Skeleton {
         return false;
     }
 
+    public Range getRangeNestedIn(long offset) {
+        for (var range: nestedRange) {
+            var start = range.getStart();
+            var end = range.getEnd();
+            if (offset >= start && offset < end) {
+                return range;
+            }
+        }
+        return null;
+    }
+
+
     @Override
     public int hashCode() {
         return uuid.hashCode();

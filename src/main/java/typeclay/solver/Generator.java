@@ -1,6 +1,7 @@
 package typeclay.solver;
 
 import ghidra.program.model.data.Structure;
+import typeclay.base.dataflow.Range;
 import typeclay.base.dataflow.SymbolExpr.SymbolExprManager;
 import typeclay.base.dataflow.skeleton.Skeleton;
 import typeclay.base.dataflow.skeleton.SkeletonCollector;
@@ -166,10 +167,14 @@ public class Generator {
                 var structDT_u = DataTypeHelper.createUniqueStructure(skt, componentMap_u);
                 var DTs = new HashSet<DataType>(Set.of(structDT_u));
 
+                /* create unique structure for each different member size */
+                var typeSizes = new HashSet<Integer>();
                 for (var dt: aps.allDTs) {
+                    if (typeSizes.contains(dt.getLength())) { continue; }
                     var componentMap = getComponentMapBySpecifyDT(skt, offset, dt);
                     var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
                     DTs.add(structDT);
+                    typeSizes.add(dt.getLength());
                 }
 
                 skt.updateRangeMorphingDataType(offset, offset + aps.maxDTSize, DTs);
@@ -213,6 +218,8 @@ public class Generator {
         List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
         SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 2);
 
+        /* same window should not appear twice in the same range */
+        Map<Integer, Set<Range>> winDTHashToRanges = new HashMap<>();
         for (int i = 0; i < offsets.size() - 1; i++) {
             for (int capacity = 2; ((offsets.size() - i) / capacity) >= 2; capacity ++) {
                 windowProcessor.setWindowCapacity(capacity);
@@ -221,7 +228,22 @@ public class Generator {
 
                 var window = hasFlattenWindow.get();
                 DataType winDT = window.getWindowDT();
+                int winDTHash = DataTypeHelper.calculateLayoutHash((Structure) winDT);
                 int flattenCnt = windowProcessor.getFlattenCount();
+                var nestStartOffset = offsets.get(i);
+                var nestEndOffset = nestStartOffset + (long) winDT.getLength() * flattenCnt;
+                var range = new Range(nestStartOffset, nestEndOffset);
+                if (!winDTHashToRanges.containsKey(winDTHash)) {
+                    winDTHashToRanges.put(winDTHash, new HashSet<>(Set.of(range)));
+                } else {
+                    var existRanges = winDTHashToRanges.get(winDTHash);
+                    if (Range.ifRangeInRanges(range, existRanges)) {
+                        Logging.info("Generator", "Found a duplicate window in the same range");
+                        continue;
+                    } else {
+                        existRanges.add(range);
+                    }
+                }
 
                 var componentMap_1 = getComponentMapByMostAccessed(skt);
                 var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
@@ -230,9 +252,8 @@ public class Generator {
                 var componentMap_3 = getComponentMapByRecoverFlattenToNest(skt, offsets.get(i), winDT, flattenCnt);
                 var structDT_3 = DataTypeHelper.createUniqueStructure(skt, componentMap_3);
 
-                var startOffset = offsets.get(i).intValue();
-                var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
-                skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2, structDT_3)));
+
+                skt.updateRangeMorphingDataType(nestStartOffset, nestEndOffset, new HashSet<>(Set.of(structDT_1, structDT_2, structDT_3)));
 
                 Logging.info("Generator",
                         String.format("Found a match of complex flatten (%d) from offset 0x%x with %d count", capacity, offsets.get(i), flattenCnt));

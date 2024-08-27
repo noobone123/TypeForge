@@ -1,6 +1,7 @@
 package typeclay.base.dataflow;
 
 import java.util.Objects;
+import java.util.Set;
 
 public class Range {
     private final long start;
@@ -17,6 +18,15 @@ public class Range {
 
     public long getEnd() {
         return end;
+    }
+
+    static public boolean ifRangeInRanges(Range range, Set<Range> existRanges) {
+        for (var r: existRanges) {
+            if (range.getStart() >= r.getStart() && range.getEnd() <= r.getEnd()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

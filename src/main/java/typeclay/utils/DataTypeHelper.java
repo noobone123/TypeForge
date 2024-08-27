@@ -55,7 +55,7 @@ public class DataTypeHelper {
     public static int calculateLayoutHash(Structure structure) {
         int hash = 1;
         for (var component: structure.getComponents()) {
-            int fieldHash = component.getDataType().hashCode();
+            int fieldHash = component.getDataType().getLength();
             fieldHash = 31 * fieldHash + component.getOrdinal();
             fieldHash = 31 * fieldHash + component.getOffset();
             fieldHash = 31 * fieldHash + component.getLength();
