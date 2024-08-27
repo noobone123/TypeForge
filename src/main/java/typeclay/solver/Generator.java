@@ -71,9 +71,6 @@ public class Generator {
                 }
             }
         }
-
-        // TODO: add FieldAccess's Expr to locate the function
-        // TODO: add TypeConstraint's fieldExprMap into Skeleton
     }
 
     private void generation() {
@@ -143,16 +140,11 @@ public class Generator {
         skt.mayPrimitiveArray = true;
         var aps = skt.finalConstraint.fieldAccess.get(0L);
         var elementType = aps.mostAccessedDT;
-        var ptrToArrayType = generatePointerToPrimitive(elementType);
-        if (ptrToArrayType == null) {
-            Logging.error("Generator", "Failed to generate array type");
-            return;
-        }
 
         var componentMap = getComponentMapByMostAccessed(skt);
         var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
-        skt.updateGlobalMorphingDataType(ptrToArrayType);
-        skt.updateGlobalMorphingDataType(DataTypeHelper.getPointerOfStruct(structDT));
+        skt.updateGlobalMorphingDataType(elementType);
+        skt.updateGlobalMorphingDataType(structDT);
     }
 
     private void handleInconsistencyField(Skeleton skt) {
@@ -212,7 +204,6 @@ public class Generator {
                     String.format("Found a match of primitive flatten from offset 0x%x with %d count", curOffset, flattenCnt));
             Logging.info("Generator",
                     String.format("Window's DataType:\n%s", winDT));
-            skt.dumpInfo();
 
             windowProcessor.resetFlattenCnt();
         }
@@ -247,18 +238,7 @@ public class Generator {
                         String.format("Found a match of complex flatten (%d) from offset 0x%x with %d count", capacity, offsets.get(i), flattenCnt));
                 Logging.info("Generator",
                         String.format("Window's DataType:\n%s", winDT));
-                skt.dumpInfo();
             }
-        }
-    }
-
-    private DataType generatePointerToPrimitive(DataType primitiveType) {
-        var pointerType = DataTypeHelper.getPointerDT(primitiveType, 1);
-        if (pointerType == null) {
-            Logging.error("Generator", "Failed to generate pointer to primitive type");
-            return null;
-        } else {
-            return pointerType;
         }
     }
 
@@ -419,11 +399,12 @@ public class Generator {
     }
 
     public void explore() {
-        // TODO: update explore function
         var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
+                continue;
+            }
             Logging.info("Generator", String.format("Exploring Skeleton: %s", skt));
-            if (skt.isMultiLevelMidPtr()) continue;
             skt.dumpInfo();
         }
 

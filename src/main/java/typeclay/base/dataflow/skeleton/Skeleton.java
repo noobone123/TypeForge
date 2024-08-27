@@ -443,6 +443,8 @@ public class Skeleton {
                 layout.append("\t");
                 layout.append(String.format("Nested -> %s", finalNestedSkeleton.get(offset)));
             }
+            layout.append("\t");
+            layout.append(finalConstraint.fieldExprMap.get(offset));
             layout.append("\n");
         }
         Logging.info("Skeleton", "Layout:\n" + layout);
@@ -450,18 +452,15 @@ public class Skeleton {
 
         Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
         Logging.info("Skeleton", "Final Type:\n" + finalType);
-        Logging.info("Skeleton", "Global Morphing Types:\n" + globalMorphingTypes);
+        Logging.info("Skeleton", String.format("Global Morphing Types (%d):\n%s", globalMorphingTypes.size(), globalMorphingTypes));
         Logging.info("Skeleton", "Range Morphing Types:");
         for (var entry: rangeMorphingTypes.entrySet()) {
             var range = entry.getKey();
             var types = entry.getValue();
-            Logging.info("Skeleton", String.format("Morphing Range (0x%x ~ 0x%x)", range.getStart(), range.getEnd()));
+            Logging.info("Skeleton", String.format("Morphing Range (0x%x ~ 0x%x) (%d)",
+                    range.getStart(), range.getEnd(), types.size()));
             for (var dt: types) {
-                if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
-                    Logging.info("Skeleton", ((Pointer)dt).getDataType().toString());
-                } else {
-                    Logging.info("Skeleton", "Primitive: " + dt);
-                }
+                Logging.info("Skeleton", "\t" + dt);
             }
         }
         Logging.info("Skeleton", " ------------------------------- End --------------------------------- ");
