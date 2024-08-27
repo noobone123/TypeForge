@@ -102,7 +102,7 @@ public class GroundTruth extends GhidraScript {
             for (var i = 0; i < localSymTable.getNumParams(); i++) {
                 var param = localSymTable.getParamSymbol(i);
                 var paramEntry = handleHighSymbol(param);
-                paramObj.set("Param_" + i, paramEntry);
+                paramObj.set("param_" + (i+1), paramEntry);
             }
 
             /* Process Local Variables */

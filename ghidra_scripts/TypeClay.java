@@ -4,6 +4,7 @@ import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
 import typeclay.base.graph.CallGraph;
+import typeclay.solver.ReTyper;
 import typeclay.utils.*;
 import org.apache.commons.io.FileUtils;
 
@@ -30,7 +31,7 @@ public class TypeClay extends GhidraScript {
         }
         Logging.info("GhidraScript","Number of main functions: " + functions.size());
 
-        long startTime = System.currentTimeMillis();
+        long startAnalysisTime = System.currentTimeMillis();
 
         // Function node and CallGraph Statistics
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
@@ -42,9 +43,16 @@ public class TypeClay extends GhidraScript {
         InterSolver interSolver = new InterSolver(cg);
         interSolver.run();
 
-        long endTime = System.currentTimeMillis();
+        long endAnalysisTime = System.currentTimeMillis();
 
-        Logging.info("GhidraScript","Analysis time: " + (endTime - startTime) / 1000.00 + "s");
+        ReTyper reTyper = new ReTyper(interSolver.generator.getFinalSkeletons());
+        reTyper.run();
+
+        long endReTypeTime = System.currentTimeMillis();
+
+        Logging.info("GhidraScript","Analysis time: " + (endAnalysisTime - startAnalysisTime) / 1000.00 + "s");
+        Logging.info("GhidraScript","ReType time: " + (endReTypeTime - endAnalysisTime) / 1000.00 + "s");
+        Logging.info("GhidraScript","Total time: " + (endReTypeTime - startAnalysisTime) / 1000.00 + "s");
     }
 
     protected boolean prepareAnalysis() {

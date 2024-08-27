@@ -64,6 +64,10 @@ public class Skeleton {
         this.exprs.addAll(exprs);
     }
 
+    public Skeleton(DataType dt) {
+        this.finalType = dt;
+    }
+
     public void addExpr(SymbolExpr expr) {
         exprs.add(expr);
     }

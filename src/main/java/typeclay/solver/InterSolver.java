@@ -12,6 +12,7 @@ import java.util.*;
 
 public class InterSolver {
     InterContext ctx;
+    public Generator generator;
 
     /** The call graph of the whole program */
     CallGraph cg;
@@ -56,15 +57,15 @@ public class InterSolver {
 
         ctx.collectSkeletons();
 
-        try {
+        /* try {
             var outputFile = new File(Global.outputDirectory);
             ctx.typeRelationManager.dumpTRG(outputFile);
             ctx.typeRelationManager.dumpEntryToExitPaths(outputFile);
         } catch (Exception e) {
             Logging.error("InterSolver", "Failed to dump TRGInfo: " + e.getMessage());
-        }
+        } */
 
-        var generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
+        generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
         generator.run();
         generator.explore();
     }

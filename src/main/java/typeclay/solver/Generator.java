@@ -33,11 +33,17 @@ import java.util.*;
 public class Generator {
     public SkeletonCollector skeletonCollector;
     public SymbolExprManager exprManager;
+    private final Set<Skeleton> finalSkeletons;
 
 
     public Generator(SkeletonCollector skeletonCollector, SymbolExprManager exprManager) {
         this.skeletonCollector = skeletonCollector;
         this.exprManager = exprManager;
+        this.finalSkeletons = new HashSet<>();
+    }
+
+    public Set<Skeleton> getFinalSkeletons() {
+        return finalSkeletons;
     }
 
     /**
@@ -48,7 +54,7 @@ public class Generator {
         generation();
 
         /* Post Processing: remove redundant types */
-        for (var skt: new HashSet<>(skeletonCollector.exprToSkeletonMap.values())) {
+        for (var skt: finalSkeletons) {
             if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
             }
@@ -104,6 +110,8 @@ public class Generator {
             // TODO: populate empty (not padding) intervals with char[]
         }
 
+        // TODO: handle Evil Sources, Evil Nodes and Evil Paths
+
         /* Handle Stable Skeletons */
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
@@ -111,10 +119,10 @@ public class Generator {
             }
             /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
             if (skt.noMorphingTypes() && skt.finalType == null) {
-                Logging.info("Generator", "Is Stable Skeleton");
                 handleNormalSkeleton(skt);
+                finalSkeletons.add(skt);
             } else {
-                Logging.info("Generator", "Unstable Skeleton");
+                finalSkeletons.add(skt);
             }
         }
     }
