@@ -108,6 +108,7 @@ public class Generator {
                 handleNestedSkeleton(skt);
             }
             // TODO: populate empty (not padding) intervals with char[]
+            // TODO: utilize ghidra structure's auto undefined filler.
         }
 
         // TODO: handle Evil Sources, Evil Nodes and Evil Paths
@@ -332,7 +333,7 @@ public class Generator {
 
             var aps = entry.getValue();
             if (fieldOffset == offset) {
-                var unionDT = DataTypeHelper.createUniqueUnion(skt, offset);
+                var unionDT = DataTypeHelper.createAnonUnion(skt, offset);
                 componentMap.put(fieldOffset, unionDT);
             } else {
                 var mostAccessedDT = aps.mostAccessedDT;

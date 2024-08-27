@@ -140,7 +140,7 @@ public class DataTypeHelper {
     }
 
 
-    public static Union createUniqueUnion(Skeleton skt, Long offset) {
+    public static Union createAnonUnion(Skeleton skt, Long offset) {
         Logging.info("Generator", "Creating Union Type");
         String unionName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_UNION_BASENAME);
         var unionDT = new UnionDataType(new CategoryPath(DEFAULT_CATEGORY), unionName, dtM);
