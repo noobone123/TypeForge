@@ -3,10 +3,18 @@ package typeclay.solver;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import ghidra.app.decompiler.DecompInterface;
+import ghidra.app.decompiler.DecompileResults;
 import ghidra.program.model.data.*;
+import ghidra.program.model.listing.Function;
+import ghidra.program.model.pcode.HighFunctionDBUtil;
+import ghidra.program.model.pcode.HighSymbol;
+import ghidra.program.model.symbol.SourceType;
+import ghidra.util.task.TaskMonitor;
 import org.python.antlr.ast.Str;
 import typeclay.base.dataflow.skeleton.Skeleton;
 import typeclay.utils.DataTypeHelper;
+import typeclay.utils.DecompilerHelper;
 import typeclay.utils.Global;
 import typeclay.utils.Logging;
 
@@ -268,13 +276,42 @@ public class ReTyper {
         }
     }
 
-
     private void saveJsonToFile(String fileName, ObjectNode jsonRoot) {
         try {
             mapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), jsonRoot);
             Logging.info("GhidraScript", "Successfully wrote JSON to file: " + fileName);
         } catch (IOException e) {
             Logging.error("GhidraScript", "Error writing JSON to file: " + e.getMessage());
+        }
+    }
+
+
+    private String retypeAndGetUpdatedDecompiledCode(Function func, HighSymbol highSym, DataType dt) {
+        try {
+            HighFunctionDBUtil.updateDBVariable(highSym, null, dt, SourceType.USER_DEFINED);
+            Logging.info("DecompilerHelper", "Set data type for variable: " + highSym.getName() + " to " + dt.getName());
+        } catch (Exception e) {
+            Logging.error("DecompilerHelper", "Failed to set data type for local variable: " + highSym.getName());
+            return null;
+        }
+
+        DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
+        try {
+            if (!ifc.openProgram(Global.currentProgram)) {
+                Logging.error("FunctionNode", "Failed to use the decompiler");
+                return null;
+            }
+
+            DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
+            if (!decompileRes.decompileCompleted()) {
+                Logging.error("FunctionNode", "Function decompile failed" + func.getName());
+                return null;
+            } else {
+                Logging.info("FunctionNode", "Success to get updated function pseudocode" + func.getName());
+                return decompileRes.getDecompiledFunction().getC();
+            }
+        } finally {
+            ifc.dispose();
         }
     }
 }
