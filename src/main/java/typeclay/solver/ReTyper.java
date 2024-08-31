@@ -5,13 +5,15 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
+import ghidra.app.decompiler.parallel.ParallelDecompiler;
 import ghidra.program.model.data.*;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.HighFunctionDBUtil;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
-import org.python.antlr.ast.Str;
+import typeclay.base.dataflow.SymbolExpr.ParsedExpr;
+import typeclay.base.dataflow.SymbolExpr.SymbolExpr;
 import typeclay.base.dataflow.skeleton.Skeleton;
 import typeclay.utils.DataTypeHelper;
 import typeclay.utils.DecompilerHelper;
@@ -21,6 +23,7 @@ import typeclay.utils.Logging;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -45,7 +48,11 @@ public class ReTyper {
                 filePath = Global.outputDirectory + "/" + skt.toString() + "_final.json";
                 jsonRoot = generateJson(skt, false);
             } else {
-                filePath = Global.outputDirectory + "/" + skt.toString() + "_morph.json";
+                if (!skt.globalMorphingTypes.isEmpty()) {
+                    filePath = Global.outputDirectory + "/" + skt.toString() + "_global_morph.json";
+                } else {
+                    filePath = Global.outputDirectory + "/" + skt.toString() + "_range_morph.json";
+                }
                 jsonRoot = generateJson(skt, true);
             }
             if (jsonRoot != null) {
@@ -85,22 +92,23 @@ public class ReTyper {
             if (!skt.globalMorphingTypes.isEmpty()) {
                 Logging.info("GhidraScript", "Writing global morphing types for skeleton: " + skt.toString());
                 var globalMorph = mapper.createObjectNode();
+                var retypeCandidates = getRetypedCandidates(skt, 0, 0);
                 for (var dt: skt.globalMorphingTypes) {
                     ObjectNode typeRoot;
                     if (dt instanceof Structure) {
                         typeRoot = processStructure(skt, (Structure) dt);
-                        // typeRoot.set("decompiledCode", writeRetypedCode(skt, dt));
+                        typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
                     } else if (dt instanceof Union) {
                         typeRoot = mapper.createObjectNode();
                         typeRoot.put("desc", "Union");
                         typeRoot.set("layout", writeUnionLayout((Union) dt));
+                        typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
                         typeRoot.set("decompilerInferred", writeDecompilerInferred(skt));
-                        // typeRoot.set("decompiledCode", writeRetypedCode(skt, dt));
                     } else {
                         typeRoot = mapper.createObjectNode();
                         typeRoot.put("desc", "Primitive");
                         typeRoot.put("type", dt.getName());
-                        // typeRoot.put("decompiledCode", writeRetypedCode(skt, dt));
+                        typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
                     }
                     globalMorph.set(dt.getName(), typeRoot);
                 }
@@ -116,6 +124,7 @@ public class ReTyper {
                     var morphingDTs = entry.getValue();
                     var start = range.getStart();
                     var end = range.getEnd();
+                    var retypeCandidates = getRetypedCandidates(skt, start, end);
                     rangeObj.put("startOffset", String.format("0x%x", start));
                     rangeObj.put("endOffset", String.format("0x%x", end));
                     var typesObj = mapper.createObjectNode();
@@ -123,6 +132,7 @@ public class ReTyper {
                         var typeRoot = mapper.createObjectNode();
                         if (dt instanceof Structure) {
                             typeRoot = processStructure(skt, (Structure) dt);
+                            typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
                         }
                         typesObj.set(dt.getName(), typeRoot);
                     }
@@ -257,6 +267,84 @@ public class ReTyper {
         fieldObj.put("type", fieldType.getName());
         fieldObj.put("name", fieldName);
         return fieldObj;
+    }
+
+
+    /**
+     * We utilize start/end to limit which variables to retype,
+     * because member's out of the range is certain and no need to retype and assess.
+     */
+    private Set<SymbolExpr> getRetypedCandidates(Skeleton skt, long start, long end) {
+        boolean globalMorph;
+        globalMorph = (start == 0 && end == 0);
+        var retypedVars = new HashSet<SymbolExpr>();
+
+        if (!globalMorph) {
+            var memberAccessExprs = new HashSet<SymbolExpr>();
+            for (var offset: skt.finalConstraint.fieldExprMap.keySet()) {
+                if (offset >= start && offset < end) {
+                    memberAccessExprs.addAll(skt.finalConstraint.fieldExprMap.get(offset));
+                }
+            }
+            Logging.info("GhidraScript",
+                    String.format("Member access in %s of range [0x%x, 0x%x]:\n%s", skt, start, end, memberAccessExprs));
+
+            for (var expr: memberAccessExprs) {
+                var parsedExpr = ParsedExpr.parseFieldAccessExpr(expr);
+                if (parsedExpr.isEmpty()) continue;
+                var base = parsedExpr.get().base;
+                if (base.isRootSymExpr()) {
+                    Logging.info("GhidraScript", String.format("Get Retype candidate: %s", base));
+                    retypedVars.add(base);
+                }
+            }
+        } else {
+            for (var expr: skt.exprs) {
+                if (expr.isRootSymExpr()) {
+                    Logging.info("GhidraScript", String.format("Get Retype candidate: %s", expr));
+                    retypedVars.add(expr);
+                }
+            }
+        }
+
+        return retypedVars;
+    }
+
+
+    private ObjectNode writeRetypedCode(Set<SymbolExpr> retypedVars, DataType dt) {
+        var result = mapper.createObjectNode();
+        var decompiledFuncCandidates = new HashSet<Function>();
+
+        for (var var: retypedVars) {
+            var highSym = var.rootSym;
+            var updatedDT = DataTypeHelper.getPointerDT(dt, 1);
+            Logging.info("GhidraScript", String.format("Retyping variable %s to data type %s", var, updatedDT.getName()));
+            DecompilerHelper.setLocalVariableDataType(highSym, updatedDT);
+            decompiledFuncCandidates.add(highSym.getHighFunction().getFunction());
+        }
+
+        var callback = new DecompilerHelper.ClayCallBack(Global.currentProgram, (ifc) -> {
+            ifc.toggleCCode(true);
+            ifc.toggleSyntaxTree(true);
+        });
+
+        try {
+            ParallelDecompiler.decompileFunctions(callback, decompiledFuncCandidates, TaskMonitor.DUMMY);
+        } catch (Exception e) {
+            Logging.error("GhidraScript", "Could not decompile functions with ParallelDecompiler");
+        } finally {
+            callback.dispose();
+        }
+
+        Logging.info("GhidraScript", "Decompiled functions: " + callback.addrToCodeMap.size());
+        for (var entry: callback.addrToCodeMap.entrySet()) {
+            var addr = entry.getKey();
+            var code = entry.getValue();
+            var addrString = String.format("0x%x", addr.getOffset());
+            result.put(addrString, code);
+        }
+
+        return result;
     }
 
 

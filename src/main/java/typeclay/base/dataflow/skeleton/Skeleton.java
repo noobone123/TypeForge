@@ -101,10 +101,6 @@ public class Skeleton {
     }
 
     public Set<SymbolExpr> getVariables() {
-        if (!variables.isEmpty()) {
-            return variables;
-        }
-
         for (var expr: exprs) {
             if (expr.isVariable()) {
                 variables.add(expr);
