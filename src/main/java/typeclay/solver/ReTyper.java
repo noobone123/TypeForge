@@ -32,12 +32,12 @@ import java.util.Set;
 */
 public class ReTyper {
 
-    Set<Skeleton> sktSet = new HashSet<>();
+    Set<Skeleton> sktSet;
     Map<SymbolExpr, Skeleton> exprSkeletonMap;
     ObjectMapper mapper = new ObjectMapper();
 
     public ReTyper(Set<Skeleton> skeletons, Map<SymbolExpr, Skeleton> exprToSkeletonMap) {
-        sktSet.addAll(skeletons);
+        sktSet = skeletons;
         exprSkeletonMap = exprToSkeletonMap;
     }
 

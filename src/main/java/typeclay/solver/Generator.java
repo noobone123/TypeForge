@@ -44,7 +44,14 @@ public class Generator {
     }
 
     public Set<Skeleton> getFinalSkeletons() {
-        return finalSkeletons;
+        var sktSet = new HashSet<Skeleton>();
+        for (var skt: new HashSet<>(skeletonCollector.exprToSkeletonMap.values())) {
+            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
+                continue;
+            }
+            sktSet.add(skt);
+        }
+        return sktSet;
     }
 
     public Map<SymbolExpr, Skeleton> getExprToSkeletonMap() {
