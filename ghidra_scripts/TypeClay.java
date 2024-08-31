@@ -45,7 +45,8 @@ public class TypeClay extends GhidraScript {
 
         long endAnalysisTime = System.currentTimeMillis();
 
-        ReTyper reTyper = new ReTyper(interSolver.generator.getFinalSkeletons());
+        ReTyper reTyper = new ReTyper(interSolver.generator.getFinalSkeletons(),
+                                interSolver.generator.getExprToSkeletonMap());
         reTyper.run();
 
         long endReTypeTime = System.currentTimeMillis();

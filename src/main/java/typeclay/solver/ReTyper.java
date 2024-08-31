@@ -24,6 +24,7 @@ import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -32,27 +33,36 @@ import java.util.Set;
 public class ReTyper {
 
     Set<Skeleton> sktSet = new HashSet<>();
+    Map<SymbolExpr, Skeleton> exprSkeletonMap;
     ObjectMapper mapper = new ObjectMapper();
 
-    public ReTyper(Set<Skeleton> skeletons) {
+    public ReTyper(Set<Skeleton> skeletons, Map<SymbolExpr, Skeleton> exprToSkeletonMap) {
         sktSet.addAll(skeletons);
+        exprSkeletonMap = exprToSkeletonMap;
     }
 
+    /**
+     * Do Retyping and dump results.
+     */
     public void run() {
         prepare();
 
+        /* Dump variable retype info */
+        dumpVariableTypeInfo(Global.outputDirectory + "/" + "varType.json");
+
+        /* Dump skeletons info */
         for (var skt: sktSet) {
             String filePath;
             ObjectNode jsonRoot;
             if (skt.decompilerInferredTypesHasComposite()) {
                 Logging.info("ReTyper", "Skeleton has composite types inferred by decompiler");
                 filePath = Global.outputDirectory + "/" + skt.toString() + "_final_DI.json";
-                jsonRoot = generateJson(skt, false, true);
+                jsonRoot = generateSkeletonJson(skt, false, true);
             }
             else if (skt.noMorphingTypes() && skt.finalType != null) {
                 Logging.info("ReTyper", "Skeleton has final type information");
                 filePath = Global.outputDirectory + "/" + skt.toString() + "_final.json";
-                jsonRoot = generateJson(skt, false, false);
+                jsonRoot = generateSkeletonJson(skt, false, false);
             } else {
                 Logging.info("ReTyper", "Skeleton has morphing types");
                 if (!skt.globalMorphingTypes.isEmpty()) {
@@ -60,7 +70,7 @@ public class ReTyper {
                 } else {
                     filePath = Global.outputDirectory + "/" + skt.toString() + "_range_morph.json";
                 }
-                jsonRoot = generateJson(skt, true, false);
+                jsonRoot = generateSkeletonJson(skt, true, false);
             }
             if (jsonRoot != null) {
                 saveJsonToFile(filePath, jsonRoot);
@@ -69,7 +79,7 @@ public class ReTyper {
     }
 
 
-    public ObjectNode generateJson(Skeleton skt, boolean isMorph, boolean isDecompilerInferred) {
+    public ObjectNode generateSkeletonJson(Skeleton skt, boolean isMorph, boolean isDecompilerInferred) {
         var jsonRoot = mapper.createObjectNode();
         /* If the skeleton is not morphing, write the final type information */
         if (isDecompilerInferred) {
@@ -158,6 +168,88 @@ public class ReTyper {
 
         return jsonRoot;
     }
+
+
+    private void dumpVariableTypeInfo(String filePath) {
+        var jsonRoot = mapper.createObjectNode();
+        for (var expr: exprSkeletonMap.keySet()) {
+            if (!expr.isVariable()) continue;
+            if (expr.isGlobal()) continue;
+
+            HighSymbol highSym;
+            boolean isRef = false;
+            if (expr.isRootSymExpr()) {
+                highSym = expr.getRootHighSymbol();
+            } else {
+                highSym = expr.getNestedExpr().getRootHighSymbol();
+                isRef = true;
+            }
+
+            var func = highSym.getHighFunction().getFunction();
+            var funcAddr = func.getEntryPoint();
+            var funcAddrStr = String.format("0x%x", funcAddr.getOffset());
+            var isParam = highSym.isParameter();
+
+            ObjectNode funcInfo;
+            if (jsonRoot.has(funcAddrStr)) {
+                funcInfo = (ObjectNode) jsonRoot.get(funcAddrStr);
+            } else {
+                funcInfo = mapper.createObjectNode();
+                funcInfo.put("Name", func.getName());
+                funcInfo.set("Parameters", mapper.createObjectNode());
+                funcInfo.set("LocalVariables", mapper.createObjectNode());
+                jsonRoot.set(funcAddrStr, funcInfo);
+            }
+
+            ObjectNode targetInfo;
+            if (isParam) {
+                targetInfo = (ObjectNode) funcInfo.get("Parameters");
+            } else {
+                targetInfo = (ObjectNode) funcInfo.get("LocalVariables");
+            }
+
+            if (isParam) {
+                ObjectNode varInfo = mapper.createObjectNode();
+                var paramName = highSym.getName();
+                varInfo.put("Name", paramName);
+                varInfo.put("desc", "pointer");
+                var skeletonName = exprSkeletonMap.get(expr).toString();
+                varInfo.put("Skeleton", skeletonName);
+                targetInfo.set(paramName, varInfo);
+            } else {
+                String locationStr;
+                if (highSym.getStorage().isStackStorage()) {
+                    locationStr = String.format("Stack[%d]", highSym.getStorage().getStackOffset());
+                } else if (highSym.getStorage().isRegisterStorage()) {
+                    locationStr = String.format("Register[%s]", highSym.getPCAddress());
+                } else if (highSym.getStorage().isUniqueStorage()) {
+                    locationStr = String.format("Unique[%s]", highSym.getPCAddress());
+                } else {
+                    continue;
+                }
+                var varInfo = mapper.createObjectNode();
+                varInfo.put("Name", highSym.getName());
+                String desc;
+                if (isRef) {
+                    desc = "nested";
+                } else {
+                    desc = "pointer";
+                }
+                varInfo.put("desc", desc);
+                var skeletonName = exprSkeletonMap.get(expr).toString();
+                varInfo.put("Skeleton", skeletonName);
+
+                targetInfo.set(locationStr, varInfo);
+            }
+        }
+
+        try {
+            saveJsonToFile(filePath, jsonRoot);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
     private ObjectNode processStructure(Skeleton skt, Structure struct) {
         var typeRoot = mapper.createObjectNode();

@@ -2,6 +2,7 @@ package typeclay.solver;
 
 import ghidra.program.model.data.Structure;
 import typeclay.base.dataflow.Range;
+import typeclay.base.dataflow.SymbolExpr.SymbolExpr;
 import typeclay.base.dataflow.SymbolExpr.SymbolExprManager;
 import typeclay.base.dataflow.skeleton.Skeleton;
 import typeclay.base.dataflow.skeleton.SkeletonCollector;
@@ -44,6 +45,18 @@ public class Generator {
 
     public Set<Skeleton> getFinalSkeletons() {
         return finalSkeletons;
+    }
+
+    public Map<SymbolExpr, Skeleton> getExprToSkeletonMap() {
+        var exprToSkeletonMap = new HashMap<SymbolExpr, Skeleton>();
+        for (var entry: skeletonCollector.exprToSkeletonMap.entrySet()) {
+            var expr = entry.getKey();
+            var skt = entry.getValue();
+            if (finalSkeletons.contains(skt)) {
+                exprToSkeletonMap.put(expr, skt);
+            }
+        }
+        return exprToSkeletonMap;
     }
 
     /**
