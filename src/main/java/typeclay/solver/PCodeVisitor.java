@@ -640,7 +640,7 @@ public class PCodeVisitor {
                 var srcExprs = intraCtx.getDataFlowFacts(srcVn);
                 for (var dstExpr : dstExprs) {
                     for (var srcExpr : srcExprs) {
-                        interCtx.addTypeRelation(srcExpr, dstExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                        // interCtx.addTypeRelation(srcExpr, dstExpr, TypeRelationGraph.EdgeType.DATAFLOW);
                         Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
                             symExprManager.getOrCreateConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
@@ -651,7 +651,6 @@ public class PCodeVisitor {
                         }
                     }
                 }
-
             }
         }
     }

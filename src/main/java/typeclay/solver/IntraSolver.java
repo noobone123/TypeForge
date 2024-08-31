@@ -16,7 +16,6 @@ public class IntraSolver {
     private final PCodeVisitor visitor;
 
     public IntraSolver(FunctionNode funcNode, InterContext interCtx, IntraContext intraCtx) {
-        // TODO: fix ghidra's function prototype error.
         this.funcNode = funcNode;
         this.interCtx = interCtx;
         this.intraCtx = intraCtx;

@@ -21,12 +21,20 @@ public class InterSolver {
         this.cg = cg;
         this.ctx = new InterContext(this.cg);
 
-        var addr = FunctionHelper.getAddress(Global.startAddress);
-        var startFunc = cg.getNodebyAddr(addr);
-        buildWorkList(startFunc);
+        /* Start the analysis from a specific function */
+        if (Global.startAddress != 0) {
+            Logging.info("InterSolver", "Start the analysis from a specific function");
+            buildWorkList(cg.getNodebyAddr(FunctionHelper.getAddress(Global.startAddress)));
+            return;
+        } else {
+            buildWorkList(null);
+        }
         // TODO: compare the results with and without setTypeAgnosticFunctions
         // TODO: if needed, complete the heuristic to determine the type-agnostic functions
         setTypeAgnosticFunctions();
+
+        Logging.info("InterSolver", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
+        Logging.info("InterSolver", String.format("Function count in workList: %d", ctx.workList.size()));
     }
 
 
@@ -40,8 +48,6 @@ public class InterSolver {
                 continue;
             }
 
-            // If the function is not a leaf function, we should
-            // collect data-flow facts from its callee functions.
             if (!funcNode.isLeaf) {
                 Logging.info("InterSolver", "Non-leaf function: " + funcNode.value.getName());
             } else {
@@ -102,7 +108,18 @@ public class InterSolver {
         List<FunctionNode> sortedFuncs = new ArrayList<>();
         Set<FunctionNode> visited = new HashSet<>();
 
-        postOrderTraversal(root, visited, sortedFuncs);
+        if (root != null) {
+            postOrderTraversal(root, visited, sortedFuncs);
+        } else {
+            for (var r: cg.roots) {
+                var rootNode = cg.getNodebyAddr(r.getEntryPoint());
+                if (rootNode == null) {
+                    Logging.warn("InterSolver", "Root function not found: " + r.getName());
+                    continue;
+                }
+                postOrderTraversal(rootNode, visited, sortedFuncs);
+            }
+        }
 
         for (FunctionNode funcNode : sortedFuncs) {
             if (!FunctionHelper.isMeaningfulFunction(funcNode.value)) {

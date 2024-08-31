@@ -185,7 +185,11 @@ public class IntraContext {
     }
 
     public KSet<SymbolExpr> getDataFlowFacts(Varnode vn) {
-        return dataFlowFacts.get(vn);
+        if (dataFlowFacts.get(vn) == null) {
+            return new KSet<>(dataFlowFactKSize);
+        } else {
+            return dataFlowFacts.get(vn);
+        }
     }
 
     public boolean isTracedVn(Varnode vn) {

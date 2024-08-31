@@ -62,6 +62,7 @@ public class CallGraph extends GraphBase<Function> {
                 "Found %d possible root nodes of the call graph",
                 possibleRoots.size()
         ));
+        Logging.info("CallGraph", possibleRoots.toString());
 
         return new CallGraph(possibleRoots);
     }
@@ -149,11 +150,13 @@ public class CallGraph extends GraphBase<Function> {
         while (!workList.isEmpty()) {
             Function cur = workList.remove();
             var funcInsts = currentProgram.getListing().getInstructions(cur.getBody(), true);
+            boolean hasIndirectCallee = false;
             for (var inst : funcInsts) {
                 if (inst.getMnemonicString().equals("CALL")) {
                     // If Call instruction is indirect that can't be resolved, flows will be empty
                     var instFlows = inst.getFlows();
                     if (instFlows.length >= 1) {
+                        hasIndirectCallee = true;
                         for (var flow : instFlows) {
                             Function calledFunc = currentProgram.getFunctionManager().getFunctionAt(flow);
                             if (calledFunc != null) {
@@ -172,6 +175,11 @@ public class CallGraph extends GraphBase<Function> {
                         Logging.debug("CallGraph", "Indirect call at " + inst.getAddress());
                     }
                 }
+            }
+
+            if (!hasIndirectCallee) {
+                getNode(cur);
+                visited.add(cur);
             }
         }
         rootToNodes.put(root, visited);
