@@ -44,16 +44,23 @@ public class ReTyper {
         for (var skt: sktSet) {
             String filePath;
             ObjectNode jsonRoot;
-            if (skt.noMorphingTypes() && skt.finalType != null) {
+            if (skt.decompilerInferredTypesHasComposite()) {
+                Logging.info("ReTyper", "Skeleton has composite types inferred by decompiler");
+                filePath = Global.outputDirectory + "/" + skt.toString() + "_final_DI.json";
+                jsonRoot = generateJson(skt, false, true);
+            }
+            else if (skt.noMorphingTypes() && skt.finalType != null) {
+                Logging.info("ReTyper", "Skeleton has final type information");
                 filePath = Global.outputDirectory + "/" + skt.toString() + "_final.json";
-                jsonRoot = generateJson(skt, false);
+                jsonRoot = generateJson(skt, false, false);
             } else {
+                Logging.info("ReTyper", "Skeleton has morphing types");
                 if (!skt.globalMorphingTypes.isEmpty()) {
                     filePath = Global.outputDirectory + "/" + skt.toString() + "_global_morph.json";
                 } else {
                     filePath = Global.outputDirectory + "/" + skt.toString() + "_range_morph.json";
                 }
-                jsonRoot = generateJson(skt, true);
+                jsonRoot = generateJson(skt, true, false);
             }
             if (jsonRoot != null) {
                 saveJsonToFile(filePath, jsonRoot);
@@ -62,9 +69,15 @@ public class ReTyper {
     }
 
 
-    public ObjectNode generateJson(Skeleton skt, boolean isMorph) {
+    public ObjectNode generateJson(Skeleton skt, boolean isMorph, boolean isDecompilerInferred) {
         var jsonRoot = mapper.createObjectNode();
         /* If the skeleton is not morphing, write the final type information */
+        if (isDecompilerInferred) {
+            jsonRoot.put("desc", "DecompilerInferred");
+            jsonRoot.set("decompilerInferred", writeDecompilerInferred(skt));
+            return jsonRoot;
+        }
+
         if (!isMorph) {
             Logging.info("GhidraScript", "Writing final type information for skeleton: " + skt.toString());
             var finalDT = skt.finalType;
@@ -317,6 +330,10 @@ public class ReTyper {
 
         for (var var: retypedVars) {
             var highSym = var.rootSym;
+            if (highSym.getDataType().getLength() < Global.currentProgram.getDefaultPointerSize()) {
+                Logging.info("GhidraScript", String.format("Variable %s is not a pointer skipped", var));
+                continue;
+            }
             var updatedDT = DataTypeHelper.getPointerDT(dt, 1);
             Logging.info("GhidraScript", String.format("Retyping variable %s to data type %s", var, updatedDT.getName()));
             DecompilerHelper.setLocalVariableDataType(highSym, updatedDT);
