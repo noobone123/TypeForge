@@ -5,8 +5,8 @@
 败者组内两两pk，输了会淘汰，赢了会保留在败者组；
 胜者组内只剩一个选手，它就会暂时不比，直到等待到败者组唯一的胜者；
 轮空等同于获胜
-
 '''
+
 import re
 import random
 from typing import List, Dict
@@ -20,6 +20,8 @@ import time
 import signal
 import argparse
 import json
+import yaml
+import pathlib
 
 class TimeoutException(Exception):
     pass
@@ -218,11 +220,12 @@ def double_elimination_(players: List[Player]) -> Player:
         return final_winner
     return winners[0] if winners else losers[0]
 
+
 def double_elimination(typename_dict:dict)-> str:
     start_time = time.time()
-    signal.signal(signal.SIGALRM, timeout_handler)
-    #可以调整，最长的处理时间
-    signal.alarm(args.pertime)  
+    # signal.signal(signal.SIGALRM, timeout_handler)
+    # 可以调整，最长的处理时间
+    # signal.alarm(args.pertime)  
     
     try:
         offsets = []
@@ -246,45 +249,71 @@ def double_elimination(typename_dict:dict)-> str:
     except Exception as e:
         result = None
         status = f"Failed: {str(e)}"
-    finally:
-        signal.alarm(0)
+    # finally:
+    #     signal.alarm(0)
     end_time = time.time()
     elapsed_time = end_time - start_time
     return (result, status, elapsed_time)
 
 
+def read_config():
+    with open('config.yaml', 'r') as f:
+        config = yaml.safe_load(f)
+    return config
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="double-elimination for best-fit")
-    parser.add_argument('--langfreq', type=int, default=10, help='max_concurrency of a batch langchain request')
-    parser.add_argument('--procnum', type=int, default=5, help='the num of proccess')
-    parser.add_argument('--pertime', type=int, default=60, help='the max excution time of one process')
-    parser.add_argument('--canpath',type=str, help='the path of candidates skeletions')
-    parser.add_argument('--verbose',type=str, choices=['true', 'false'], default = 'false', help='print output')
+    parser = argparse.ArgumentParser(description = "double-elimination for best-fit")
+    parser.add_argument('--langfreq', type = int, default = 5, help = 'max_concurrency of a batch langchain request')
+    parser.add_argument('--procnum', type = int, default = 10, help = 'the num of proccess')
+    parser.add_argument('--pertime', type = int, default = 60, help = 'the max excution time of one process')
+    parser.add_argument('--respath', type = str, help = 'the directory of the inferred result', required = True)
+    parser.add_argument('--verbose', type = str, choices = ['true', 'false'], default = 'false', help = 'print output')
     args = parser.parse_args()
-    #感觉这个更适合放到函数外面
+    config = read_config()
+
     start_time = time.time()
-    model = ChatOpenAI(model="gpt-4o-mini",api_key = '',base_url = '')
+
+    model = ChatOpenAI(model = config['llm']['model'], api_key = config['llm']['apikey'], base_url = config['llm']['url'])
     prompt = ChatPromptTemplate(
-    [("system", "You are an expert in code comprehension."),
-    ("human",
-    '''
-    Assess which snippet has better readability in terms of syntax and semantics. For every snippet pair,
-    if the first snippet is more readable, please indicate this with 0; if the second is more readable, please indicate this with 1, if both snippets are identical except for the variable names, please indicate this with 2.
-    Pair snippets : [<{snippet1} & {snippet2}> , <{snippet3} & {snippet4}> , <{snippet5} & {snippet6}> , <{snippet7} & {snippet8}> , <{snippet9} & {snippet10}>]
-    You must only return a list as ['0/1/2','0/1/2','0/1/2', '0/1/2','0/1/2'] 
-    ''')])
+        [
+            ("system", config["prompt"]["system"]),
+            ("human",
+            '''
+            Assess which snippet has better readability in terms of syntax and semantics. For every snippet pair,
+            if the first snippet is more readable, please indicate this with 0; if the second is more readable, please indicate this with 1, if both snippets are identical except for the variable names and type names, please indicate this with 2.
+            Pair snippets : [<{snippet1} & {snippet2}> , <{snippet3} & {snippet4}> , <{snippet5} & {snippet6}> , <{snippet7} & {snippet8}> , <{snippet9} & {snippet10}>]
+            You must only return a list as ['0/1/2','0/1/2','0/1/2', '0/1/2','0/1/2'] 
+            ''')
+        ]
+    )
     chain_gpt4omini = prompt | model
 
+    res_dir = args.respath
     res_list = []
     params = []
-    filenames = os.listdir(args.canpath)
+    filenames = os.listdir(res_dir)
+    total_num = 0
+    empty_global_num = 0
+    empty_range_num = 0
+
     for filename in filenames:
-        with open(args.canpath + '/' + filename, 'r',encoding = 'utf-8',) as f:
-            tmp_dict = json.load(f)
+        if 'final' in filename:
+            continue
+        
+        total_num += 1
+        filepath = pathlib.Path(res_dir + '/' + filename)
+        with open(filepath, 'r', encoding = 'utf-8') as f:
+            inferrd_json = json.load(f)
+            
         if 'global' in filename:
             tmp_para_dict = {}
-            for k,v in tmp_dict['globalMorph'].items():
-                tmp_para_dict[k] = v["decompiledCode"]
+            for type_name, type_info in inferrd_json['globalMorph'].items():
+                if (type_info["decompiledCode"] == {}):
+                    empty_global_num += 1
+                    continue
+                tmp_para_dict[type_name] = type_info["decompiledCode"]
+
             params.append(tmp_para_dict)
             tmp_skeletion_dict = {}
             tmp_skeletion_desc_dict = {}
@@ -292,38 +321,47 @@ if __name__ == "__main__":
             split_list = filename.split('_')
             tmp_skeletion_dict[split_list[0]+ '_' + split_list[1]] = tmp_skeletion_desc_dict
             res_list.append(tmp_skeletion_dict)
+
         elif 'range' in filename:
-            for part in tmp_dict['rangeMorph']:
+            for range in inferrd_json['rangeMorph']:
                 tmp_para_dict = {}
-                for k,v in part['types'].items():
-                    tmp_para_dict[k] = v["decompiledCode"]
+                for type_name, type_info in range['types'].items():
+                    tmp_para_dict[type_name] = type_info["decompiledCode"]
+                    if (type_info["decompiledCode"] == {}):
+                        empty_range_num += 1
+                        continue
+
                 params.append(tmp_para_dict) 
                 tmp_skeletion_dict = {}
                 tmp_skeletion_desc_dict = {}
                 tmp_skeletion_desc_dict['desc'] = 'range'
-                tmp_skeletion_desc_dict['offset'] = part['startOffset'] + '&' + part['endOffset']
+                tmp_skeletion_desc_dict['offset'] = range['startOffset'] + '&' + range['endOffset']
                 split_list = filename.split('_')
                 tmp_skeletion_dict[split_list[0]+ '_' + split_list[1]] = tmp_skeletion_desc_dict
-                res_list.append(tmp_skeletion_dict)        
+                res_list.append(tmp_skeletion_dict)   
+
+    if args.verbose == 'true':
+        print(f"Total number need to be inferred: {total_num}")
+        print(f"Empty global number: {empty_global_num}")
+        print(f"Empty range number: {empty_range_num}")     
 
     if args.verbose == 'true':
         print('===================')
-        print('input orders:')
-        print(res_list)
-    # if args.verbose == 'true':
-    #     print('===================')
-    #     print('input params:')
-    #     print(params)
-    #这里似乎异步的必要性不高，暂时就同步方法了
-    with multiprocessing.Pool(processes=args.procnum) as pool:
+        print(f"candidate count: {len(params)}")
+        print(f"result list count: {len(res_list)}")
+
+    # Main: Start the double elimination
+    with multiprocessing.Pool(processes = args.procnum) as pool:
         results = pool.map(double_elimination, params)
 
     if args.verbose == 'true':
         print('===================')
         print('Result:')
         print(results)
+        
     final_res = []
     assert len(res_list) == len(results)
+
     for i in range(len(res_list)):
         res_tmp_dict = {}
         res_tmp_dict_result = {}
@@ -342,6 +380,7 @@ if __name__ == "__main__":
                 res_tmp_dict_result['result'] = tmp_tmp_dict
                 res_tmp_dict[k] = res_tmp_dict_result
                 final_res.append(res_tmp_dict)
+
     if args.verbose == 'true':
         print('===================')
         print("final json:")
