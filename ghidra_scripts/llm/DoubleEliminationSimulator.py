@@ -223,9 +223,8 @@ def double_elimination_(players: List[Player]) -> Player:
 
 def double_elimination(typename_dict:dict)-> str:
     start_time = time.time()
-    # signal.signal(signal.SIGALRM, timeout_handler)
-    # 可以调整，最长的处理时间
-    # signal.alarm(args.pertime)  
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(args.pertime)  
     
     try:
         offsets = []
@@ -249,8 +248,8 @@ def double_elimination(typename_dict:dict)-> str:
     except Exception as e:
         result = None
         status = f"Failed: {str(e)}"
-    # finally:
-    #     signal.alarm(0)
+    finally:
+        signal.alarm(0)
     end_time = time.time()
     elapsed_time = end_time - start_time
     return (result, status, elapsed_time)
@@ -264,13 +263,18 @@ def read_config():
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = "double-elimination for best-fit")
-    parser.add_argument('--langfreq', type = int, default = 5, help = 'max_concurrency of a batch langchain request')
-    parser.add_argument('--procnum', type = int, default = 10, help = 'the num of proccess')
+    parser.add_argument('--langfreq', type = int, default = 64, help = 'max_concurrency of a batch langchain request')
+    parser.add_argument('--procnum', type = int, default = 32, help = 'the num of proccess')
     parser.add_argument('--pertime', type = int, default = 60, help = 'the max excution time of one process')
     parser.add_argument('--respath', type = str, help = 'the directory of the inferred result', required = True)
     parser.add_argument('--verbose', type = str, choices = ['true', 'false'], default = 'false', help = 'print output')
     args = parser.parse_args()
     config = read_config()
+
+    # TODO:
+    #  1. 修复 Retyper 中产生空的 decompileCode 的问题
+    #  2. 修复 output.json 中的格式问题
+    #  3. 使用 gpt4o 进行评估作为对比
 
     start_time = time.time()
 
@@ -305,14 +309,19 @@ if __name__ == "__main__":
         filepath = pathlib.Path(res_dir + '/' + filename)
         with open(filepath, 'r', encoding = 'utf-8') as f:
             inferrd_json = json.load(f)
-            
+        
         if 'global' in filename:
             tmp_para_dict = {}
+            skip_global = False
             for type_name, type_info in inferrd_json['globalMorph'].items():
                 if (type_info["decompiledCode"] == {}):
                     empty_global_num += 1
-                    continue
+                    skip_global = True
+                    break
                 tmp_para_dict[type_name] = type_info["decompiledCode"]
+
+            if skip_global:
+                continue
 
             params.append(tmp_para_dict)
             tmp_skeletion_dict = {}
@@ -323,22 +332,31 @@ if __name__ == "__main__":
             res_list.append(tmp_skeletion_dict)
 
         elif 'range' in filename:
-            for range in inferrd_json['rangeMorph']:
+            skip_range = False
+            for interval in inferrd_json['rangeMorph']:
                 tmp_para_dict = {}
-                for type_name, type_info in range['types'].items():
-                    tmp_para_dict[type_name] = type_info["decompiledCode"]
+                for type_name, type_info in interval['types'].items():
                     if (type_info["decompiledCode"] == {}):
                         empty_range_num += 1
-                        continue
+                        skip_range = True
+                        break
+                    tmp_para_dict[type_name] = type_info["decompiledCode"]
+                
+                if skip_range:
+                    continue
 
                 params.append(tmp_para_dict) 
                 tmp_skeletion_dict = {}
                 tmp_skeletion_desc_dict = {}
                 tmp_skeletion_desc_dict['desc'] = 'range'
-                tmp_skeletion_desc_dict['offset'] = range['startOffset'] + '&' + range['endOffset']
+                tmp_skeletion_desc_dict['offset'] = interval['startOffset'] + '&' + interval['endOffset']
                 split_list = filename.split('_')
                 tmp_skeletion_dict[split_list[0]+ '_' + split_list[1]] = tmp_skeletion_desc_dict
                 res_list.append(tmp_skeletion_dict)   
+            
+            if skip_range:
+                continue
+
 
     if args.verbose == 'true':
         print(f"Total number need to be inferred: {total_num}")
