@@ -141,6 +141,9 @@ public class InterSolver {
         if (visited.contains(node)) {
             return;
         }
+        if (node == null) {
+            return;
+        }
         visited.add(node);
 
         for (FunctionNode callee : cg.getCallees(node)) {
