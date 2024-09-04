@@ -115,7 +115,7 @@ public class DecompilerHelper {
             else if (paramName != null) {
                 return String.format("%s:%s", funcEA, paramName);
             } else {
-                var loc = String.format("RegUniq[0x%x]", PCAddr.getOffset());
+                var loc = String.format("RegUniq[0x%x]", PCAddr != null ? PCAddr.getOffset() : 0);
                 return String.format("%s:%s", funcEA, loc);
             }
         }
