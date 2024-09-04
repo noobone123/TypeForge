@@ -83,6 +83,7 @@ public class InterSolver {
         for (var funcNode: ctx.workList) {
             for (var callsite: funcNode.callSites.values()) {
                 var callee = cg.getNodebyAddr(callsite.calleeAddr);
+                if (callee == null) continue;
                 argNum.computeIfAbsent(callee, k -> new HashSet<>()).add(callsite.arguments.size());
                 argNum.get(callee).add(callee.parameters.size());
             }
@@ -196,7 +197,9 @@ public class InterSolver {
 
         for (var addr: addrList) {
             var funcNode = cg.getNodebyAddr(FunctionHelper.getAddress(addr));
-            funcNode.setTypeAgnostic();
+            if (funcNode != null) {
+                funcNode.setTypeAgnostic();
+            }
         }
     }
 }

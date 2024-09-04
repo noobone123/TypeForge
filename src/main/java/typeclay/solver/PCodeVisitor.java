@@ -530,6 +530,10 @@ public class PCodeVisitor {
         var calleeNode = interCtx.callGraph.getNodebyAddr(calleeAddr);
         var callSite = funcNode.callSites.get(pcodeOp);
 
+        if (calleeNode == null) {
+            Logging.warn("PCodeVisitor", "Callee function is not found: " + calleeAddr);
+            return;
+        }
         if (!interCtx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
             Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
             return;
@@ -546,6 +550,9 @@ public class PCodeVisitor {
         if (calleeNode.isVarArg) {
             Logging.info("PCodeVisitor", String.format("Callee function %s is vararg", calleeNode.value.getName()));
             totalArgNum = calleeNode.fixedParamNum;
+            if (totalArgNum > calleeNode.parameters.size()) {
+                totalArgNum = calleeNode.parameters.size();
+            }
         } else {
             totalArgNum = calleeNode.parameters.size();
         }

@@ -651,6 +651,9 @@ public class TypeRelationPathManager<T> {
 
     public Set<TypeRelationPath<T>> getAllValidPathsFromSource(T source) {
         var result = new HashSet<TypeRelationPath<T>>();
+        if (!srcToPathsMap.containsKey(source)) {
+            return result;
+        }
         for (var path: srcToPathsMap.get(source)) {
             if (path.evil || path.noComposite) {
                 continue;

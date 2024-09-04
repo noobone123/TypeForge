@@ -153,6 +153,9 @@ public class FunctionNode extends NodeBase<Function> {
         parameters.clear();
         var funcProto = hFunc.getFunctionPrototype();
         var totalParamsNum = isVarArg ? fixedParamNum : funcProto.getNumParams();
+        if (totalParamsNum > funcProto.getNumParams()) {
+            totalParamsNum = funcProto.getNumParams();
+        }
         for (int i = 0; i < totalParamsNum; i++) {
             var param = funcProto.getParam(i);
             parameters.add(param);

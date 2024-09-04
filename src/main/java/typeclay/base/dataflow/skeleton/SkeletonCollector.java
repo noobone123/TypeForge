@@ -488,6 +488,7 @@ public class SkeletonCollector {
         var parsedExpr = parsed.get();
         var base = parsedExpr.base;
         var offset = parsedExpr.offsetValue;
+        if (base == null) { return; }
 
         if (parsedExpr.base.isDereference()) {
             parseAndSetTypeAlias(parsedExpr.base, aliasMap);
