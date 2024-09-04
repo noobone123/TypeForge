@@ -245,7 +245,7 @@ public class SymbolExprManager {
      */
     public SymbolExpr multiply(SymbolExpr a, SymbolExpr b) {
         if (!a.isConst() && !b.isConst) {
-            Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.warn("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
             return null;
         }
 
@@ -268,7 +268,7 @@ public class SymbolExprManager {
             builder.index(a).scale(b);
         }
         else {
-            Logging.error("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.warn("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
             return null;
         }
 

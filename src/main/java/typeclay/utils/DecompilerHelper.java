@@ -9,13 +9,16 @@ import ghidra.app.decompiler.parallel.DecompilerCallback;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.MetaDataType;
+import ghidra.program.model.lang.Register;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.listing.Program;
+import ghidra.program.model.listing.VariableStorage;
 import ghidra.program.model.pcode.*;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 
 import java.util.HashMap;
+import java.util.Iterator;
 
 public class DecompilerHelper {
 
@@ -76,13 +79,111 @@ public class DecompilerHelper {
     }
 
 
+    public static class Location {
+        private Function func;
+        private int stackOffset;
+        private String paramName;
+        private Address PCAddr;
+
+        public Location(Function func, int stackOffset) {
+            this.func = func;
+            this.stackOffset = stackOffset;
+        }
+
+        public Location(Function func, String paramName) {
+            this.func = func;
+            this.paramName = paramName;
+        }
+
+        public Location(Function func, Address pcAddr) {
+            this.func = func;
+            this.PCAddr = pcAddr;
+        }
+
+        @Override
+        public String toString() {
+            var funcEA = String.format("0x%x", func.getEntryPoint().getOffset());
+            if (stackOffset != 0) {
+                String loc;
+                if (stackOffset > 0) {
+                    loc = String.format("stack[0x%x]", stackOffset);
+                } else {
+                    loc = String.format("stack[-0x%x]", -stackOffset);
+                }
+                return String.format("%s:%s", funcEA, loc);
+            }
+            else if (paramName != null) {
+                return String.format("%s:%s", funcEA, paramName);
+            } else {
+                var loc = String.format("RegUniq[0x%x]", PCAddr.getOffset());
+                return String.format("%s:%s", funcEA, loc);
+            }
+        }
+
+        @Override
+        public int hashCode() {
+            if (stackOffset != 0) {
+                return func.hashCode() + stackOffset;
+            } else if (paramName != null) {
+                return func.hashCode() + paramName.hashCode();
+            } else {
+                return func.hashCode() + PCAddr.hashCode();
+            }
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == this) {
+                return true;
+            }
+            if (!(obj instanceof Location loc)) {
+                return false;
+            }
+            if (stackOffset != 0) {
+                return func.equals(loc.func) && stackOffset == loc.stackOffset;
+            } else if (paramName != null) {
+                return func.equals(loc.func) && paramName.equals(loc.paramName);
+            } else {
+                return func.equals(loc.func) && PCAddr.equals(loc.PCAddr);
+            }
+        }
+
+        public static Location getLocation(HighSymbol sym) {
+            if (sym.isParameter()) {
+                return new Location(sym.getHighFunction().getFunction(), sym.getName());
+            } else {
+                var storage = sym.getStorage();
+                if (storage.isStackStorage()) {
+                    return new Location(sym.getHighFunction().getFunction(), storage.getStackOffset());
+                } else if (storage.isRegisterStorage()) {
+                    return new Location(sym.getHighFunction().getFunction(), sym.getPCAddress());
+                } else if (storage.isUniqueStorage()) {
+                    return new Location(sym.getHighFunction().getFunction(), sym.getPCAddress());
+                }
+                return null;
+            }
+        }
+
+        public static Location getLocation(HighSymbol sym, String paramName) {
+            if (sym.isParameter()) {
+                return new Location(sym.getHighFunction().getFunction(), paramName);
+            } else {
+                Logging.error("Location", "Failed to get location for symbol: " + sym.getName());
+                return null;
+            }
+        }
+    }
+
+
     public static class ClayCallBack extends DecompilerCallback<Void> {
 
         public HashMap<Address, String> addrToCodeMap;
+        public HashMap<Location, HighSymbol> locationToSymMap;
 
         public ClayCallBack(Program program, DecompileConfigurer configurer) {
             super(program, configurer);
-            addrToCodeMap = new HashMap<Address, String>();
+            addrToCodeMap = new HashMap<>();
+            locationToSymMap = new HashMap<>();
         }
 
         @Override
@@ -90,11 +191,23 @@ public class DecompilerHelper {
             if (decompileResults != null && decompileResults.decompileCompleted()) {
                 String code = decompileResults.getDecompiledFunction().getC();
                 addrToCodeMap.put(decompileResults.getFunction().getEntryPoint(), code);
+
+                var localSymMap = decompileResults.getHighFunction().getLocalSymbolMap();
+                for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
+                    var sym = it.next();
+                    var location = Location.getLocation(sym);
+                    locationToSymMap.put(location, sym);
+                }
             }
             return null;
         }
-    }
 
+        public HighSymbol getHighSymbolByOldHighSym(HighSymbol old) {
+            if (old == null) { return null; }
+            var location = Location.getLocation(old);
+            return locationToSymMap.get(location);
+        }
+    }
 
 
     /**

@@ -51,9 +51,9 @@ public class TypeClay extends GhidraScript {
 
         long endReTypeTime = System.currentTimeMillis();
 
-        Logging.info("GhidraScript","Analysis time: " + (endAnalysisTime - startAnalysisTime) / 1000.00 + "s");
-        Logging.info("GhidraScript","ReType time: " + (endReTypeTime - endAnalysisTime) / 1000.00 + "s");
-        Logging.info("GhidraScript","Total time: " + (endReTypeTime - startAnalysisTime) / 1000.00 + "s");
+        Logging.warn("GhidraScript","Analysis time: " + (endAnalysisTime - startAnalysisTime) / 1000.00 + "s");
+        Logging.warn("GhidraScript","ReType time: " + (endReTypeTime - endAnalysisTime) / 1000.00 + "s");
+        Logging.warn("GhidraScript","Total time: " + (endReTypeTime - startAnalysisTime) / 1000.00 + "s");
     }
 
     protected boolean prepareAnalysis() {

@@ -22,10 +22,7 @@ import typeclay.utils.Logging;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * We First Utilize readability assessment method to generate final Skeleton info json base on following Skeleton_uuid_morph.json
@@ -115,28 +112,41 @@ public class ReTyper {
             if (!skt.globalMorphingTypes.isEmpty()) {
                 Logging.info("GhidraScript", "Writing global morphing types for skeleton: " + skt.toString());
                 var globalMorph = mapper.createObjectNode();
-                var retypeCandidates = getRetypedCandidates(skt, 0, 0);
+                var retypeCandidates = new HashSet<SymbolExpr>();
+                var reservedDT = new HashMap<HighSymbol, DataType>();
+                populateRetypedCandidates(skt, 0, 0, retypeCandidates, reservedDT);
+
+                /* Check if there are no retype candidates, if so, we add the marker */
+                if (retypeCandidates.isEmpty()) {
+                    jsonRoot.put("desc", "NoRetypeCandidates");
+                }
                 for (var dt: skt.globalMorphingTypes) {
                     ObjectNode typeRoot;
                     if (dt instanceof Structure) {
                         typeRoot = processStructure(skt, (Structure) dt);
-                        typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
                     } else if (dt instanceof Union) {
                         typeRoot = mapper.createObjectNode();
                         typeRoot.put("desc", "Union");
                         typeRoot.set("layout", writeUnionLayout((Union) dt));
-                        typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
                         typeRoot.set("decompilerInferred", writeDecompilerInferred(skt));
                     } else {
                         typeRoot = mapper.createObjectNode();
                         typeRoot.put("desc", "Primitive");
                         typeRoot.put("type", dt.getName());
-                        typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
                     }
+
+                    /* If there exists retype candidates, we retype them and write the decompiled code */
+                    if (!retypeCandidates.isEmpty()) {
+                        typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, reservedDT, dt));
+                    }
+
                     globalMorph.set(dt.getName(), typeRoot);
                 }
+
                 jsonRoot.set("globalMorph", globalMorph);
+                return jsonRoot;
             }
+
             /* Handle range morphing types */
             else {
                 Logging.info("GhidraScript", "Writing range morphing types for skeleton: " + skt.toString());
@@ -147,20 +157,37 @@ public class ReTyper {
                     var morphingDTs = entry.getValue();
                     var start = range.getStart();
                     var end = range.getEnd();
-                    var retypeCandidates = getRetypedCandidates(skt, start, end);
+
+                    var retypeCandidates = new HashSet<SymbolExpr>();
+                    var reservedDT = new HashMap<HighSymbol, DataType>();
+                    populateRetypedCandidates(skt, 0, 0, retypeCandidates, reservedDT);
+
                     rangeObj.put("startOffset", String.format("0x%x", start));
                     rangeObj.put("endOffset", String.format("0x%x", end));
-                    var typesObj = mapper.createObjectNode();
-                    for (var dt: morphingDTs) {
-                        var typeRoot = mapper.createObjectNode();
-                        if (dt instanceof Structure) {
-                            typeRoot = processStructure(skt, (Structure) dt);
-                            typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, dt));
+                    /* Check if there are no retype candidates, if so, we add the marker and find the
+                     * type declaration with most member, because we can not process readability assessment */
+                    if (retypeCandidates.isEmpty()) {
+                        rangeObj.put("desc", "NoRetypeCandidates");
+                        var finalDT = getDataTypeHasMostMember(morphingDTs);
+                        if (finalDT instanceof Structure struct) {
+                            var typeRoot = processStructure(skt, struct);
+                            rangeObj.set(finalDT.getName(), typeRoot);
                         }
-                        typesObj.set(dt.getName(), typeRoot);
                     }
-                    rangeObj.set("types", typesObj);
-                    rangeMorph.add(rangeObj);
+                    /* If there exists retype candidates, we run retype and write retyped decompiled code into types */
+                    else {
+                        var typesObj = mapper.createObjectNode();
+                        for (var dt: morphingDTs) {
+                            var typeRoot = mapper.createObjectNode();
+                            if (dt instanceof Structure) {
+                                typeRoot = processStructure(skt, (Structure) dt);
+                                typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, reservedDT, dt));
+                            }
+                            typesObj.set(dt.getName(), typeRoot);
+                        }
+                        rangeObj.set("types", typesObj);
+                        rangeMorph.add(rangeObj);
+                    }
                 }
                 jsonRoot.set("rangeMorph", rangeMorph);
             }
@@ -211,22 +238,16 @@ public class ReTyper {
             if (isParam) {
                 ObjectNode varInfo = mapper.createObjectNode();
                 var paramName = highSym.getName();
+                var location = DecompilerHelper.Location.getLocation(highSym, paramName);
                 varInfo.put("Name", paramName);
                 varInfo.put("desc", "pointer");
                 var skeletonName = exprSkeletonMap.get(expr).toString();
                 varInfo.put("Skeleton", skeletonName);
-                targetInfo.set(paramName, varInfo);
-            } else {
-                String locationStr;
-                if (highSym.getStorage().isStackStorage()) {
-                    locationStr = String.format("Stack[%d]", highSym.getStorage().getStackOffset());
-                } else if (highSym.getStorage().isRegisterStorage()) {
-                    locationStr = String.format("Register[%s]", highSym.getPCAddress());
-                } else if (highSym.getStorage().isUniqueStorage()) {
-                    locationStr = String.format("Unique[%s]", highSym.getPCAddress());
-                } else {
-                    continue;
+                if (location != null) {
+                    targetInfo.set(location.toString(), varInfo);
                 }
+            } else {
+                var location = DecompilerHelper.Location.getLocation(highSym);
                 var varInfo = mapper.createObjectNode();
                 varInfo.put("Name", highSym.getName());
                 String desc;
@@ -239,7 +260,9 @@ public class ReTyper {
                 var skeletonName = exprSkeletonMap.get(expr).toString();
                 varInfo.put("Skeleton", skeletonName);
 
-                targetInfo.set(locationStr, varInfo);
+                if (location != null) {
+                    targetInfo.set(location.toString(), varInfo);
+                }
             }
         }
 
@@ -341,7 +364,10 @@ public class ReTyper {
             return inferred;
         }
         for (var dt: skt.decompilerInferredTypes) {
-            if (DataTypeHelper.isPointerToCompositeDataType(dt) || dt instanceof Composite) {
+            if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
+                var baseDT = ((Pointer) dt).getDataType();
+                composite.add(baseDT.getName());
+            } else if (dt instanceof Composite) {
                 composite.add(dt.getName());
             } else if (dt instanceof Array) {
                 array.add(dt.getName());
@@ -379,59 +405,95 @@ public class ReTyper {
      * We utilize start/end to limit which variables to retype,
      * because member's out of the range is certain and no need to retype and assess.
      */
-    private Set<SymbolExpr> getRetypedCandidates(Skeleton skt, long start, long end) {
+    private void populateRetypedCandidates(Skeleton skt, long start, long end,
+                                           HashSet<SymbolExpr> retypeCandidates,
+                                           HashMap<HighSymbol, DataType> reservedDT) {
         boolean globalMorph;
         globalMorph = (start == 0 && end == 0);
-        var retypedVars = new HashSet<SymbolExpr>();
+        var memberAccessExprs = new HashSet<SymbolExpr>();
 
+        /* If range morphing */
         if (!globalMorph) {
-            var memberAccessExprs = new HashSet<SymbolExpr>();
-            for (var offset: skt.finalConstraint.fieldExprMap.keySet()) {
+            for (var offset : skt.finalConstraint.fieldExprMap.keySet()) {
                 if (offset >= start && offset < end) {
                     memberAccessExprs.addAll(skt.finalConstraint.fieldExprMap.get(offset));
                 }
             }
             Logging.info("GhidraScript",
                     String.format("Member access in %s of range [0x%x, 0x%x]:\n%s", skt, start, end, memberAccessExprs));
-
-            for (var expr: memberAccessExprs) {
-                var parsedExpr = ParsedExpr.parseFieldAccessExpr(expr);
-                if (parsedExpr.isEmpty()) continue;
-                var base = parsedExpr.get().base;
-                if (base.isRootSymExpr()) {
-                    Logging.info("GhidraScript", String.format("Get Retype candidate: %s", base));
-                    retypedVars.add(base);
-                }
-            }
-        } else {
-            for (var expr: skt.exprs) {
-                if (expr.isRootSymExpr()) {
-                    Logging.info("GhidraScript", String.format("Get Retype candidate: %s", expr));
-                    retypedVars.add(expr);
-                }
+        }
+        /* If global morphing */
+        else {
+            for (var offset: skt.finalConstraint.fieldExprMap.keySet()) {
+                memberAccessExprs.addAll(skt.finalConstraint.fieldExprMap.get(offset));
             }
         }
 
-        return retypedVars;
+        for (var expr: memberAccessExprs) {
+            var parsedExpr = ParsedExpr.parseFieldAccessExpr(expr);
+            if (parsedExpr.isEmpty()) continue;
+            var base = parsedExpr.get().base;
+            if (base.isVariable()) {
+                Logging.info("GhidraScript", String.format("Get Retype candidate: %s", base));
+                retypeCandidates.add(base);
+                var rootHighSym = base.getRootHighSymbol();
+                reservedDT.put(rootHighSym, rootHighSym.getDataType());
+            }
+        }
     }
 
+    /**
+     * Get the type declaration in the morphing types that has the most members. (indicating more complete flatten of the structure)
+     * @return the data type with the most members
+     */
+    private DataType getDataTypeHasMostMember(Set<DataType> DTs) {
+        DataType result = null;
+        int maxMemberCount = 0;
+        for (var dt: DTs) {
+            if (dt instanceof Structure struct) {
+                if (struct.getNumComponents() > maxMemberCount) {
+                    maxMemberCount = struct.getNumComponents();
+                    result = struct;
+                }
+            }
+        }
+        return result;
+    }
 
-    private ObjectNode writeRetypedCode(Set<SymbolExpr> retypedVars, DataType dt) {
+    private ObjectNode writeRetypedCode(Set<SymbolExpr> retypedVars,
+                                        HashMap<HighSymbol, DataType> reservedDT,
+                                        DataType newDt) {
         var result = mapper.createObjectNode();
         var decompiledFuncCandidates = new HashSet<Function>();
 
         for (var var: retypedVars) {
-            var highSym = var.rootSym;
-            if (highSym.getDataType().getLength() < Global.currentProgram.getDefaultPointerSize()) {
-                Logging.info("GhidraScript", String.format("Variable %s is not a pointer skipped", var));
+            HighSymbol highSym;
+            DataType updatedDT;
+            DataType originalDT;
+            /* Retyped as Pointer */
+            if (var.isRootSymExpr()) {
+                highSym = var.rootSym;
+                originalDT = reservedDT.get(highSym);
+                updatedDT = DataTypeHelper.getPointerDT(newDt, 1);
+                if (originalDT.getLength() < Global.currentProgram.getDefaultPointerSize()) {
+                    Logging.info("GhidraScript", String.format("Variable %s is not a pointer skipped", var));
+                    continue;
+                }
+            /* Retyped as Nested */
+            } else if (var.isReference() && var.nestedExpr.isRootSymExpr()) {
+                highSym = var.nestedExpr.rootSym;
+                updatedDT = newDt;
+            } else {
                 continue;
             }
-            var updatedDT = DataTypeHelper.getPointerDT(dt, 1);
+
             Logging.info("GhidraScript", String.format("Retyping variable %s to data type %s", var, updatedDT.getName()));
+            /* update the data type of the variable */
             DecompilerHelper.setLocalVariableDataType(highSym, updatedDT);
             decompiledFuncCandidates.add(highSym.getHighFunction().getFunction());
         }
 
+        /* Decompile the functions parallelly and get the decompiled code */
         var callback = new DecompilerHelper.ClayCallBack(Global.currentProgram, (ifc) -> {
             ifc.toggleCCode(true);
             ifc.toggleSyntaxTree(true);
@@ -445,12 +507,24 @@ public class ReTyper {
             callback.dispose();
         }
 
-        Logging.info("GhidraScript", "Decompiled functions: " + callback.addrToCodeMap.size());
+        Logging.info("GhidraScript", "Decompiled functions count: " + callback.addrToCodeMap.size());
         for (var entry: callback.addrToCodeMap.entrySet()) {
             var addr = entry.getKey();
             var code = entry.getValue();
             var addrString = String.format("0x%x", addr.getOffset());
             result.put(addrString, code);
+        }
+
+        /* Restore the reserved original data type by setLocalVariableDataType, and these will be automatically updated in the next decompile
+         * However, after decompile, the highSymbol object will be updated, to we need to find the new highSymbol object by variable Storage
+        * */
+        for (var entry: reservedDT.entrySet()) {
+            var oldHighSym = entry.getKey();
+            var originalDT = entry.getValue();
+            var newHighSym = callback.getHighSymbolByOldHighSym(oldHighSym);
+            if (newHighSym != null) {
+                DecompilerHelper.setLocalVariableDataType(newHighSym, originalDT);
+            }
         }
 
         return result;

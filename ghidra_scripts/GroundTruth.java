@@ -102,7 +102,12 @@ public class GroundTruth extends GhidraScript {
             for (var i = 0; i < localSymTable.getNumParams(); i++) {
                 var param = localSymTable.getParamSymbol(i);
                 var paramEntry = handleHighSymbol(param);
-                paramObj.set("param_" + (i+1), paramEntry);
+                var paramName = String.format("param_%d", (i + 1));
+                var location = DecompilerHelper.Location.getLocation(param, paramName);
+
+                if (location != null) {
+                    paramObj.set(location.toString(), paramEntry);
+                }
             }
 
             /* Process Local Variables */
@@ -112,13 +117,9 @@ public class GroundTruth extends GhidraScript {
                 if (sym.isParameter()) { continue; }
                 if (sym.getHighVariable() == null) { continue; }
                 var varEntry = handleHighSymbol(sym);
-
-                if (sym.getStorage().isStackStorage()) {
-                    localObj.set(String.format("Stack[%d]", sym.getStorage().getStackOffset()), varEntry);
-                } else if (sym.getStorage().isRegisterStorage()) {
-                    localObj.set(String.format("Register[%s]", sym.getPCAddress()), varEntry);
-                } else if (sym.getStorage().isUniqueStorage()) {
-                    localObj.set(String.format("Unique[%s]", sym.getPCAddress()), varEntry);
+                var location = DecompilerHelper.Location.getLocation(sym);
+                if (location != null) {
+                    localObj.set(location.toString(), varEntry);
                 }
             }
 

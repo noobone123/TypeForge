@@ -44,14 +44,7 @@ public class Generator {
     }
 
     public Set<Skeleton> getFinalSkeletons() {
-        var sktSet = new HashSet<Skeleton>();
-        for (var skt: new HashSet<>(skeletonCollector.exprToSkeletonMap.values())) {
-            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
-                continue;
-            }
-            sktSet.add(skt);
-        }
-        return sktSet;
+        return new HashSet<>(finalSkeletons);
     }
 
     public Map<SymbolExpr, Skeleton> getExprToSkeletonMap() {
@@ -73,7 +66,7 @@ public class Generator {
         /* Generation Morphing Types */
         generation();
 
-        /* Post Processing: remove redundant types */
+        /* Post Processing: remove redundant type declaration in morph range */
         for (var skt: finalSkeletons) {
             if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
@@ -276,13 +269,13 @@ public class Generator {
 
                 var componentMap_1 = getComponentMapByMostAccessed(skt);
                 var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
-                var componentMap_2 = getComponentMapByRecoverFlattenToArray(skt, offsets.get(i), winDT, flattenCnt);
-                var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+                // var componentMap_2 = getComponentMapByRecoverFlattenToArray(skt, offsets.get(i), winDT, flattenCnt);
+                // var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
                 var componentMap_3 = getComponentMapByRecoverFlattenToNest(skt, offsets.get(i), winDT, flattenCnt);
                 var structDT_3 = DataTypeHelper.createUniqueStructure(skt, componentMap_3);
 
 
-                skt.updateRangeMorphingDataType(nestStartOffset, nestEndOffset, new HashSet<>(Set.of(structDT_1, structDT_2, structDT_3)));
+                skt.updateRangeMorphingDataType(nestStartOffset, nestEndOffset, new HashSet<>(Set.of(structDT_1, structDT_3)));
 
                 Logging.info("Generator",
                         String.format("Found a match of complex flatten (%d) from offset 0x%x with %d count", capacity, offsets.get(i), flattenCnt));
