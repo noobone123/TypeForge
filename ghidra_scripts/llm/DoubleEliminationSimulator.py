@@ -1,12 +1,3 @@
-'''
-双败淘汰制的实现
-
-双败就会淘汰，胜者组内两两pk，输了会掉入败者组；
-败者组内两两pk，输了会淘汰，赢了会保留在败者组；
-胜者组内只剩一个选手，它就会暂时不比，直到等待到败者组唯一的胜者；
-轮空等同于获胜
-'''
-
 import re
 import random
 from typing import List, Dict
@@ -28,7 +19,6 @@ class TimeoutException(Exception):
 
 def timeout_handler(signum, frame):
     raise TimeoutException("Task timed out")
-
 
 
 def generate_random_c_function():
@@ -271,10 +261,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config = read_config()
 
-    # TODO:
-    #  2. 修复 output.json 中的格式问题
-    #  3. 使用 gpt4o 进行评估作为对比
-
     start_time = time.time()
 
     model = ChatOpenAI(model = config['llm']['model'], api_key = config['llm']['apikey'], base_url = config['llm']['url'])
@@ -284,7 +270,7 @@ if __name__ == "__main__":
             ("human",
             '''
             Assess which snippet has better readability in terms of syntax and semantics. For every snippet pair,
-            if the first snippet is more readable, please indicate this with 0; if the second is more readable, please indicate this with 1, if both snippets are identical except for the variable names and type names, please indicate this with 2.
+            if the first snippet is more readable, please indicate this with 0; if the second is more readable, please indicate this with 1, if both snippets are identical except for variable and type names, please indicate this with 2.
             Pair snippets : [<{snippet1} & {snippet2}> , <{snippet3} & {snippet4}> , <{snippet5} & {snippet6}> , <{snippet7} & {snippet8}> , <{snippet9} & {snippet10}>]
             You must only return a list as ['0/1/2','0/1/2','0/1/2', '0/1/2','0/1/2'] 
             ''')
@@ -294,9 +280,8 @@ if __name__ == "__main__":
 
     res_dir = args.respath
     res_list = []
-    params = []
+    candidates = []
     filenames = os.listdir(res_dir)
-    total_num = 0
     empty_global_num = 0
     empty_range_num = 0
 
@@ -304,25 +289,22 @@ if __name__ == "__main__":
         if 'final' in filename:
             continue
         
-        total_num += 1
         filepath = pathlib.Path(res_dir + '/' + filename)
         with open(filepath, 'r', encoding = 'utf-8') as f:
-            inferrd_json = json.load(f)
+            inferred_json = json.load(f)
         
         if 'global' in filename:
-            tmp_para_dict = {}
-            skip_global = False
-            for type_name, type_info in inferrd_json['globalMorph'].items():
-                if (type_info["decompiledCode"] == {}):
-                    empty_global_num += 1
-                    skip_global = True
-                    break
-                tmp_para_dict[type_name] = type_info["decompiledCode"]
-
-            if skip_global:
+            if ('desc' in inferred_json and inferred_json['desc'] == "NoRetypeCandidates"):
                 continue
 
-            params.append(tmp_para_dict)
+            type_to_codes = {}
+            for type_name, type_info in inferred_json['globalMorph'].items():
+                if (type_info["decompiledCode"] == {}):
+                    empty_global_num += 1
+                    break
+                type_to_codes[type_name] = type_info["decompiledCode"]
+
+            candidates.append(type_to_codes)
             tmp_skeletion_dict = {}
             tmp_skeletion_desc_dict = {}
             tmp_skeletion_desc_dict['desc'] = 'global'
@@ -331,45 +313,36 @@ if __name__ == "__main__":
             res_list.append(tmp_skeletion_dict)
 
         elif 'range' in filename:
-            skip_range = False
-            for interval in inferrd_json['rangeMorph']:
-                tmp_para_dict = {}
+            for interval in inferred_json['rangeMorph']:
+                if ('desc' in interval and interval['desc'] == "NoRetypeCandidates"):
+                    continue
+
+                type_to_codes = {}
                 for type_name, type_info in interval['types'].items():
                     if (type_info["decompiledCode"] == {}):
                         empty_range_num += 1
-                        skip_range = True
                         break
-                    tmp_para_dict[type_name] = type_info["decompiledCode"]
+                    type_to_codes[type_name] = type_info["decompiledCode"]
                 
-                if skip_range:
-                    continue
-
-                params.append(tmp_para_dict) 
+                candidates.append(type_to_codes) 
                 tmp_skeletion_dict = {}
                 tmp_skeletion_desc_dict = {}
                 tmp_skeletion_desc_dict['desc'] = 'range'
                 tmp_skeletion_desc_dict['offset'] = interval['startOffset'] + '&' + interval['endOffset']
                 split_list = filename.split('_')
                 tmp_skeletion_dict[split_list[0]+ '_' + split_list[1]] = tmp_skeletion_desc_dict
-                res_list.append(tmp_skeletion_dict)   
-            
-            if skip_range:
-                continue
+                res_list.append(tmp_skeletion_dict)
 
 
-    if args.verbose == 'true':
-        print(f"Total number need to be inferred: {total_num}")
-        print(f"Empty global number: {empty_global_num}")
-        print(f"Empty range number: {empty_range_num}")     
-
-    if args.verbose == 'true':
-        print('===================')
-        print(f"candidate count: {len(params)}")
-        print(f"result list count: {len(res_list)}")
+    print(f"Empty global number: {empty_global_num}")
+    print(f"Empty range number: {empty_range_num}")     
+    print('===================')
+    print(f"candidate count: {len(candidates)}")
+    print(f"result list count: {len(res_list)}")
 
     # Main: Start the double elimination
     with multiprocessing.Pool(processes = args.procnum) as pool:
-        results = pool.map(double_elimination, params)
+        results = pool.map(double_elimination, candidates)
 
     if args.verbose == 'true':
         print('===================')
@@ -404,8 +377,7 @@ if __name__ == "__main__":
         print(final_res)
     end_time = time.time()
     elapsed_time = end_time - start_time
-    if args.verbose == 'true':
-        print('===================')
-        print(f"the time of best-fit this binary is {elapsed_time}s")
+    print('===================')
+    print(f"the time of best-fit this binary is {elapsed_time}s")
     with open('output.json', 'w') as file:
         json.dump(final_res, file, indent=4)
