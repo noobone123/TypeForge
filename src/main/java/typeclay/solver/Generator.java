@@ -106,7 +106,7 @@ public class Generator {
                 continue;
             }
 
-            if (!skt.hasNestedSkeleton() && !skt.hasPtrReference() && skt.mayPrimitiveArray()) {
+            if (!skt.hasPtrReference() && skt.mayPrimitiveArray()) {
                 Logging.info("Generator", "May Primitive Array Found");
                 handleMayPrimitiveArray(skt);
                 continue;

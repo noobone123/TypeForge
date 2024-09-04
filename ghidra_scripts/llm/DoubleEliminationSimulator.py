@@ -272,7 +272,6 @@ if __name__ == "__main__":
     config = read_config()
 
     # TODO:
-    #  (done) 1. 修复 Retyper 中产生空的 decompileCode 的问题
     #  2. 修复 output.json 中的格式问题
     #  3. 使用 gpt4o 进行评估作为对比
 
