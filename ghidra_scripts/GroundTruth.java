@@ -7,8 +7,7 @@ import ghidra.program.model.data.*;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
-import ghidra.program.model.pcode.HighLocal;
-import typeclay.utils.*;
+import typeforge.utils.*;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;
 import ghidra.util.task.TaskMonitor;

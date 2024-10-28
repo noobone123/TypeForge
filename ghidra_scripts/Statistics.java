@@ -1,10 +1,10 @@
-import typeclay.utils.*;
+import typeforge.utils.*;
 import ghidra.app.script.GhidraScript;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
-import typeclay.base.graph.CallGraph;
+import typeforge.base.graph.CallGraph;
 
 import java.util.HashSet;
 import java.util.List;
@@ -101,7 +101,7 @@ public class Statistics extends GhidraScript {
 //        }
 //
 //        SDGraph sdg = SDGraph.getSDGraph(struct);
-//        Helper.dumpSDGraph(sdg, "/home/h1k0/codes/typeclay/dummy/sdgraph.dot");
+//        Helper.dumpSDGraph(sdg, "/home/h1k0/codes/typeforge/dummy/sdgraph.dot");
 
         long endTime = System.currentTimeMillis();
 
