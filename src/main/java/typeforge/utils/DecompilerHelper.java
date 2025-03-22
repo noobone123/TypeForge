@@ -54,7 +54,6 @@ public class DecompilerHelper {
         }
     }
 
-
     public static DecompileResults decompile(Function func) {
         DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
         try {
@@ -72,6 +71,30 @@ public class DecompilerHelper {
             return decompileRes;
         } finally {
             ifc.dispose();
+        }
+    }
+
+    /**
+     * Callback for parallel decompile, used for initializing function node
+     */
+    public static class ParallelPrepareFunctionNodeCallBack extends DecompilerCallback<Void> {
+
+        public HashMap<Address, DecompileResults> addrToDecRes = new HashMap<>();
+        public int decompileCount = 0;
+
+        // TODO: store Function->FunctionNode mapping here, then update FunctionNode info in `process` function.
+        public ParallelPrepareFunctionNodeCallBack(Program program, DecompileConfigurer configurer) {
+            super(program, configurer);
+        }
+
+        @Override
+        public Void process(DecompileResults decompileResults, TaskMonitor taskMonitor) throws Exception {
+            addrToDecRes.put(
+                    decompileResults.getFunction().getEntryPoint(),
+                    decompileResults
+            );
+            decompileCount += 1;
+            return null;
         }
     }
 

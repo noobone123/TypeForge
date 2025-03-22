@@ -493,7 +493,7 @@ public class ReTyper {
             decompiledFuncCandidates.add(highSym.getHighFunction().getFunction());
         }
 
-        /* Decompile the functions parallelly and get the decompiled code */
+        /* Decompile the functions in parallel and get the decompiled code */
         var callback = new DecompilerHelper.ClayCallBack(Global.currentProgram, (ifc) -> {
             ifc.toggleCCode(true);
             ifc.toggleSyntaxTree(true);

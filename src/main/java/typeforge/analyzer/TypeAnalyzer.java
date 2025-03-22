@@ -1,5 +1,8 @@
 package typeforge.analyzer;
 
+import ghidra.app.decompiler.parallel.ParallelDecompiler;
+import ghidra.program.model.listing.Function;
+import ghidra.util.task.TaskMonitor;
 import typeforge.base.dataflow.solver.InterSolver;
 import typeforge.base.dataflow.solver.IntraSolver;
 import typeforge.base.graph.CallGraph;
@@ -24,17 +27,87 @@ public class TypeAnalyzer {
         /* Start the analysis from a specific function */
         if (Global.startAddress != 0) {
             Logging.info("TypeAnalyzer", "Start the analysis from a specific function");
-            buildWorkList(cg.getNodebyAddr(FunctionHelper.getAddress(Global.startAddress)));
+            prepareAnalyze(cg.getNodebyAddr(FunctionHelper.getAddress(Global.startAddress)));
             return;
-        } else {
-            buildWorkList(null);
         }
+        /* Analysis all functions in the binary */
+        else {
+            prepareAnalyze(null);
+        }
+
         // TODO: compare the results with and without setTypeAgnosticFunctions
         // TODO: if needed, complete the heuristic to determine the type-agnostic functions
         setTypeAgnosticFunctions();
 
         Logging.info("TypeAnalyzer", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
         Logging.info("TypeAnalyzer", String.format("Function count in workList: %d", interSolver.workList.size()));
+    }
+
+    /**
+     * Prepare for the analysis, including:
+     *  1. Sort the functions in post-order
+     *  2. Decompiling the functions to get HighSymbols for further analysis
+     *  3. Add the functions to the workList
+     *
+     * @param root The root function to start the analysis,
+     *             if null, analyze all functions in the binary
+     */
+    private void prepareAnalyze(FunctionNode root) {
+        var start = System.currentTimeMillis();
+
+        List<FunctionNode> sortedFuncs = new ArrayList<>();
+        Set<FunctionNode> visited = new HashSet<>();
+
+        // Sort the functions in post-order
+        if (root != null) {
+            postOrderTraversal(root, visited, sortedFuncs);
+        } else {
+            for (var r: cg.roots) {
+                var rootNode = cg.getNodebyAddr(r.getEntryPoint());
+                if (rootNode == null) {
+                    Logging.warn("TypeAnalyzer", "Root function not found: " + r.getName());
+                    continue;
+                }
+                postOrderTraversal(rootNode, visited, sortedFuncs);
+            }
+        }
+
+        // Decompiling the functions
+        var decompileSet = new HashSet<Function>();
+
+        for (var funcNode: sortedFuncs) {
+            if (!FunctionHelper.isMeaningfulFunction(funcNode.value)) {
+                Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
+                continue;
+            }
+            decompileSet.add(funcNode.value);
+            interSolver.workList.add(funcNode);
+            Logging.info("TypeAnalyzer", "Added function to workList: " + funcNode.value.getName());
+        }
+
+        // Decompile the functions in parallel
+        var callback = new DecompilerHelper.ParallelPrepareFunctionNodeCallBack(
+                Global.currentProgram,
+                (ifc) -> {
+                    ifc.toggleCCode(true);
+                }
+        );
+
+        try {
+            ParallelDecompiler.decompileFunctions(callback, decompileSet, TaskMonitor.DUMMY);
+        } catch (Exception e) {
+            Logging.error("GhidraScript", "Could not decompile functions with ParallelDecompiler");
+        } finally {
+            callback.dispose();
+        }
+
+        var decompiledFuncCnt = callback.decompileCount;
+        Logging.info("TypeAnalyzer", String.format("Decompiled function count: %d", decompiledFuncCnt));
+
+        // TODO: rewrite funcNode.initialize() here
+
+        var end = System.currentTimeMillis();
+        Logging.info("TypeAnalyzer", String.format("Prepare analysis time: %.2fs", (end - start) / 1000.0));
     }
 
 
@@ -102,40 +175,7 @@ public class TypeAnalyzer {
     }
 
 
-    /**
-     * Build the worklist for intra-procedural solver, the element's order in the worklist is ...
-     */
-    private void buildWorkList(FunctionNode root) {
-        List<FunctionNode> sortedFuncs = new ArrayList<>();
-        Set<FunctionNode> visited = new HashSet<>();
 
-        if (root != null) {
-            postOrderTraversal(root, visited, sortedFuncs);
-        } else {
-            for (var r: cg.roots) {
-                var rootNode = cg.getNodebyAddr(r.getEntryPoint());
-                if (rootNode == null) {
-                    Logging.warn("TypeAnalyzer", "Root function not found: " + r.getName());
-                    continue;
-                }
-                postOrderTraversal(rootNode, visited, sortedFuncs);
-            }
-        }
-
-        for (FunctionNode funcNode : sortedFuncs) {
-            if (!FunctionHelper.isMeaningfulFunction(funcNode.value)) {
-                Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
-                continue;
-            }
-
-            if (!funcNode.initialize()) {
-                Logging.warn("TypeAnalyzer", "Failed to pre-analyze function: " + funcNode.value.getName());
-                continue;
-            }
-            interSolver.workList.add(funcNode);
-            Logging.info("TypeAnalyzer", "Added function to workList: " + funcNode.value.getName());
-        }
-    }
 
     private void postOrderTraversal(FunctionNode node, Set<FunctionNode> visited, List<FunctionNode> sortedFuncs) {
         if (visited.contains(node)) {

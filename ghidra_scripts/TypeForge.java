@@ -43,7 +43,7 @@ public class TypeForge extends GhidraScript {
         CallGraph cg = CallGraph.getCallGraph();
 
         TypeAnalyzer analyzer = new TypeAnalyzer(cg);
-        analyzer.run();
+        // analyzer.run();
 
         long endAnalysisTime = System.currentTimeMillis();
 

@@ -1,5 +1,8 @@
 package typeforge.base.node;
 
+import ghidra.app.decompiler.parallel.DecompileConfigurer;
+import ghidra.app.decompiler.parallel.DecompilerCallback;
+import ghidra.program.model.listing.Program;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.DecompilerHelper;
 import typeforge.utils.Global;
