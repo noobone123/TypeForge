@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.context;
+package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.SymbolExpr.ParsedExpr;
@@ -21,7 +21,7 @@ import java.util.*;
 /**
  * The context used to store the relationship between HighSymbol and TypeBuilder.
  */
-public class InterContext {
+public class InterSolver {
 
     public CallGraph callGraph;
     /** The workList queue of the whole program */
@@ -37,7 +37,7 @@ public class InterContext {
     public SymbolExprManager symExprManager;
     public SkeletonCollector skeletonCollector;
 
-    public InterContext(CallGraph cg) {
+    public InterSolver(CallGraph cg) {
         this.callGraph = cg;
         this.workList = new LinkedList<>();
         this.solvedFunc = new HashSet<>();

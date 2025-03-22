@@ -1,4 +1,4 @@
-package typeforge.solver;
+package typeforge.analyzer;
 
 import ghidra.program.model.data.Structure;
 import typeforge.base.dataflow.Range;

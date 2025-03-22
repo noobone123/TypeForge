@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.SymbolExpr;
 
 import typeforge.base.dataflow.skeleton.TypeConstraint;
-import typeforge.base.dataflow.context.InterContext;
+import typeforge.base.dataflow.solver.InterSolver;
 import typeforge.base.dataflow.typeRelation.TypeRelationGraph;
 import typeforge.utils.Logging;
 import ghidra.program.model.address.Address;
@@ -17,13 +17,13 @@ public class SymbolExprManager {
     Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap;
     Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
     Map<SymbolExpr.Attribute, Set<SymbolExpr>> attributeToExpr;
-    InterContext interCtx;
+    InterSolver interCtx;
     Map<SymbolExpr, DataType> exprToDecompilerInferredType;
 
     // mem alias related fields
     public Map<SymbolExpr, Set<SymbolExpr>> fastMayMemAliasCache;
 
-    public SymbolExprManager(InterContext interCtx) {
+    public SymbolExprManager(InterSolver interCtx) {
         exprToConstraintBeforeMerge = new HashMap<>();
 
         baseToFieldsMap = new HashMap<>();

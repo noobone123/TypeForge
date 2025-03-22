@@ -2,9 +2,8 @@ import ghidra.app.script.GhidraScript;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
-import typeforge.solver.InterSolver;
+import typeforge.analyzer.TypeAnalyzer;
 import typeforge.base.graph.CallGraph;
-import typeforge.solver.ReTyper;
 import typeforge.utils.*;
 import org.apache.commons.io.FileUtils;
 
@@ -17,14 +16,18 @@ public class TypeForge extends GhidraScript {
     @Override
     protected void run() throws Exception {
 
+        println("====================== TypeForge ======================");
+
         if(!Logging.init()) {
             return;
         }
-        if (!prepareAnalysis()) {
+        if (!prepare()) {
             return;
         }
 
         List<Function> functions = Global.currentProgram.getListing().getGlobalFunctions("main");
+        DataTypeHelper.prepare();
+
         if (functions.isEmpty()) {
             Logging.error("GhidraScript","No main function found");
             return;
@@ -38,16 +41,15 @@ public class TypeForge extends GhidraScript {
         Logging.info("GhidraScript","Number of meaningful functions: " + meaningfulFunctions.size());
 
         CallGraph cg = CallGraph.getCallGraph();
-        DataTypeHelper.buildNameToDTMap();
 
-        InterSolver interSolver = new InterSolver(cg);
-        interSolver.run();
+        TypeAnalyzer analyzer = new TypeAnalyzer(cg);
+        analyzer.run();
 
         long endAnalysisTime = System.currentTimeMillis();
 
-        ReTyper reTyper = new ReTyper(interSolver.generator.getFinalSkeletons(),
-                                interSolver.generator.getExprToSkeletonMap());
-        reTyper.run();
+//        ReTyper reTyper = new ReTyper(interSolver.generator.getFinalSkeletons(),
+//                                interSolver.generator.getExprToSkeletonMap());
+//        reTyper.run();
 
         long endReTypeTime = System.currentTimeMillis();
 
@@ -56,7 +58,7 @@ public class TypeForge extends GhidraScript {
         Logging.warn("GhidraScript","Total time: " + (endReTypeTime - startAnalysisTime) / 1000.00 + "s");
     }
 
-    protected boolean prepareAnalysis() {
+    protected boolean prepare() {
         parseArgs();
         prepareOutputDirectory();
 

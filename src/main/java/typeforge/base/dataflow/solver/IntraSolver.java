@@ -1,8 +1,7 @@
-package typeforge.solver;
+package typeforge.base.dataflow.solver;
 
-import typeforge.base.dataflow.context.InterContext;
-import typeforge.base.dataflow.context.IntraContext;
 import typeforge.base.node.FunctionNode;
+import typeforge.analyzer.PCodeVisitor;
 import typeforge.utils.Logging;
 
 /**
@@ -11,11 +10,11 @@ import typeforge.utils.Logging;
 public class IntraSolver {
 
     private final FunctionNode funcNode;
-    private final InterContext interCtx;
+    private final InterSolver interCtx;
     private final IntraContext intraCtx;
     private final PCodeVisitor visitor;
 
-    public IntraSolver(FunctionNode funcNode, InterContext interCtx, IntraContext intraCtx) {
+    public IntraSolver(FunctionNode funcNode, InterSolver interCtx, IntraContext intraCtx) {
         this.funcNode = funcNode;
         this.interCtx = interCtx;
         this.intraCtx = intraCtx;

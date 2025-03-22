@@ -1,6 +1,7 @@
-package typeforge.solver;
+package typeforge.analyzer;
 
-import typeforge.base.dataflow.context.InterContext;
+import typeforge.base.dataflow.solver.InterSolver;
+import typeforge.base.dataflow.solver.IntraSolver;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.*;
@@ -9,20 +10,20 @@ import ghidra.program.model.address.Address;
 
 import java.util.*;
 
-public class InterSolver {
-    InterContext ctx;
+public class TypeAnalyzer {
+    InterSolver interSolver;
     public Generator generator;
 
     /** The call graph of the whole program */
     CallGraph cg;
 
-    public InterSolver(CallGraph cg) {
+    public TypeAnalyzer(CallGraph cg) {
         this.cg = cg;
-        this.ctx = new InterContext(this.cg);
+        this.interSolver = new InterSolver(this.cg);
 
         /* Start the analysis from a specific function */
         if (Global.startAddress != 0) {
-            Logging.info("InterSolver", "Start the analysis from a specific function");
+            Logging.info("TypeAnalyzer", "Start the analysis from a specific function");
             buildWorkList(cg.getNodebyAddr(FunctionHelper.getAddress(Global.startAddress)));
             return;
         } else {
@@ -32,35 +33,35 @@ public class InterSolver {
         // TODO: if needed, complete the heuristic to determine the type-agnostic functions
         setTypeAgnosticFunctions();
 
-        Logging.info("InterSolver", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
-        Logging.info("InterSolver", String.format("Function count in workList: %d", ctx.workList.size()));
+        Logging.info("TypeAnalyzer", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
+        Logging.info("TypeAnalyzer", String.format("Function count in workList: %d", interSolver.workList.size()));
     }
 
 
     public void run() {
         checkCallSitesInconsistency();
 
-        while (!ctx.workList.isEmpty()) {
-            FunctionNode funcNode = ctx.workList.poll();
+        while (!interSolver.workList.isEmpty()) {
+            FunctionNode funcNode = interSolver.workList.poll();
             if (!funcNode.isMeaningful || funcNode.isTypeAgnostic) {
-                Logging.info("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
+                Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
 
             if (!funcNode.isLeaf) {
-                Logging.info("InterSolver", "Non-leaf function: " + funcNode.value.getName());
+                Logging.info("TypeAnalyzer", "Non-leaf function: " + funcNode.value.getName());
             } else {
-                Logging.info("InterSolver", "Leaf function: " + funcNode.value.getName());
+                Logging.info("TypeAnalyzer", "Leaf function: " + funcNode.value.getName());
             }
 
-            ctx.createIntraContext(funcNode);
-            IntraSolver intraSolver = new IntraSolver(funcNode, ctx, ctx.getIntraContext(funcNode));
+            interSolver.createIntraContext(funcNode);
+            IntraSolver intraSolver = new IntraSolver(funcNode, interSolver, interSolver.getIntraContext(funcNode));
             intraSolver.solve();
 
-            ctx.solvedFunc.add(funcNode);
+            interSolver.solvedFunc.add(funcNode);
         }
 
-        ctx.collectSkeletons();
+        interSolver.collectSkeletons();
 
         /* try {
             var outputFile = new File(Global.outputDirectory);
@@ -70,7 +71,7 @@ public class InterSolver {
             Logging.error("InterSolver", "Failed to dump TRGInfo: " + e.getMessage());
         } */
 
-        generator = new Generator(ctx.skeletonCollector, ctx.symExprManager);
+        generator = new Generator(interSolver.skeletonCollector, interSolver.symExprManager);
         generator.run();
         generator.explore();
     }
@@ -79,7 +80,7 @@ public class InterSolver {
         // Records the Map of Callee function and its callsites' argument number
         Map<FunctionNode, Set<Integer>> argNum = new HashMap<>();
         // traverse all functions in worklist
-        for (var funcNode: ctx.workList) {
+        for (var funcNode: interSolver.workList) {
             for (var callsite: funcNode.callSites.values()) {
                 var callee = cg.getNodebyAddr(callsite.calleeAddr);
                 if (callee == null) continue;
@@ -92,7 +93,7 @@ public class InterSolver {
             var funcNode = entry.getKey();
             var argNums = entry.getValue();
             if (argNums.size() > 1) {
-                Logging.warn("InterSolver", "Inconsistent argument number for function: " + funcNode.value.getName());
+                Logging.warn("TypeAnalyzer", "Inconsistent argument number for function: " + funcNode.value.getName());
                 var minArgNum = Collections.min(argNums);
                 funcNode.isVarArg = true;
                 funcNode.fixedParamNum = minArgNum;
@@ -114,7 +115,7 @@ public class InterSolver {
             for (var r: cg.roots) {
                 var rootNode = cg.getNodebyAddr(r.getEntryPoint());
                 if (rootNode == null) {
-                    Logging.warn("InterSolver", "Root function not found: " + r.getName());
+                    Logging.warn("TypeAnalyzer", "Root function not found: " + r.getName());
                     continue;
                 }
                 postOrderTraversal(rootNode, visited, sortedFuncs);
@@ -123,16 +124,16 @@ public class InterSolver {
 
         for (FunctionNode funcNode : sortedFuncs) {
             if (!FunctionHelper.isMeaningfulFunction(funcNode.value)) {
-                Logging.info("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
+                Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
 
             if (!funcNode.initialize()) {
-                Logging.warn("InterSolver", "Failed to pre-analyze function: " + funcNode.value.getName());
+                Logging.warn("TypeAnalyzer", "Failed to pre-analyze function: " + funcNode.value.getName());
                 continue;
             }
-            ctx.workList.add(funcNode);
-            Logging.info("InterSolver", "Added function to workList: " + funcNode.value.getName());
+            interSolver.workList.add(funcNode);
+            Logging.info("TypeAnalyzer", "Added function to workList: " + funcNode.value.getName());
         }
     }
 
@@ -185,7 +186,7 @@ public class InterSolver {
         for (var a : addrList) {
             addr = FunctionHelper.getAddress(a);
             funcNode = cg.getNodebyAddr(addr);
-            ctx.workList.add(funcNode);
+            interSolver.workList.add(funcNode);
         }
     }
 

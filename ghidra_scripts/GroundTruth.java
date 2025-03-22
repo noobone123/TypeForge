@@ -42,7 +42,7 @@ public class GroundTruth extends GhidraScript {
         typeLibJsonRoot.set("Lib_Union", objMapper.createObjectNode());
         typeLibJsonRoot.set("TypeDef", objMapper.createObjectNode());
 
-        DataTypeHelper.buildNameToDTMap();
+        DataTypeHelper.prepare();
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
 
         getUserDefinedTypeLib();

@@ -18,7 +18,7 @@ public class DataTypeHelper {
     private static final String DEFAULT_CATEGORY = "/TypeClay_structs";
 
 
-    public static void buildNameToDTMap() {
+    public static void prepare() {
         for (var iter = dtM.getAllDataTypes(); iter.hasNext(); ) {
             var dt = iter.next();
             nameToDTMap.put(dt.getName(), dt);

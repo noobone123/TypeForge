@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.context;
+package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.SymbolExpr.SymbolExpr;

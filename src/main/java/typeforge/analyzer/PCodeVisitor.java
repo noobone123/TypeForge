@@ -1,11 +1,11 @@
-package typeforge.solver;
+package typeforge.analyzer;
 
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
 import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
-import typeforge.base.dataflow.context.InterContext;
-import typeforge.base.dataflow.context.IntraContext;
+import typeforge.base.dataflow.solver.InterSolver;
+import typeforge.base.dataflow.solver.IntraContext;
 import typeforge.base.dataflow.typeRelation.TypeRelationGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.DecompilerHelper;
@@ -21,7 +21,7 @@ import static typeforge.utils.DecompilerHelper.getSigned;
 
 public class PCodeVisitor {
 
-    public InterContext interCtx;
+    public InterSolver interCtx;
     public IntraContext intraCtx;
     public FunctionNode funcNode;
     public SymbolExprManager symExprManager;
@@ -32,7 +32,7 @@ public class PCodeVisitor {
     /** If trace all generated expressions during the abstract interpretation */
     private boolean traceAllExprs = false;
 
-    public PCodeVisitor(FunctionNode funcNode, InterContext interCtx, IntraContext intraCtx, boolean traceAllExprs) {
+    public PCodeVisitor(FunctionNode funcNode, InterSolver interCtx, IntraContext intraCtx, boolean traceAllExprs) {
         this.funcNode = funcNode;
         this.interCtx = interCtx;
         this.intraCtx = intraCtx;
