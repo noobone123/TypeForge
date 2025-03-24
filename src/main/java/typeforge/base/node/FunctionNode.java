@@ -1,8 +1,5 @@
 package typeforge.base.node;
 
-import ghidra.app.decompiler.parallel.DecompileConfigurer;
-import ghidra.app.decompiler.parallel.DecompilerCallback;
-import ghidra.program.model.listing.Program;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.DecompilerHelper;
 import typeforge.utils.Global;
@@ -57,6 +54,7 @@ public class FunctionNode extends NodeBase<Function> {
     public Map<PcodeOp, CallSite> callSites = new HashMap<>();
 
     /** Following information should be updated after each decompile */
+    public boolean isDecompiled = false;
     public HighFunction hFunc = null;
     public List<PcodeOp> pCodes = new LinkedList<>();
     public PcodeOp returnOp = null;
@@ -68,8 +66,9 @@ public class FunctionNode extends NodeBase<Function> {
     public List<HighSymbol> globalVariables = new LinkedList<>();
     public Map<VariableStorage, DataType> decompilerInferredDT = new HashMap<>();
 
-    /** If a local variable is merged, these variables should not appear in TypeAliasGraph
-     merged variable's dataType should not be inferred, because there may hold different types */
+    /** If a local variable is merged, these variables should not appear in TFG
+     merged variable's dataType should not be inferred, because there are derived from
+     decompiler's inaccuracy */
     public HashSet<HighSymbol> mergedVariables = new HashSet<>();
 
     public FunctionNode(Function value, int id) {
@@ -80,6 +79,11 @@ public class FunctionNode extends NodeBase<Function> {
         isTypeAgnostic = true;
     }
 
+    /**
+     * Some function's prototype may be inferred incorrectly by Ghidra decompiler,
+     * Especially for the varargs function, we need to fix the prototype.
+     * @return The prototype that need to be fixed
+     */
     private Optional<List<HighSymbol>> checkPrototype() {
         var funcProto = hFunc.getFunctionPrototype();
         var newParams = new ArrayList<HighSymbol>();
@@ -87,7 +91,7 @@ public class FunctionNode extends NodeBase<Function> {
             var param = funcProto.getParam(i);
             if (param.getStorage().getRegister() != null) {
                 if (param.getStorage().getRegister().getName().contains("XMM")) {
-                    Logging.warn("FunctionNode", "Remove XMM register parameter: " + param.getName());
+                    Logging.debug("FunctionNode", "Remove XMM register parameter: " + param.getName());
                 } else {
                     newParams.add(param);
                 }
@@ -97,7 +101,9 @@ public class FunctionNode extends NodeBase<Function> {
         }
 
         if (newParams.size() != funcProto.getNumParams()) {
-            Logging.info("FunctionNode", String.format("Found %d XMM register parameters in %s", funcProto.getNumParams() - newParams.size(), this.value.getName()));
+            Logging.warn("FunctionNode",
+                    String.format("Found %d XMM register parameters in %s, these parameters will be removed",
+                            funcProto.getNumParams() - newParams.size(), this.value.getName()));
             return Optional.of(newParams);
         } else {
             return Optional.empty();
@@ -121,22 +127,23 @@ public class FunctionNode extends NodeBase<Function> {
     }
 
     /**
-     * We can not fully trust decompiler inferred composite datatype, so we need to record them and fix them into primitive.
+     * We can not fully trust decompiler inferred composite datatype,
+     * so we need to record them and fix them into primitive.
+     * @return The set of local variables that need to fix datatype.
      */
     private Optional<Set<HighSymbol>> checkLocalVariables() {
-        Set<HighSymbol> reTypeCandidate = new HashSet<>();
+        Set<HighSymbol> result = new HashSet<>();
         var localSymMap = hFunc.getLocalSymbolMap();
         for (Iterator<HighSymbol> it = localSymMap.getSymbols(); it.hasNext(); ) {
             var sym = it.next();
             var dt = sym.getDataType();
             decompilerInferredDT.put(sym.getStorage(), dt);
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
-                reTypeCandidate.add(sym);
+                result.add(sym);
                 Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s -> %s", sym.getName(), dt.getName()));
             }
         }
-
-        return reTypeCandidate.isEmpty() ? Optional.empty() : Optional.of(reTypeCandidate);
+        return result.isEmpty() ? Optional.empty() : Optional.of(result);
     }
 
 
@@ -180,7 +187,7 @@ public class FunctionNode extends NodeBase<Function> {
 
             var mergedGroups = getMergedGroup(sym);
             if (mergedGroups.size() > 1) {
-                Logging.info("FunctionNode", String.format("Found merged local variable: %s: %s", hFunc.getFunction().getName(), sym.getName()));
+                Logging.debug("FunctionNode", String.format("Found merged local variable: %s: %s", hFunc.getFunction().getName(), sym.getName()));
                 mergedVariables.add(sym);
             }
             else {
@@ -229,32 +236,6 @@ public class FunctionNode extends NodeBase<Function> {
         }
     }
 
-
-    /**
-     * Decompile current function
-     */
-    public boolean decompile() {
-        DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
-        try {
-            if (!ifc.openProgram(Global.currentProgram)) {
-                Logging.error("FunctionNode", "Failed to use the decompiler");
-                return false;
-            }
-
-            DecompileResults decompileRes = ifc.decompileFunction(value, 30, TaskMonitor.DUMMY);
-            if (!decompileRes.decompileCompleted()) {
-                Logging.error("FunctionNode", "Function decompile failed" + value.getName());
-                return false;
-            } else {
-                Logging.info("FunctionNode", "Decompiled function " + value.getName());
-                updateDecompileResult(decompileRes);
-                return true;
-            }
-        } finally {
-            ifc.dispose();
-        }
-    }
-
     public void updateDecompileResult(DecompileResults res) {
         this.decompileResults = res;
         this.hFunc = res.getHighFunction();
@@ -272,8 +253,8 @@ public class FunctionNode extends NodeBase<Function> {
         if (needFixPrototype) {
             Logging.info("FunctionNode", "Need to fix function prototype");
             fixFuncProto(this.newParams);
-            if (!decompile()) { return false; }
-            collectPCodeInfo();
+            if (!reDecompile()) { return false; }
+            setPCodeInfo();
             setParameters();
             setLocalVariables();
             setGlobalVariables();
@@ -283,42 +264,49 @@ public class FunctionNode extends NodeBase<Function> {
 
 
     /**
-     * Decompile the function
+     * Initialize the function node, including:
+     * 1. Check if the function prototype need to be fixed
+     * 2. Check if the local variables need to be fixed
+     * 3. Check if the local variables need to be split
+     * 4. Collect pcode, set parameters, local variables and global variables
      */
     public boolean initialize() {
-        if (!decompile()) { return false; }
+        if (!isDecompiled) {
+            Logging.warn("FunctionNode", "Function not decompiled: " + value.getName());
+            return false;
+        }
+
         var newParams = checkPrototype();
+        // Prototype fix should be done after all functions are decompiled,
+        // because it may influence other function's decompile result
         if (newParams.isPresent()) {
             needFixPrototype = true;
             this.newParams = newParams.get();
         }
 
-        var result = checkNeedSplitVariable();
+        var result = checkNeedSplitParams();
         if (result.isPresent()) {
-            var splitCandidates = new HashSet<HighSymbol>(result.get());
+            var splitCandidates = new HashSet<>(result.get());
             for (var sym : splitCandidates) {
                 splitMergedVariables(sym);
             }
-            if (!decompile()) {
-                return false;
-            }
+            if (!reDecompile()) { return false; }
         }
 
         var fixCandidates = checkLocalVariables();
         if (fixCandidates.isPresent()) {
-            Logging.info("FunctionNode", "Found local variables pointed to composite datatype");
             fixLocalVariableDataType(fixCandidates.get());
-            if (!decompile()) { return false; }
+            if (!reDecompile()) { return false; }
         }
 
-        collectPCodeInfo();
+        setPCodeInfo();
         setParameters();
         setLocalVariables();
         setGlobalVariables();
         return true;
     }
 
-    public void collectPCodeInfo() {
+    public void setPCodeInfo() {
         returnOp = null;
         callSites.clear();
         for (var block : hFunc.getBasicBlocks()) {
@@ -337,7 +325,12 @@ public class FunctionNode extends NodeBase<Function> {
         }
     }
 
-    public Optional<Set<HighSymbol>> checkNeedSplitVariable() {
+    /**
+     * Some parameters may be merged with other variables in the function, which
+     * may cause incorrect type inference. We need to split these parameters.
+     * @return The set of parameters that need to be split
+     */
+    public Optional<Set<HighSymbol>> checkNeedSplitParams() {
         Set<HighSymbol> result = new HashSet<>();
         Set<HighSymbol> allHighSymbols = new HashSet<>();
         for (Iterator<HighSymbol> it = hFunc.getLocalSymbolMap().getSymbols(); it.hasNext(); ) {
@@ -359,7 +352,8 @@ public class FunctionNode extends NodeBase<Function> {
                 if (sym.isParameter()) {
                     // If the merged variable is a parameter, we should split it out
                     result.add(sym);
-                    Logging.info("FunctionNode", String.format("Found variables need to split: %s", sym.getName()));
+                    Logging.warn("FunctionNode",
+                            String.format("Found variables %s:%s need to split", hFunc.getFunction().getName(), sym.getName()));
                 }
             }
         }
@@ -374,7 +368,7 @@ public class FunctionNode extends NodeBase<Function> {
             try {
                 HighVariable newVar = hFunc.splitOutMergeGroup(variable, vn);
                 HighSymbol newSymbol = newVar.getSymbol();
-                Logging.info("FunctionNode", "Split merged variable: " + newSymbol.getName());
+                Logging.debug("FunctionNode", "Split merged variable: " + newSymbol.getName());
             }
             catch (PcodeException e) {
                 Logging.warn("FunctionNode", "Failed to split merged variable: " + variable.getName());
@@ -398,6 +392,31 @@ public class FunctionNode extends NodeBase<Function> {
             mergedGroups.add(vn.getMergeGroup());
         }
         return mergedGroups;
+    }
+
+    /**
+     * Re-decompile the current function and update the decompile result
+     */
+    public boolean reDecompile() {
+        DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
+        try {
+            if (!ifc.openProgram(Global.currentProgram)) {
+                Logging.error("FunctionNode", "Failed to use the decompiler");
+                return false;
+            }
+
+            DecompileResults decompileRes = ifc.decompileFunction(value, 30, TaskMonitor.DUMMY);
+            if (!decompileRes.decompileCompleted()) {
+                Logging.error("FunctionNode", "Function decompile failed" + value.getName());
+                return false;
+            } else {
+                Logging.debug("FunctionNode", "Decompiled function " + value.getName());
+                updateDecompileResult(decompileRes);
+                return true;
+            }
+        } finally {
+            ifc.dispose();
+        }
     }
 
 

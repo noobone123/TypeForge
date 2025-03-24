@@ -29,33 +29,35 @@ public class TypeForge extends GhidraScript {
         DataTypeHelper.prepare();
 
         if (functions.isEmpty()) {
-            Logging.error("GhidraScript","No main function found");
+            Logging.error("TypeForge","No main function found");
             return;
         }
-        Logging.info("GhidraScript","Number of main functions: " + functions.size());
+        Logging.info("TypeForge","Number of main functions: " + functions.size());
 
         long startAnalysisTime = System.currentTimeMillis();
 
         // Function node and CallGraph Statistics
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
-        Logging.info("GhidraScript","Number of meaningful functions: " + meaningfulFunctions.size());
+        Logging.info("TypeForge","Number of meaningful functions: " + meaningfulFunctions.size());
 
         CallGraph cg = CallGraph.getCallGraph();
 
+        Global.typeAnalysisBeginTime = System.currentTimeMillis();
         TypeAnalyzer analyzer = new TypeAnalyzer(cg);
         // analyzer.run();
+        Global.typeAnalysisEndTime = System.currentTimeMillis();
 
-        long endAnalysisTime = System.currentTimeMillis();
-
+        Global.retypingBeginTime = System.currentTimeMillis();
 //        ReTyper reTyper = new ReTyper(interSolver.generator.getFinalSkeletons(),
 //                                interSolver.generator.getExprToSkeletonMap());
 //        reTyper.run();
+        Global.retypingEndTime = System.currentTimeMillis();
 
-        long endReTypeTime = System.currentTimeMillis();
 
-        Logging.warn("GhidraScript","Analysis time: " + (endAnalysisTime - startAnalysisTime) / 1000.00 + "s");
-        Logging.warn("GhidraScript","ReType time: " + (endReTypeTime - endAnalysisTime) / 1000.00 + "s");
-        Logging.warn("GhidraScript","Total time: " + (endReTypeTime - startAnalysisTime) / 1000.00 + "s");
+        Logging.warn("TypeForge","Type Analysis time: " + (Global.typeAnalysisEndTime - Global.typeAnalysisBeginTime) / 1000.00 + "s");
+        Logging.warn("TypeForge","ReTyping time: " + (Global.retypingEndTime - Global.retypingBeginTime) / 1000.00 + "s");
+        Logging.warn("TypeForge","Total time: " + (Global.retypingEndTime  - Global.typeAnalysisBeginTime) / 1000.00 + "s");
+        Logging.warn("TypeForge", "Prepare Analysis time: " + (Global.prepareAnalysisEndTime - Global.prepareAnalysisBeginTime) / 1000.00 + "s");
     }
 
     protected boolean prepare() {

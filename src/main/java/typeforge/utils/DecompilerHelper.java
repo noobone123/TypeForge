@@ -54,51 +54,6 @@ public class DecompilerHelper {
         }
     }
 
-    public static DecompileResults decompile(Function func) {
-        DecompInterface ifc = DecompilerHelper.setUpDecompiler(null);
-        try {
-            if (!ifc.openProgram(Global.currentProgram)) {
-                Logging.error("FunctionNode", "Failed to use the decompiler");
-                return null;
-            }
-
-            DecompileResults decompileRes = ifc.decompileFunction(func, 30, TaskMonitor.DUMMY);
-            if (!decompileRes.decompileCompleted()) {
-                Logging.error("FunctionNode", "Function decompile failed" + func.getName());
-            } else {
-                Logging.info("FunctionNode", "Decompiled function " + func.getName());
-            }
-            return decompileRes;
-        } finally {
-            ifc.dispose();
-        }
-    }
-
-    /**
-     * Callback for parallel decompile, used for initializing function node
-     */
-    public static class ParallelPrepareFunctionNodeCallBack extends DecompilerCallback<Void> {
-
-        public HashMap<Address, DecompileResults> addrToDecRes = new HashMap<>();
-        public int decompileCount = 0;
-
-        // TODO: store Function->FunctionNode mapping here, then update FunctionNode info in `process` function.
-        public ParallelPrepareFunctionNodeCallBack(Program program, DecompileConfigurer configurer) {
-            super(program, configurer);
-        }
-
-        @Override
-        public Void process(DecompileResults decompileResults, TaskMonitor taskMonitor) throws Exception {
-            addrToDecRes.put(
-                    decompileResults.getFunction().getEntryPoint(),
-                    decompileResults
-            );
-            decompileCount += 1;
-            return null;
-        }
-    }
-
-
     public static class Location {
         private Function func;
         private int stackOffset;

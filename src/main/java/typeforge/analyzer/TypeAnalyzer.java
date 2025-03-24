@@ -7,6 +7,7 @@ import typeforge.base.dataflow.solver.InterSolver;
 import typeforge.base.dataflow.solver.IntraSolver;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.FunctionNode;
+import typeforge.base.parallel.PrepareFunctionNodeCallback;
 import typeforge.utils.*;
 
 import ghidra.program.model.address.Address;
@@ -53,7 +54,7 @@ public class TypeAnalyzer {
      *             if null, analyze all functions in the binary
      */
     private void prepareAnalyze(FunctionNode root) {
-        var start = System.currentTimeMillis();
+        Global.prepareAnalysisBeginTime = System.currentTimeMillis();
 
         List<FunctionNode> sortedFuncs = new ArrayList<>();
         Set<FunctionNode> visited = new HashSet<>();
@@ -74,6 +75,7 @@ public class TypeAnalyzer {
 
         // Decompiling the functions
         var decompileSet = new HashSet<Function>();
+        var addrToFuncNode = new HashMap<Address, FunctionNode>();
 
         for (var funcNode: sortedFuncs) {
             if (!FunctionHelper.isMeaningfulFunction(funcNode.value)) {
@@ -81,16 +83,21 @@ public class TypeAnalyzer {
                 continue;
             }
             decompileSet.add(funcNode.value);
+            addrToFuncNode.put(
+                    funcNode.value.getEntryPoint(),
+                    funcNode
+            );
             interSolver.workList.add(funcNode);
             Logging.info("TypeAnalyzer", "Added function to workList: " + funcNode.value.getName());
         }
 
         // Decompile the functions in parallel
-        var callback = new DecompilerHelper.ParallelPrepareFunctionNodeCallBack(
+        var callback = new PrepareFunctionNodeCallback(
                 Global.currentProgram,
                 (ifc) -> {
                     ifc.toggleCCode(true);
-                }
+                },
+                addrToFuncNode
         );
 
         try {
@@ -104,10 +111,7 @@ public class TypeAnalyzer {
         var decompiledFuncCnt = callback.decompileCount;
         Logging.info("TypeAnalyzer", String.format("Decompiled function count: %d", decompiledFuncCnt));
 
-        // TODO: rewrite funcNode.initialize() here
-
-        var end = System.currentTimeMillis();
-        Logging.info("TypeAnalyzer", String.format("Prepare analysis time: %.2fs", (end - start) / 1000.0));
+        Global.prepareAnalysisEndTime = System.currentTimeMillis();
     }
 
 

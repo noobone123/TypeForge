@@ -12,4 +12,11 @@ public class Global {
     public static GhidraScript ghidraScript;
     public static String outputDirectory;
     public static long startAddress;
+
+    public static long typeAnalysisBeginTime;
+    public static long typeAnalysisEndTime;
+    public static long retypingBeginTime;
+    public static long retypingEndTime;
+    public static long prepareAnalysisBeginTime;
+    public static long prepareAnalysisEndTime;
 }
