@@ -44,7 +44,7 @@ public class TypeForge extends GhidraScript {
 
         Global.typeAnalysisBeginTime = System.currentTimeMillis();
         TypeAnalyzer analyzer = new TypeAnalyzer(cg);
-        // analyzer.run();
+        analyzer.run();
         Global.typeAnalysisEndTime = System.currentTimeMillis();
 
         Global.retypingBeginTime = System.currentTimeMillis();

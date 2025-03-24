@@ -2,11 +2,11 @@ package typeforge.analyzer;
 
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.SymbolExpr.NMAEManager;
 import typeforge.base.dataflow.solver.InterSolver;
 import typeforge.base.dataflow.solver.IntraContext;
-import typeforge.base.dataflow.typeRelation.TypeRelationGraph;
+import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.DecompilerHelper;
 import typeforge.utils.Global;
@@ -24,7 +24,7 @@ public class PCodeVisitor {
     public InterSolver interCtx;
     public IntraContext intraCtx;
     public FunctionNode funcNode;
-    public SymbolExprManager symExprManager;
+    public NMAEManager symExprManager;
 
     /** The workList queue of current function */
     public LinkedList<PcodeOpAST> workList = new LinkedList<>();
@@ -36,7 +36,7 @@ public class PCodeVisitor {
         this.funcNode = funcNode;
         this.interCtx = interCtx;
         this.intraCtx = intraCtx;
-        symExprManager = intraCtx.symbolExprManager;
+        symExprManager = intraCtx.exprManager;
         this.traceAllExprs = traceAllExprs;
     }
 
@@ -149,7 +149,7 @@ public class PCodeVisitor {
             for (var symExpr: inputFact_0) {
                 var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
                 if (OffsetSanityCheck(delta)) {
-                    var deltaSym = new SymbolExprManager.Builder().constant(delta).build();
+                    var deltaSym = new NMAEManager.Builder().constant(delta).build();
                     var newExpr = symExprManager.add(symExpr, deltaSym);
                     if (newExpr != null) {
                         intraCtx.updateDataFlowFacts(output, newExpr);
@@ -189,7 +189,7 @@ public class PCodeVisitor {
         for (var inputSymExpr: inputFact) {
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    interCtx.addTypeRelation(inputSymExpr, outputSymExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(inputSymExpr, outputSymExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
             intraCtx.updateDataFlowFacts(outputVn, inputSymExpr);
@@ -217,7 +217,7 @@ public class PCodeVisitor {
             for (var symExpr: input0Fact) {
                 var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
                 if (OffsetSanityCheck(delta)) {
-                    var deltaSym = new SymbolExprManager.Builder().constant(delta).build();
+                    var deltaSym = new NMAEManager.Builder().constant(delta).build();
                     var newExpr = symExprManager.add(symExpr, deltaSym);
                     if (newExpr != null) {
                         intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), newExpr);
@@ -236,7 +236,7 @@ public class PCodeVisitor {
                 Logging.debug("PCodeVisitor", String.format("Scale value %d is not valid", scaleValue));
                 return;
             }
-            var scaleExpr = new SymbolExprManager.Builder().constant(scaleValue).build();
+            var scaleExpr = new NMAEManager.Builder().constant(scaleValue).build();
             for (var symExpr: input0Fact) {
                 var indexFacts = intraCtx.getDataFlowFacts(inputs[1]);
                 for (var indexExpr: indexFacts) {
@@ -265,7 +265,7 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
         var base = inputs[0];
         var offset = inputs[1];
-        SymbolExpr outputExpr = null;
+        NMAE outputExpr = null;
 
         if (base.isRegister()) {
             var reg = Global.currentProgram.getRegister(base);
@@ -279,7 +279,7 @@ public class PCodeVisitor {
                 // local symbol
                 if (offset.getHigh().getSymbol() != null) {
                     var sym = offset.getHigh().getSymbol();
-                    outputExpr = new SymbolExprManager.Builder().rootSymbol(sym).build();
+                    outputExpr = new NMAEManager.Builder().rootSymbol(sym).build();
                     outputExpr = symExprManager.reference(outputExpr);
                 } else {
                     Logging.warn("PCodeVisitor", String.format("PtrSub handler found an unresolved variable %s", pcodeOp));
@@ -294,7 +294,7 @@ public class PCodeVisitor {
         else if (base.isConstant() && base.getOffset() == 0 && offset.isConstant()) {
             // Global symbol
             var sym = offset.getHigh().getSymbol();
-            outputExpr = new SymbolExprManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(sym), sym).build();
+            outputExpr = new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(sym), sym).build();
             outputExpr = symExprManager.reference(outputExpr);
         }
         // if base is a traced varnode, means it's a fieldAccess of a structure
@@ -302,7 +302,7 @@ public class PCodeVisitor {
             var baseExprs = intraCtx.getDataFlowFacts(base);
             var offsetValue = getSigned(offset);
             if (OffsetSanityCheck(offsetValue)) {
-                var offsetExpr = new SymbolExprManager.Builder().constant(offsetValue).build();
+                var offsetExpr = new NMAEManager.Builder().constant(offsetValue).build();
                 for (var baseExpr: baseExprs) {
                     outputExpr = symExprManager.add(baseExpr, offsetExpr);
                 }
@@ -317,7 +317,7 @@ public class PCodeVisitor {
             var leftExprs = intraCtx.getDataFlowFacts(pcodeOp.getOutput());
             if (leftExprs != null) {
                 for (var leftExpr : leftExprs) {
-                    interCtx.addTypeRelation(outputExpr, leftExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(outputExpr, leftExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
             intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), outputExpr);
@@ -334,9 +334,9 @@ public class PCodeVisitor {
         if (output.getHigh() != null && output.getHigh().getSymbol() != null) {
             var highSym = output.getHigh().getSymbol();
             if (!highSym.isGlobal()) {
-                intraCtx.updateDataFlowFacts(output, new SymbolExprManager.Builder().rootSymbol(highSym).build());
+                intraCtx.updateDataFlowFacts(output, new NMAEManager.Builder().rootSymbol(highSym).build());
             } else {
-                intraCtx.updateDataFlowFacts(output, new SymbolExprManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(highSym), highSym).build());
+                intraCtx.updateDataFlowFacts(output, new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(highSym), highSym).build());
             }
         } else {
             for (var input : inputs) {
@@ -396,7 +396,7 @@ public class PCodeVisitor {
             return;
         }
 
-        KSet<SymbolExpr> inputFacts;
+        KSet<NMAE> inputFacts;
         long size = 0;
         if (input0.isConstant()) {
             inputFacts = intraCtx.getDataFlowFacts(input1);
@@ -407,7 +407,7 @@ public class PCodeVisitor {
         }
 
         if (OffsetSanityCheck(size)) {
-            var sizeExpr = new SymbolExprManager.Builder().constant(size).build();
+            var sizeExpr = new NMAEManager.Builder().constant(size).build();
             for (var symExpr : inputFacts) {
                 var newExpr = symExprManager.multiply(symExpr, sizeExpr);
                 if (newExpr != null) {
@@ -458,7 +458,7 @@ public class PCodeVisitor {
             if (leftValueExprs != null) {
                 for (var leftValueExpr : leftValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Loaded varnode has already held %s, set type alias of %s and %s", leftValueExpr, loadedValueExpr, leftValueExpr));
-                    interCtx.addTypeRelation(loadedValueExpr, leftValueExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(loadedValueExpr, leftValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
 
@@ -489,7 +489,7 @@ public class PCodeVisitor {
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));
-                    interCtx.addTypeRelation(rightValueExpr, storedValueExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                    interCtx.addTypeRelation(rightValueExpr, storedValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
         }
@@ -504,7 +504,7 @@ public class PCodeVisitor {
 
         var indirectCallFacts = intraCtx.getDataFlowFacts(indirectCallVn);
         for (var symExpr : indirectCallFacts) {
-            symExprManager.addExprAttribute(symExpr, SymbolExpr.Attribute.CODE_PTR);
+            symExprManager.addExprAttribute(symExpr, NMAE.Attribute.CODE_PTR);
         }
     }
 
@@ -519,7 +519,7 @@ public class PCodeVisitor {
             var retFacts = intraCtx.getDataFlowFacts(retVn);
             for (var retExpr : retFacts) {
                 intraCtx.setReturnExpr(retExpr);
-                symExprManager.addExprAttribute(retExpr, SymbolExpr.Attribute.RETURN);
+                symExprManager.addExprAttribute(retExpr, NMAE.Attribute.RETURN);
                 Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
@@ -566,12 +566,12 @@ public class PCodeVisitor {
 
             var argFacts = intraCtx.getDataFlowFacts(argVn);
             for (var argExpr : argFacts) {
-                symExprManager.addExprAttribute(argExpr, SymbolExpr.Attribute.ARGUMENT);
+                symExprManager.addExprAttribute(argExpr, NMAE.Attribute.ARGUMENT);
 
                 if (!calleeNode.isExternal) {
                     var param = calleeNode.parameters.get(argIdx);
-                    var paramExpr = new SymbolExprManager.Builder().rootSymbol(param).build();
-                    interCtx.addTypeRelation(argExpr, paramExpr, TypeRelationGraph.EdgeType.CALL);
+                    var paramExpr = new NMAEManager.Builder().rootSymbol(param).build();
+                    interCtx.addTypeRelation(argExpr, paramExpr, TypeFlowGraph.EdgeType.CALL);
                 }
             }
         }
@@ -593,7 +593,7 @@ public class PCodeVisitor {
                 if (receiverFacts != null) {
                     for (var receiverExpr : receiverFacts) {
                         for (var retValueExpr : retExprs) {
-                            interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeRelationGraph.EdgeType.RETURN);
+                            interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
                         }
                     }
                 } else {
@@ -607,7 +607,7 @@ public class PCodeVisitor {
                         if (newReceiverFacts != null) {
                             for (var receiverExpr : newReceiverFacts) {
                                 for (var retValueExpr : retExprs) {
-                                    interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeRelationGraph.EdgeType.RETURN);
+                                    interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
                                 }
                             }
                         } else {
@@ -663,10 +663,10 @@ public class PCodeVisitor {
     }
 
 
-    private boolean checkIfHoldsCompositeType(SymbolExpr expr) {
-        return expr.hasAttribute(SymbolExpr.Attribute.ARRAY) ||
-                expr.hasAttribute(SymbolExpr.Attribute.STRUCT) ||
-                expr.hasAttribute(SymbolExpr.Attribute.UNION);
+    private boolean checkIfHoldsCompositeType(NMAE expr) {
+        return expr.hasAttribute(NMAE.Attribute.ARRAY) ||
+                expr.hasAttribute(NMAE.Attribute.STRUCT) ||
+                expr.hasAttribute(NMAE.Attribute.UNION);
     }
 
     /**

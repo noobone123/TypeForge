@@ -1,8 +1,8 @@
 package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.KSet;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.SymbolExpr.NMAEManager;
 import typeforge.base.dataflow.skeleton.TypeConstraint;
 import typeforge.base.dataflow.types.TypeDescriptorManager;
 import typeforge.base.node.FunctionNode;
@@ -25,26 +25,26 @@ public class IntraContext {
     public final HashSet<Varnode> tracedVarnodes;
 
     /** Dataflow facts collected from the current function, each varnode may hold PointerRef from different base varnode and offset */
-    public HashMap<Varnode, KSet<SymbolExpr>> dataFlowFacts;
-    public HashSet<SymbolExpr> returnExprs;
+    public HashMap<Varnode, KSet<NMAE>> dataFlowFacts;
+    public HashSet<NMAE> returnExprs;
     public int dataFlowFactKSize = 10;
-    public SymbolExprManager symbolExprManager;
+    public NMAEManager exprManager;
 
-    public IntraContext(FunctionNode funcNode, SymbolExprManager symbolExprManager) {
+    public IntraContext(FunctionNode funcNode, NMAEManager exprManager) {
         this.funcNode = funcNode;
         this.tracedSymbols = new HashSet<>();
         this.tracedVarnodes = new HashSet<>();
         this.dataFlowFacts = new HashMap<>();
         this.returnExprs = new HashSet<>();
-        this.symbolExprManager = symbolExprManager;
+        this.exprManager = exprManager;
     }
 
-    public void setReturnExpr(SymbolExpr expr) {
+    public void setReturnExpr(NMAE expr) {
         this.returnExprs.add(expr);
         expr.isReturnVal = true;
     }
 
-    public Set<SymbolExpr> getReturnExpr() {
+    public Set<NMAE> getReturnExpr() {
         return this.returnExprs;
     }
 
@@ -93,17 +93,17 @@ public class IntraContext {
         for (var symbol: tracedSymbols) {
             Logging.info("IntraContext", "Candidate HighSymbol: " + symbol.getName());
 
-            SymbolExpr expr;
+            NMAE expr;
             TypeConstraint constraint;
             DataType dt;
 
             // Create the SymbolExpr and Constraint for the HighSymbol
             if (symbol.isGlobal()) {
-                expr = new SymbolExprManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
-                symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.GLOBAL);
+                expr = new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
+                exprManager.addExprAttribute(expr, NMAE.Attribute.GLOBAL);
                 dt = symbol.getDataType();
             } else {
-                expr = new SymbolExprManager.Builder().rootSymbol(symbol).build();
+                expr = new NMAEManager.Builder().rootSymbol(symbol).build();
                 dt = funcNode.getDecompilerInferredDT(symbol.getStorage());
                 if (dt == null) {
                     dt = symbol.getDataType();
@@ -113,32 +113,32 @@ public class IntraContext {
                     expr.isParameter = true;
                 }
             }
-            symbolExprManager.addDecompilerInferredType(expr, dt);
-            constraint = symbolExprManager.createConstraint(expr);
+            exprManager.addDecompilerInferredType(expr, dt);
+            constraint = exprManager.createConstraint(expr);
 
             if (DataTypeHelper.isCompositeOrArray(dt)) {
                 if (dt instanceof Array array) {
                     Logging.info("IntraContext", "Found Array " + dt.getName());
-                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.ARRAY);
+                    exprManager.addExprAttribute(expr, NMAE.Attribute.ARRAY);
                     expr.setVariableSize(array.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                 }
                 else if (dt instanceof Structure structure) {
                     Logging.info("IntraContext", "Found Structure " + dt.getName());
-                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.STRUCT);
+                    exprManager.addExprAttribute(expr, NMAE.Attribute.STRUCT);
                     expr.setVariableSize(structure.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                 }
                 else if (dt instanceof Union union) {
                     Logging.info("IntraContext", "Found Union " + dt.getName());
-                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.UNION);
+                    exprManager.addExprAttribute(expr, NMAE.Attribute.UNION);
                     expr.setVariableSize(union.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                 }
             } else if (dt instanceof Pointer ptrDT) {
                 if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
                     Logging.info("IntraContext", "Found Pointer " + ptrDT.getName());
-                    symbolExprManager.addExprAttribute(expr, SymbolExpr.Attribute.POINTER_TO_COMPOSITE);
+                    exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_COMPOSITE);
                     if (ptrDT.getDataType() instanceof Array array) {
                         constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                     } else if (ptrDT.getDataType() instanceof Structure structure) {
@@ -159,7 +159,6 @@ public class IntraContext {
             } else {
                 // Initialize the dataFlowFacts using the interested varnodes and add
                 // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
-                // TODO: this may cause flow-insensitive, ... we can improve it in the future
                 for (var vn: symbol.getHighVariable().getInstances()) {
                     addTracedVarnode(vn);
                     updateDataFlowFacts(vn, expr);
@@ -173,7 +172,7 @@ public class IntraContext {
      * @param vn the varnode which holds the dataflow fact
      * @param symbolExpr the new symbolExpr
      */
-    public void updateDataFlowFacts(Varnode vn, SymbolExpr symbolExpr) {
+    public void updateDataFlowFacts(Varnode vn, NMAE symbolExpr) {
         var curDataFlowFact = dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(dataFlowFactKSize));
         if (curDataFlowFact.add(symbolExpr)) {
             Logging.debug("IntraContext", "New " + vn + " -> " + curDataFlowFact);
@@ -181,7 +180,7 @@ public class IntraContext {
         addTracedVarnode(vn);
     }
 
-    public KSet<SymbolExpr> getDataFlowFacts(Varnode vn) {
+    public KSet<NMAE> getDataFlowFacts(Varnode vn) {
         if (dataFlowFacts.get(vn) == null) {
             return new KSet<>(dataFlowFactKSize);
         } else {

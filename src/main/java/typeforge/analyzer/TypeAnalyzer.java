@@ -36,8 +36,7 @@ public class TypeAnalyzer {
             prepareAnalyze(null);
         }
 
-        // TODO: compare the results with and without setTypeAgnosticFunctions
-        // TODO: if needed, complete the heuristic to determine the type-agnostic functions
+        // TODO: just for testing
         setTypeAgnosticFunctions();
 
         Logging.info("TypeAnalyzer", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
@@ -127,21 +126,18 @@ public class TypeAnalyzer {
         Global.prepareAnalysisEndTime = System.currentTimeMillis();
     }
 
-
+    /**
+     * Run the Type Analysis,
+     * building Whole-program Type Flow Graph and constructing the final type constraints
+     */
     public void run() {
-        checkCallSitesInconsistency();
+        markVarArgFunctions();
 
         while (!interSolver.workList.isEmpty()) {
             FunctionNode funcNode = interSolver.workList.poll();
             if (!funcNode.isMeaningful || funcNode.isTypeAgnostic) {
                 Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
-            }
-
-            if (!funcNode.isLeaf) {
-                Logging.info("TypeAnalyzer", "Non-leaf function: " + funcNode.value.getName());
-            } else {
-                Logging.info("TypeAnalyzer", "Leaf function: " + funcNode.value.getName());
             }
 
             interSolver.createIntraContext(funcNode);
@@ -151,7 +147,7 @@ public class TypeAnalyzer {
             interSolver.solvedFunc.add(funcNode);
         }
 
-        interSolver.collectSkeletons();
+        // interSolver.collectSkeletons();
 
         /* try {
             var outputFile = new File(Global.outputDirectory);
@@ -161,15 +157,20 @@ public class TypeAnalyzer {
             Logging.error("InterSolver", "Failed to dump TRGInfo: " + e.getMessage());
         } */
 
-        generator = new Generator(interSolver.skeletonCollector, interSolver.symExprManager);
-        generator.run();
-        generator.explore();
+//        generator = new Generator(interSolver.skeletonCollector, interSolver.symExprManager);
+//        generator.run();
+//        generator.explore();
     }
 
-    public void checkCallSitesInconsistency() {
-        // Records the Map of Callee function and its callsites' argument number
+    /**
+     * Due to decompiler's limitation, some functions may have inconsistent argument number at different callsites.
+     * So we need to mark these functions as vararg functions.
+     * And we will use the minimum argument number as the fixed parameter number in the subsequent analysis.
+     */
+    public void markVarArgFunctions() {
+        // A map to store the function and the number of arguments of its callsites
         Map<FunctionNode, Set<Integer>> argNum = new HashMap<>();
-        // traverse all functions in worklist
+        // traverse all functions in workList
         for (var funcNode: interSolver.workList) {
             for (var callsite: funcNode.callSites.values()) {
                 var callee = cg.getNodebyAddr(callsite.calleeAddr);
@@ -183,15 +184,13 @@ public class TypeAnalyzer {
             var funcNode = entry.getKey();
             var argNums = entry.getValue();
             if (argNums.size() > 1) {
-                Logging.warn("TypeAnalyzer", "Inconsistent argument number for function: " + funcNode.value.getName());
+                Logging.debug("TypeAnalyzer", "Inconsistent argument number for function: " + funcNode.value.getName());
                 var minArgNum = Collections.min(argNums);
                 funcNode.isVarArg = true;
                 funcNode.fixedParamNum = minArgNum;
             }
         }
     }
-
-
 
 
     private void postOrderTraversal(FunctionNode node, Set<FunctionNode> visited, List<FunctionNode> sortedFuncs) {

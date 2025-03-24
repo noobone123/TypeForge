@@ -13,7 +13,7 @@ import ghidra.program.model.pcode.HighSymbol;
 import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 import typeforge.base.dataflow.SymbolExpr.ParsedExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
 import typeforge.base.dataflow.skeleton.Skeleton;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.DecompilerHelper;
@@ -30,10 +30,10 @@ import java.util.*;
 public class ReTyper {
 
     Set<Skeleton> sktSet;
-    Map<SymbolExpr, Skeleton> exprSkeletonMap;
+    Map<NMAE, Skeleton> exprSkeletonMap;
     ObjectMapper mapper = new ObjectMapper();
 
-    public ReTyper(Set<Skeleton> skeletons, Map<SymbolExpr, Skeleton> exprToSkeletonMap) {
+    public ReTyper(Set<Skeleton> skeletons, Map<NMAE, Skeleton> exprToSkeletonMap) {
         sktSet = skeletons;
         exprSkeletonMap = exprToSkeletonMap;
     }
@@ -112,7 +112,7 @@ public class ReTyper {
             if (!skt.globalMorphingTypes.isEmpty()) {
                 Logging.info("GhidraScript", "Writing global morphing types for skeleton: " + skt.toString());
                 var globalMorph = mapper.createObjectNode();
-                var retypeCandidates = new HashSet<SymbolExpr>();
+                var retypeCandidates = new HashSet<NMAE>();
                 var reservedDT = new HashMap<HighSymbol, DataType>();
                 populateRetypedCandidates(skt, 0, 0, retypeCandidates, reservedDT);
 
@@ -158,7 +158,7 @@ public class ReTyper {
                     var start = range.getStart();
                     var end = range.getEnd();
 
-                    var retypeCandidates = new HashSet<SymbolExpr>();
+                    var retypeCandidates = new HashSet<NMAE>();
                     var reservedDT = new HashMap<HighSymbol, DataType>();
                     populateRetypedCandidates(skt, 0, 0, retypeCandidates, reservedDT);
 
@@ -406,11 +406,11 @@ public class ReTyper {
      * because member's out of the range is certain and no need to retype and assess.
      */
     private void populateRetypedCandidates(Skeleton skt, long start, long end,
-                                           HashSet<SymbolExpr> retypeCandidates,
+                                           HashSet<NMAE> retypeCandidates,
                                            HashMap<HighSymbol, DataType> reservedDT) {
         boolean globalMorph;
         globalMorph = (start == 0 && end == 0);
-        var memberAccessExprs = new HashSet<SymbolExpr>();
+        var memberAccessExprs = new HashSet<NMAE>();
 
         /* If range morphing */
         if (!globalMorph) {
@@ -460,7 +460,7 @@ public class ReTyper {
         return result;
     }
 
-    private ObjectNode writeRetypedCode(Set<SymbolExpr> retypedVars,
+    private ObjectNode writeRetypedCode(Set<NMAE> retypedVars,
                                         HashMap<HighSymbol, DataType> reservedDT,
                                         DataType newDt) {
         var result = mapper.createObjectNode();

@@ -5,14 +5,14 @@ import typeforge.utils.Logging;
 import java.util.Optional;
 
 public class ParsedExpr {
-    public SymbolExpr base = null;
-    public SymbolExpr offset = null;
-    public SymbolExpr index = null;
-    public SymbolExpr scale = null;
+    public NMAE base = null;
+    public NMAE offset = null;
+    public NMAE index = null;
+    public NMAE scale = null;
     public long offsetValue = 0;
 
 
-    public static Optional<ParsedExpr> parseFieldAccessExpr(SymbolExpr expr) {
+    public static Optional<ParsedExpr> parseFieldAccessExpr(NMAE expr) {
         ParsedExpr parsedExpr = new ParsedExpr();
 
         if (expr.getNestedExpr().isDereference()) {

@@ -1,6 +1,6 @@
 package typeforge.base.dataflow.typeRelation;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.SymbolExpr.NMAEManager;
 import typeforge.base.dataflow.skeleton.TypeConstraint;
 import typeforge.utils.Logging;
 import org.jgrapht.GraphPath;
@@ -11,7 +11,7 @@ public class TypeRelationPath<T> {
     public final UUID uuid = UUID.randomUUID();
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
-    public List<TypeRelationGraph.TypeRelationEdge> edges;
+    public List<TypeFlowGraph.TypeRelationEdge> edges;
     public List<TypeConstraint> forwardMergedConstraints;
     public List<TypeConstraint> backwardMergedConstraints;
     public TypeConstraint finalConstraint = null;
@@ -19,14 +19,14 @@ public class TypeRelationPath<T> {
     public boolean noComposite = false;
     public T start;
     public T end;
-    public Set<TypeRelationGraph.TypeRelationEdge> evilEdges;
+    public Set<TypeFlowGraph.TypeRelationEdge> evilEdges;
 
     /**
      * Map[SUB_PATH_LENGTH, Map[HASH_CODE, SUB_PATH_NODES]]
      */
     public Map<Integer, Map<Integer, List<T>>> subPathsOfLengthWithHash = new HashMap<>();
 
-    public TypeRelationPath(GraphPath<T, TypeRelationGraph.TypeRelationEdge> path) {
+    public TypeRelationPath(GraphPath<T, TypeFlowGraph.TypeRelationEdge> path) {
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
@@ -39,7 +39,7 @@ public class TypeRelationPath<T> {
         this.evilEdges = new HashSet<>();
     }
 
-    public TypeRelationPath(List<T> nodes, List<TypeRelationGraph.TypeRelationEdge> edges) {
+    public TypeRelationPath(List<T> nodes, List<TypeFlowGraph.TypeRelationEdge> edges) {
         this.nodes = nodes;
         this.edges = edges;
 
@@ -51,11 +51,11 @@ public class TypeRelationPath<T> {
         this.evilEdges = new HashSet<>();
     }
 
-    public boolean tryMergeOnPath(SymbolExprManager exprManager) {
+    public boolean tryMergeOnPath(NMAEManager exprManager) {
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get(i);
             TypeConstraint curMergedCon;
-            SymbolExpr curExpr = (SymbolExpr) node;
+            NMAE curExpr = (NMAE) node;
             TypeConstraint curExprCon = exprManager.getConstraint(curExpr);
 
             if (curExprCon == null) {
@@ -123,11 +123,11 @@ public class TypeRelationPath<T> {
     }
 
 
-    public Optional<Integer> tryMergeBackward(SymbolExprManager exprManager) {
+    public Optional<Integer> tryMergeBackward(NMAEManager exprManager) {
         for (int i = nodes.size() - 1; i >= 0; i--) {
             T node = nodes.get(i);
             TypeConstraint curMergedCon;
-            SymbolExpr curExpr = (SymbolExpr) node;
+            NMAE curExpr = (NMAE) node;
             TypeConstraint curExprCon = exprManager.getConstraint(curExpr);
 
             if (curExprCon == null) {
@@ -211,8 +211,8 @@ public class TypeRelationPath<T> {
     }
 
 
-    public Set<TypeRelationGraph.TypeRelationEdge> getConnectedEdges(T node) {
-        var result = new HashSet<TypeRelationGraph.TypeRelationEdge>();
+    public Set<TypeFlowGraph.TypeRelationEdge> getConnectedEdges(T node) {
+        var result = new HashSet<TypeFlowGraph.TypeRelationEdge>();
         var nodeIdx = nodes.indexOf(node);
         if (nodeIdx != -1) {
             if (nodeIdx > 0) {

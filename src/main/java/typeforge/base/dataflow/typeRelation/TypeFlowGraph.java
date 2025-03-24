@@ -10,7 +10,7 @@ import typeforge.utils.Logging;
 
 import java.util.*;
 
-public class TypeRelationGraph<T> {
+public class TypeFlowGraph<T> {
     public enum EdgeType {
         CALL,
         RETURN,
@@ -62,7 +62,7 @@ public class TypeRelationGraph<T> {
 
     public TypeRelationPathManager<T> pathManager;
 
-    public TypeRelationGraph() {
+    public TypeFlowGraph() {
         graph = new DefaultDirectedGraph<>(TypeRelationEdge.class);
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
@@ -105,7 +105,7 @@ public class TypeRelationGraph<T> {
         return graph;
     }
 
-    public void mergeGraph(TypeRelationGraph<T> other) {
+    public void mergeGraph(TypeFlowGraph<T> other) {
         for (T vertex: other.getNodes()) {
             graph.addVertex(vertex);
         }
@@ -159,9 +159,9 @@ public class TypeRelationGraph<T> {
         return builder.toString();
     }
 
-    public TypeRelationGraph<T> createCopy() {
+    public TypeFlowGraph<T> createCopy() {
         Logging.debug("TypeRelationGraph", "Create copy of " + this);
-        TypeRelationGraph<T> copy = new TypeRelationGraph<>();
+        TypeFlowGraph<T> copy = new TypeFlowGraph<>();
         Graphs.addGraph(copy.graph, this.graph);
         return copy;
     }

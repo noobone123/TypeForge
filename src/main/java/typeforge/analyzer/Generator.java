@@ -2,8 +2,8 @@ package typeforge.analyzer;
 
 import ghidra.program.model.data.Structure;
 import typeforge.base.dataflow.Range;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.SymbolExpr.NMAEManager;
 import typeforge.base.dataflow.skeleton.Skeleton;
 import typeforge.base.dataflow.skeleton.SkeletonCollector;
 import typeforge.base.passes.SlidingWindowProcessor;
@@ -33,11 +33,11 @@ import java.util.*;
  */
 public class Generator {
     public SkeletonCollector skeletonCollector;
-    public SymbolExprManager exprManager;
+    public NMAEManager exprManager;
     private final Set<Skeleton> finalSkeletons;
 
 
-    public Generator(SkeletonCollector skeletonCollector, SymbolExprManager exprManager) {
+    public Generator(SkeletonCollector skeletonCollector, NMAEManager exprManager) {
         this.skeletonCollector = skeletonCollector;
         this.exprManager = exprManager;
         this.finalSkeletons = new HashSet<>();
@@ -47,8 +47,8 @@ public class Generator {
         return new HashSet<>(finalSkeletons);
     }
 
-    public Map<SymbolExpr, Skeleton> getExprToSkeletonMap() {
-        var exprToSkeletonMap = new HashMap<SymbolExpr, Skeleton>();
+    public Map<NMAE, Skeleton> getExprToSkeletonMap() {
+        var exprToSkeletonMap = new HashMap<NMAE, Skeleton>();
         for (var entry: skeletonCollector.exprToSkeletonMap.entrySet()) {
             var expr = entry.getKey();
             var skt = entry.getValue();

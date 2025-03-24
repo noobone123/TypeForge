@@ -13,7 +13,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
-public class SymbolExprTest {
+public class NMAETest {
     @Mock
     private HighSymbol mockHighSymbol1;
     @Mock

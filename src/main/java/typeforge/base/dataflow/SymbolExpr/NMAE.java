@@ -9,10 +9,10 @@ import ghidra.program.model.pcode.Varnode;
 import java.util.*;
 
 /**
- * SymbolExpr represents all expressions in program that can be represented as :
+ * NMAE (Nested Member Access Expression) represents all expressions in program that can be represented as:
  *  <p> base + index * scale + offset </p>
  */
-public class SymbolExpr {
+public class NMAE {
 
     public enum Attribute {
         ARGUMENT,
@@ -26,16 +26,16 @@ public class SymbolExpr {
         CODE_PTR
     }
 
-    public SymbolExpr baseExpr = null;
-    public SymbolExpr indexExpr = null;
-    public SymbolExpr scaleExpr = null;
-    public SymbolExpr offsetExpr = null;
+    public NMAE baseExpr = null;
+    public NMAE indexExpr = null;
+    public NMAE scaleExpr = null;
+    public NMAE offsetExpr = null;
 
     public HighSymbol rootSym = null;
     public long constant = 0;
     public boolean dereference = false;
     public boolean reference = false;
-    public SymbolExpr nestedExpr = null;
+    public NMAE nestedExpr = null;
 
     public Function function = null;
     public String prefix = null;
@@ -53,7 +53,7 @@ public class SymbolExpr {
     public Set<Attribute> attributes = new HashSet<>();
     public long variableSize = 0;
 
-    public SymbolExpr(SymbolExprManager.Builder builder) {
+    public NMAE(NMAEManager.Builder builder) {
         // Be careful, for global variables, the same global variable have different HighSymbol instances
         // in different functions.
         this.baseExpr = builder.baseExpr;
@@ -94,19 +94,19 @@ public class SymbolExpr {
         Logging.info("SymbolExpr","Created new SymbolExpr: " + this);
     }
 
-    public SymbolExpr getBase() {
+    public NMAE getBase() {
         return baseExpr;
     }
 
-    public SymbolExpr getOffset() {
+    public NMAE getOffset() {
         return offsetExpr;
     }
 
-    public SymbolExpr getIndex() {
+    public NMAE getIndex() {
         return indexExpr;
     }
 
-    public SymbolExpr getScale() {
+    public NMAE getScale() {
         return scaleExpr;
     }
 
@@ -151,7 +151,7 @@ public class SymbolExpr {
         return reference;
     }
 
-    public SymbolExpr getNestedExpr() {
+    public NMAE getNestedExpr() {
         return nestedExpr;
     }
 
@@ -159,7 +159,7 @@ public class SymbolExpr {
         return isGlobal;
     }
 
-    public SymbolExpr getRootSymExpr() {
+    public NMAE getRootSymExpr() {
         if (isRootSymExpr()) {
             return this;
         }
@@ -276,7 +276,7 @@ public class SymbolExpr {
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof SymbolExpr that)) return false;
+        if (!(o instanceof NMAE that)) return false;
         return this.hashCode() == that.hashCode();
     }
 

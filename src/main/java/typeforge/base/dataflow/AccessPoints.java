@@ -1,6 +1,6 @@
 package typeforge.base.dataflow;
 
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Logging;
 import ghidra.program.model.data.*;
@@ -159,19 +159,19 @@ public class AccessPoints {
      */
 
     /** Expressions in memAccessMap: (param + 1) means there is a load/store into (param + 1), loaded value can be represented as *(param + 1) */
-    private final Map<SymbolExpr, Set<AP>> fieldExprToAccessMap;
+    private final Map<NMAE, Set<AP>> fieldExprToAccessMap;
 
     public AccessPoints() {
         fieldExprToAccessMap = new HashMap<>();
     }
 
-    public void addFieldAccessPoint(SymbolExpr symExpr, PcodeOp op, DataType type, AccessType accessType, Function func) {
+    public void addFieldAccessPoint(NMAE symExpr, PcodeOp op, DataType type, AccessType accessType, Function func) {
         fieldExprToAccessMap.putIfAbsent(symExpr, new HashSet<>());
         fieldExprToAccessMap.get(symExpr).add(new AP(op, type, accessType, func));
         Logging.info("AccessPoints", String.format("Add Field Access %s for [%s] with type [%s]", accessType, symExpr, type.getName()));
     }
 
-    public Set<AP> getFieldAccessPoints(SymbolExpr symExpr) {
+    public Set<AP> getFieldAccessPoints(NMAE symExpr) {
         return fieldExprToAccessMap.get(symExpr);
     }
 

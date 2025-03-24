@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.skeleton;
 
 import typeforge.base.dataflow.AccessPoints;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
 import typeforge.base.dataflow.types.TypeDescriptor;
 import typeforge.utils.Logging;
 
@@ -34,7 +34,7 @@ public class TypeConstraint {
      */
     public final TreeMap<Long, AccessPoints.APSet> fieldAccess;
     public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
-    public final TreeMap<Long, HashSet<SymbolExpr>> fieldExprMap;
+    public final TreeMap<Long, HashSet<NMAE>> fieldExprMap;
 
     public final HashSet<Attribute> globalAttrs;
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
@@ -70,7 +70,7 @@ public class TypeConstraint {
         }
 
         this.fieldExprMap = new TreeMap<>();
-        for (Map.Entry<Long, HashSet<SymbolExpr>> entry : other.fieldExprMap.entrySet()) {
+        for (Map.Entry<Long, HashSet<NMAE>> entry : other.fieldExprMap.entrySet()) {
             this.fieldExprMap.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
 
@@ -103,7 +103,7 @@ public class TypeConstraint {
         }
     }
 
-    public void addFieldExpr(long offset, SymbolExpr fieldAccessExpr) {
+    public void addFieldExpr(long offset, NMAE fieldAccessExpr) {
         fieldExprMap.putIfAbsent(offset, new HashSet<>());
         fieldExprMap.get(offset).add(fieldAccessExpr);
     }

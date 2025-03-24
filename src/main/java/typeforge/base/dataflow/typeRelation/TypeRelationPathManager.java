@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.typeRelation;
 
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.SymbolExpr.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
 import typeforge.base.dataflow.skeleton.Skeleton;
 import typeforge.base.dataflow.skeleton.SkeletonCollector;
@@ -15,7 +15,7 @@ import java.io.FileWriter;
 import java.util.*;
 
 public class TypeRelationPathManager<T> {
-    public TypeRelationGraph<T> graph;
+    public TypeFlowGraph<T> graph;
     public boolean hasSrcSink = true;
     public final Set<T> source;
     public final Set<T> sink;
@@ -28,16 +28,16 @@ public class TypeRelationPathManager<T> {
     /** fields for handle conflict paths and nodes */
     public final Set<TypeRelationPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
     public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
-    public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
+    public final Map<T, Set<TypeFlowGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
     public final Set<T> evilSource = new HashSet<>();
     public final Set<Function> evilFunction = new HashSet<>();
-    public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
-    public final Map<T, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
+    public final Map<T, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
+    public final Map<T, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
 
     /** fields for handle edges that introduce conflicts */
-    public final Set<TypeRelationGraph.TypeRelationEdge> mustRemove = new HashSet<>();
-    public final Set<TypeRelationGraph.TypeRelationEdge> mayRemove = new HashSet<>();
-    public final Set<TypeRelationGraph.TypeRelationEdge> keepEdges = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeRelationEdge> mustRemove = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeRelationEdge> mayRemove = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeRelationEdge> keepEdges = new HashSet<>();
 
     /** Fields for build skeletons, not used for conflict checking
      * If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
@@ -45,7 +45,7 @@ public class TypeRelationPathManager<T> {
     public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
     public final Map<T, TypeConstraint> sourceToConstraints = new HashMap<>();
 
-    public TypeRelationPathManager(TypeRelationGraph<T> graph) {
+    public TypeRelationPathManager(TypeFlowGraph<T> graph) {
         this.graph = graph;
         this.source = new HashSet<>();
         this.sink = new HashSet<>();
@@ -83,7 +83,7 @@ public class TypeRelationPathManager<T> {
      * Try merge TypeConstraints using nodes in one path
      * IMPORTANT: This Function should be called after all Graph's pathManager built
      */
-    public void tryMergeOnPath(SymbolExprManager exprManager) {
+    public void tryMergeOnPath(NMAEManager exprManager) {
         for (var src: srcToPathsMap.keySet()) {
             for (var path: srcToPathsMap.get(src)) {
                 Logging.info("TypeRelationPathManager", "============================================== start ==============================================\n");
@@ -105,7 +105,7 @@ public class TypeRelationPathManager<T> {
 
     // Try merge paths from same source, them propagate TypeConstraints to each node start from this source
     // Because there may have some node with paths from different source, we then handle them in next step
-    public void tryMergePathsFromSameSource(SymbolExprManager exprManager) {
+    public void tryMergePathsFromSameSource(NMAEManager exprManager) {
         var workList = new LinkedList<T>(source);
 
         while (!workList.isEmpty()) {
@@ -130,9 +130,9 @@ public class TypeRelationPathManager<T> {
             if (!success) {
                 /* Mark all exprs connect to this source in current function as evil */
                 evilSource.add(src);
-                evilFunction.add(((SymbolExpr)src).function);
+                evilFunction.add(((NMAE)src).function);
                 Logging.info("TypeRelationPathManager", String.format("Evil source nodes found: %s", src));
-                Logging.warn("TypeRelationPathManager", String.format("Evil function found: %s", ((SymbolExpr)src).function));
+                Logging.warn("TypeRelationPathManager", String.format("Evil function found: %s", ((NMAE)src).function));
                 for (var path: pathsFromSrc) {
                     Logging.info("TypeRelationPathManager", path.toString());
                 }
@@ -218,7 +218,7 @@ public class TypeRelationPathManager<T> {
                     if (!success) {
                         Logging.warn("TypeRelationPathManager", String.format("Evil nodes found: %s", node));
                         evilNodes.add(node);
-                        evilFunction.add(((SymbolExpr)node).function);
+                        evilFunction.add(((NMAE)node).function);
 
                         /* Start debugging */
                         for (var layout: layoutToConstraints.keySet()) {
@@ -258,7 +258,7 @@ public class TypeRelationPathManager<T> {
     /**
      * Removed edges are mustRemove + (mayRemove - keepEdges)
      */
-    public Set<TypeRelationGraph.TypeRelationEdge> getEdgesToRemove() {
+    public Set<TypeFlowGraph.TypeRelationEdge> getEdgesToRemove() {
         /* Add all edges of current conflict node to mustRemove */
         for (var node: evilNodes) {
             mayRemove.addAll(graph.getGraph().edgesOf(node));
@@ -278,7 +278,7 @@ public class TypeRelationPathManager<T> {
      * This method is actually very similar to tryMergeOnPath
      * @param exprManager SymbolExprManager
      */
-    public void mergeOnPath(SymbolExprManager exprManager) {
+    public void mergeOnPath(NMAEManager exprManager) {
         for (var src: srcToPathsMap.keySet()) {
             for (var path: srcToPathsMap.get(src)) {
                 var success = path.tryMergeOnPath(exprManager);
@@ -399,7 +399,7 @@ public class TypeRelationPathManager<T> {
 
         if (mergedConstraints.isEmpty()) { return; }
 
-        var exprs = new HashSet<SymbolExpr>();
+        var exprs = new HashSet<NMAE>();
         for (var src: sources) {
             var children = sourceToChildren.get(src);
             if (children == null) {
@@ -407,7 +407,7 @@ public class TypeRelationPathManager<T> {
                 continue;
             }
             for (var node: children) {
-                exprs.add((SymbolExpr) node);
+                exprs.add((NMAE) node);
             }
         }
 
@@ -511,15 +511,15 @@ public class TypeRelationPathManager<T> {
      * @param lcs given Longest Common Subpath in the set of paths
      * @param paths set of paths
      */
-    private Set<TypeRelationGraph.TypeRelationEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
-        Set<TypeRelationGraph.TypeRelationEdge> endEdges = new HashSet<>();
+    private Set<TypeFlowGraph.TypeRelationEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+        Set<TypeFlowGraph.TypeRelationEdge> endEdges = new HashSet<>();
         if (lcs.isEmpty()) {
             return endEdges;
         }
 
         for (var path: paths) {
             List<T> nodes = path.nodes;
-            List<TypeRelationGraph.TypeRelationEdge> edges = path.edges;
+            List<TypeFlowGraph.TypeRelationEdge> edges = path.edges;
 
             // Find the start index of the LCS in the current path
             int startIdx = Collections.indexOfSubList(nodes, lcs);
@@ -544,14 +544,14 @@ public class TypeRelationPathManager<T> {
     }
 
 
-    private Set<TypeRelationGraph.TypeRelationEdge> getEdgesInLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+    private Set<TypeFlowGraph.TypeRelationEdge> getEdgesInLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
         // Initialize a set to store the edges within the LCS
-        Set<TypeRelationGraph.TypeRelationEdge> lcsEdges = new HashSet<>();
+        Set<TypeFlowGraph.TypeRelationEdge> lcsEdges = new HashSet<>();
 
         // Loop through each path in the set
         for (TypeRelationPath<T> path : paths) {
             List<T> nodes = path.nodes;
-            List<TypeRelationGraph.TypeRelationEdge> edges = path.edges;
+            List<TypeFlowGraph.TypeRelationEdge> edges = path.edges;
 
             // Find the starting index of LCS in the current path
             int startIdx = Collections.indexOfSubList(nodes, lcs);
@@ -577,19 +577,19 @@ public class TypeRelationPathManager<T> {
     }
 
     private Set<TypeRelationPath<T>> splitPathsByLCS(Set<TypeRelationPath<T>> candidatePaths,
-                                                     Set<TypeRelationGraph.TypeRelationEdge> endEdgesOfLCS,
-                                                     SymbolExprManager exprManager) {
+                                                     Set<TypeFlowGraph.TypeRelationEdge> endEdgesOfLCS,
+                                                     NMAEManager exprManager) {
         Set<TypeRelationPath<T>> newPaths = new HashSet<>();
 
         for (TypeRelationPath<T> path : candidatePaths) {
             List<T> nodes = path.nodes;
-            List<TypeRelationGraph.TypeRelationEdge> edges = path.edges;
+            List<TypeFlowGraph.TypeRelationEdge> edges = path.edges;
 
             var splitIndex = 0;
             for (int i = 0; i < edges.size(); i++) {
                 if (endEdgesOfLCS.contains(edges.get(i))) {
                     List<T> subPathNodes = new ArrayList<>(nodes.subList(0, i + 1));
-                    List<TypeRelationGraph.TypeRelationEdge> subPathEdges = new ArrayList<>(edges.subList(0, i));
+                    List<TypeFlowGraph.TypeRelationEdge> subPathEdges = new ArrayList<>(edges.subList(0, i));
 
                     if (!subPathNodes.isEmpty()) {
                         TypeRelationPath<T> newPath = new TypeRelationPath<>(subPathNodes, subPathEdges);
@@ -604,7 +604,7 @@ public class TypeRelationPathManager<T> {
             // Add the remaining part of the path as a new path if any
             if (splitIndex < nodes.size()) {
                 List<T> remainingNodes = new ArrayList<>(nodes.subList(splitIndex, nodes.size()));
-                List<TypeRelationGraph.TypeRelationEdge> remainingEdges = new ArrayList<>(edges.subList(splitIndex, edges.size()));
+                List<TypeFlowGraph.TypeRelationEdge> remainingEdges = new ArrayList<>(edges.subList(splitIndex, edges.size()));
 
                 if (!remainingNodes.isEmpty()) {
                     TypeRelationPath<T> newPath = new TypeRelationPath<>(remainingNodes, remainingEdges);

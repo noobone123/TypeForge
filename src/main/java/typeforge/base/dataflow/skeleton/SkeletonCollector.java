@@ -1,10 +1,10 @@
 package typeforge.base.dataflow.skeleton;
 
 import typeforge.base.dataflow.SymbolExpr.ParsedExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.SymbolExpr.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
-import typeforge.base.dataflow.typeRelation.TypeRelationGraph;
+import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
 import typeforge.base.dataflow.typeRelation.TypeRelationPath;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
@@ -15,25 +15,25 @@ import java.util.*;
 public class SkeletonCollector {
     private final Set<Skeleton> skeletons;
     /* Map[SymbolExpr, Set[Skeleton]]: this is temp data structure before handling skeletons */
-    private final Map<SymbolExpr, Set<Skeleton>> exprToSkeletons_T;
+    private final Map<NMAE, Set<Skeleton>> exprToSkeletons_T;
     /* Map[SymbolExpr, Skeleton]: this is final data structure, very important */
-    public final Map<SymbolExpr, Skeleton> exprToSkeletonMap;
+    public final Map<NMAE, Skeleton> exprToSkeletonMap;
 
     /* SymbolExprs that have multiple skeletons */
-    private final Set<SymbolExpr> multiSkeletonExprs;
+    private final Set<NMAE> multiSkeletonExprs;
 
-    private final SymbolExprManager exprManager;
+    private final NMAEManager exprManager;
 
     /** fields for handle conflict paths and nodes */
-    public final Set<TypeRelationPath<SymbolExpr>> evilPaths = new HashSet<>();
-    public final Set<SymbolExpr> evilNodes = new HashSet<>();
-    public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
-    public final Set<SymbolExpr> evilSource = new HashSet<>();
-    public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
-    public final Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
-    public final Set<SymbolExpr> injuredNode = new HashSet<>();
+    public final Set<TypeRelationPath<NMAE>> evilPaths = new HashSet<>();
+    public final Set<NMAE> evilNodes = new HashSet<>();
+    public final Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
+    public final Set<NMAE> evilSource = new HashSet<>();
+    public final Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
+    public final Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
+    public final Set<NMAE> injuredNode = new HashSet<>();
 
-    public SkeletonCollector(SymbolExprManager exprManager) {
+    public SkeletonCollector(NMAEManager exprManager) {
         this.skeletons = new HashSet<>();
         this.exprToSkeletons_T = new HashMap<>();
         this.exprToSkeletonMap = new HashMap<>();
@@ -299,7 +299,7 @@ public class SkeletonCollector {
      */
     public void handleTypeAlias() {
         /* initialize aliasMap using Skeleton's expressions */
-        var aliasMap = new UnionFind<SymbolExpr>();
+        var aliasMap = new UnionFind<NMAE>();
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             aliasMap.initializeWithCluster(skt.exprs);
         }
@@ -315,7 +315,7 @@ public class SkeletonCollector {
      * Handle May Nesting Relationships between Skeletons
      * @param exprsAsArgument SymbolExpr that used as arguments in callSite.
      */
-    public void handleNesting(Set<SymbolExpr> exprsAsArgument) {
+    public void handleNesting(Set<NMAE> exprsAsArgument) {
         /* Add MayNestedSkeleton */
         for (var expr: exprsAsArgument) {
             if (!exprToSkeletonMap.containsKey(expr)) continue;
@@ -480,7 +480,7 @@ public class SkeletonCollector {
     }
 
 
-    private void parseAndSetTypeAlias(SymbolExpr expr, UnionFind<SymbolExpr> aliasMap) {
+    private void parseAndSetTypeAlias(NMAE expr, UnionFind<NMAE> aliasMap) {
         // IMPORTANT: this algorithm is not perfect, it didn't run until a fixed point is reached.
         // So UnionFind may cause some inconsistency problem.
         var parsed = ParsedExpr.parseFieldAccessExpr(expr);
@@ -561,20 +561,20 @@ public class SkeletonCollector {
         skeletons.add(skt);
     }
 
-    public void updateEvilPaths(Set<TypeRelationPath<SymbolExpr>> evilPaths) {
+    public void updateEvilPaths(Set<TypeRelationPath<NMAE>> evilPaths) {
         this.evilPaths.addAll(evilPaths);
     }
 
-    public void updateEvilSource(Set<SymbolExpr> evilSource,
-                                  Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceLCSEdges,
-                                  Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilSourceEndEdges) {
+    public void updateEvilSource(Set<NMAE> evilSource,
+                                  Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceLCSEdges,
+                                  Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceEndEdges) {
         this.evilSource.addAll(evilSource);
         this.evilSourceLCSEdges.putAll(evilSourceLCSEdges);
         this.evilSourceEndEdges.putAll(evilSourceEndEdges);
     }
 
-    public void updateEvilNodes(Set<SymbolExpr> evilNodes,
-                                Map<SymbolExpr, Set<TypeRelationGraph.TypeRelationEdge>> evilNodeEdges) {
+    public void updateEvilNodes(Set<NMAE> evilNodes,
+                                Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilNodeEdges) {
         this.evilNodes.addAll(evilNodes);
         this.evilNodeEdges.putAll(evilNodeEdges);
     }

@@ -2,15 +2,15 @@ package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.SymbolExpr.ParsedExpr;
-import typeforge.base.dataflow.SymbolExpr.SymbolExprManager;
+import typeforge.base.dataflow.SymbolExpr.NMAEManager;
 import typeforge.base.dataflow.skeleton.SkeletonCollector;
-import typeforge.base.dataflow.typeRelation.TypeRelationGraph;
+import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
 import typeforge.base.dataflow.skeleton.TypeConstraint;
-import typeforge.base.dataflow.typeRelation.TypeRelationManager;
+import typeforge.base.dataflow.typeRelation.TFGManager;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.Logging;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.PcodeOp;
@@ -32,9 +32,9 @@ public class InterSolver {
     public HashMap<FunctionNode, IntraContext> intraCtxMap;
 
     public AccessPoints APs;
-    public TypeRelationManager<SymbolExpr> typeRelationManager;
-    public Set<SymbolExpr> fieldExprCandidates;
-    public SymbolExprManager symExprManager;
+    public TFGManager<NMAE> graphManager;
+    public Set<NMAE> fieldExprCandidates;
+    public NMAEManager symExprManager;
     public SkeletonCollector skeletonCollector;
 
     public InterSolver(CallGraph cg) {
@@ -43,9 +43,9 @@ public class InterSolver {
         this.solvedFunc = new HashSet<>();
         this.intraCtxMap = new HashMap<>();
         this.APs = new AccessPoints();
-        this.typeRelationManager = new TypeRelationManager<>();
+        this.graphManager = new TFGManager<>();
         this.fieldExprCandidates = new HashSet<>();
-        this.symExprManager = new SymbolExprManager(this);
+        this.symExprManager = new NMAEManager(this);
         this.skeletonCollector = new SkeletonCollector(symExprManager);
     }
 
@@ -58,12 +58,12 @@ public class InterSolver {
         return intraCtxMap.get(funcNode);
     }
 
-    public void addFieldAccessExpr(SymbolExpr expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType, Function function) {
+    public void addFieldAccessExpr(NMAE expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType, Function function) {
         fieldExprCandidates.add(expr);
         APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType, function);
     }
 
-    public void addTypeRelation(SymbolExpr from, SymbolExpr to, TypeRelationGraph.EdgeType edgeType) {
+    public void addTypeRelation(NMAE from, NMAE to, TypeFlowGraph.EdgeType edgeType) {
         if (from.equals(to)) {
             return;
         }
@@ -73,7 +73,7 @@ public class InterSolver {
             return;
         }
 
-        typeRelationManager.addEdge(from, to, edgeType);
+        graphManager.addEdge(from, to, edgeType);
     }
 
     /**
@@ -98,7 +98,7 @@ public class InterSolver {
         skeletonCollector.handleUnreasonableSkeleton();
         skeletonCollector.handlePtrReference();
         skeletonCollector.handleDecompilerInferredTypes();
-        skeletonCollector.handleNesting(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.ARGUMENT));
+        skeletonCollector.handleNesting(symExprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
         skeletonCollector.handleMemberConflict();
         // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
@@ -106,13 +106,13 @@ public class InterSolver {
 
     private void buildSkeletons(SkeletonCollector collector) {
         Logging.info("InterContext", "========================= Start to merge type constraints =========================");
-        Logging.info("InterContext", "Total Graph Number: " + typeRelationManager.getGraphs().size());
-        typeRelationManager.buildAllPathManagers();
+        Logging.info("InterContext", "Total Graph Number: " + graphManager.getGraphs().size());
+        graphManager.buildAllPathManagers();
 
         Set<Function> evilFunctions = new HashSet<>();
 
         // Remove some redundant edges in the graph
-        for (var graph: typeRelationManager.getGraphs()) {
+        for (var graph: graphManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
@@ -132,7 +132,7 @@ public class InterSolver {
             }
         }
 
-        for (var graph: typeRelationManager.getGraphs()) {
+        for (var graph: graphManager.getGraphs()) {
             for (var node: graph.getGraph().vertexSet()) {
                 if (evilFunctions.contains(node.function)) {
                     /* We don't remove edges of expressions that indicate parameters and local variables */
@@ -150,7 +150,7 @@ public class InterSolver {
             }
         }
 
-        for (var graph: typeRelationManager.getGraphs()) {
+        for (var graph: graphManager.getGraphs()) {
             if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
                 continue;
             }
@@ -169,7 +169,7 @@ public class InterSolver {
      * @param parentTypeConstraint if the expr is a recursive dereference, the parentTypeConstraint is the constraint of the parent expr
      * @param derefDepth the dereference depth of the expr
      */
-    private void buildConstraintByFieldAccessExpr(SymbolExpr expr, TypeConstraint parentTypeConstraint, long derefDepth) {
+    private void buildConstraintByFieldAccessExpr(NMAE expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
         Logging.info("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: %s, derefDepth: %d",
@@ -204,7 +204,7 @@ public class InterSolver {
         }
     }
 
-    private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, SymbolExpr fieldExpr) {
+    private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, NMAE fieldExpr) {
         var fieldAPs = APs.getFieldAccessPoints(fieldExpr);
         baseConstraint.addFieldExpr(offsetValue, fieldExpr);
         for (var ap: fieldAPs) {
@@ -212,7 +212,7 @@ public class InterSolver {
         }
     }
 
-    private boolean isMergedVariableExpr(SymbolExpr expr) {
+    private boolean isMergedVariableExpr(NMAE expr) {
         if (expr.isTemp) { return false; }
         var rootSym = expr.getRootHighSymbol();
         if (rootSym.isGlobal()) { return false; }

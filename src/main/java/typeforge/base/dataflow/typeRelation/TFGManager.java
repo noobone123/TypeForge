@@ -1,6 +1,6 @@
 package typeforge.base.dataflow.typeRelation;
 
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
 import typeforge.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -11,20 +11,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.*;
 
-public class TypeRelationManager<T> {
-    private final Set<TypeRelationGraph<T>> graphs;
-    private final Map<T, TypeRelationGraph<T>> exprToGraph;
+public class TFGManager<T> {
+    private final Set<TypeFlowGraph<T>> graphs;
+    private final Map<T, TypeFlowGraph<T>> exprToGraph;
 
-    public TypeRelationManager() {
+    public TFGManager() {
         this.graphs = new HashSet<>();
         this.exprToGraph = new HashMap<>();
     }
 
-    public void addEdge(T from, T to, TypeRelationGraph.EdgeType type) {
-        TypeRelationGraph<T> fromGraph = exprToGraph.get(from);
-        TypeRelationGraph<T> toGraph = exprToGraph.get(to);
+    public void addEdge(T from, T to, TypeFlowGraph.EdgeType type) {
+        TypeFlowGraph<T> fromGraph = exprToGraph.get(from);
+        TypeFlowGraph<T> toGraph = exprToGraph.get(to);
         if (fromGraph == null && toGraph == null) {
-            TypeRelationGraph<T> newGraph = new TypeRelationGraph<T>();
+            TypeFlowGraph<T> newGraph = new TypeFlowGraph<T>();
             newGraph.addEdge(from, to, type);
             graphs.add(newGraph);
             exprToGraph.put(from, newGraph);
@@ -49,17 +49,17 @@ public class TypeRelationManager<T> {
     }
 
     public boolean hasEdge(T from, T to) {
-        TypeRelationGraph<T> fromGraph = exprToGraph.get(from);
-        TypeRelationGraph<T> toGraph = exprToGraph.get(to);
+        TypeFlowGraph<T> fromGraph = exprToGraph.get(from);
+        TypeFlowGraph<T> toGraph = exprToGraph.get(to);
         return fromGraph != null && fromGraph == toGraph;
     }
 
 
-    public TypeRelationGraph<T> getTypeRelationGraph(T node) {
+    public TypeFlowGraph<T> getTypeRelationGraph(T node) {
         return exprToGraph.get(node);
     }
 
-    public Set<TypeRelationGraph<T>> getGraphs() {
+    public Set<TypeFlowGraph<T>> getGraphs() {
         return graphs;
     }
 
@@ -76,12 +76,12 @@ public class TypeRelationManager<T> {
      * If a graph has no nodes with fields, it is redundant and should be removed.
      * @param baseToFieldsMap A map from base to its fields
      */
-    public void removeRedundantGraphs(Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap) {
-        Set<TypeRelationGraph<T>> toRemove = new HashSet<>();
+    public void removeRedundantGraphs(Map<NMAE, TreeMap<Long, Set<NMAE>>> baseToFieldsMap) {
+        Set<TypeFlowGraph<T>> toRemove = new HashSet<>();
         for (var graph: graphs) {
             boolean hasInterestedNode = false;
             for (var node: graph.getNodes()) {
-                if (node instanceof SymbolExpr expr && baseToFieldsMap.containsKey(expr) && !baseToFieldsMap.get(expr).isEmpty()) {
+                if (node instanceof NMAE expr && baseToFieldsMap.containsKey(expr) && !baseToFieldsMap.get(expr).isEmpty()) {
                     hasInterestedNode = true;
                     break;
                 }

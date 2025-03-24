@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.skeleton;
 
 import typeforge.base.dataflow.Range;
-import typeforge.base.dataflow.SymbolExpr.SymbolExpr;
+import typeforge.base.dataflow.SymbolExpr.NMAE;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
@@ -16,8 +16,8 @@ public class Skeleton {
 
     public Set<TypeConstraint> constraints = new HashSet<>();
     public TypeConstraint finalConstraint;
-    public Set<SymbolExpr> exprs = new HashSet<>();
-    public Set<SymbolExpr> variables = new HashSet<>();
+    public Set<NMAE> exprs = new HashSet<>();
+    public Set<NMAE> variables = new HashSet<>();
     public boolean hasMultiConstraints = false;
 
     public Map<Long, Set<Skeleton>> ptrReference = new HashMap<>();
@@ -48,17 +48,17 @@ public class Skeleton {
 
     public Skeleton() { }
 
-    public Skeleton(TypeConstraint constraints, Set<SymbolExpr> exprs) {
+    public Skeleton(TypeConstraint constraints, Set<NMAE> exprs) {
         this.constraints.add(constraints);
         this.exprs.addAll(exprs);
     }
 
-    public Skeleton(Set<TypeConstraint> constraints, SymbolExpr expr) {
+    public Skeleton(Set<TypeConstraint> constraints, NMAE expr) {
         this.constraints.addAll(constraints);
         this.exprs.add(expr);
     }
 
-    public Skeleton(Set<TypeConstraint> constraints, Set<SymbolExpr> exprs) {
+    public Skeleton(Set<TypeConstraint> constraints, Set<NMAE> exprs) {
         this.constraints.addAll(constraints);
         this.exprs.addAll(exprs);
     }
@@ -67,7 +67,7 @@ public class Skeleton {
         this.finalType = dt;
     }
 
-    public void addExpr(SymbolExpr expr) {
+    public void addExpr(NMAE expr) {
         exprs.add(expr);
     }
 
@@ -99,7 +99,7 @@ public class Skeleton {
         return true;
     }
 
-    public Set<SymbolExpr> getVariables() {
+    public Set<NMAE> getVariables() {
         for (var expr: exprs) {
             if (expr.isVariable()) {
                 variables.add(expr);
@@ -482,7 +482,7 @@ public class Skeleton {
      */
     public static Optional<Skeleton> mergeSkeletons(Skeleton skt1, Skeleton skt2, boolean isStrongMerge) {
         var newConstraints = new HashSet<TypeConstraint>();
-        var newExprs = new HashSet<SymbolExpr>();
+        var newExprs = new HashSet<NMAE>();
         newConstraints.addAll(skt1.constraints);
         newConstraints.addAll(skt2.constraints);
         newExprs.addAll(skt1.exprs);

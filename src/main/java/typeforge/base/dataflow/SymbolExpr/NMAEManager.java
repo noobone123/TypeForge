@@ -2,7 +2,7 @@ package typeforge.base.dataflow.SymbolExpr;
 
 import typeforge.base.dataflow.skeleton.TypeConstraint;
 import typeforge.base.dataflow.solver.InterSolver;
-import typeforge.base.dataflow.typeRelation.TypeRelationGraph;
+import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
 import typeforge.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
@@ -11,19 +11,19 @@ import ghidra.program.model.pcode.Varnode;
 
 import java.util.*;
 
-public class SymbolExprManager {
+public class NMAEManager {
 
-    Map<SymbolExpr, TypeConstraint> exprToConstraintBeforeMerge;
-    Map<SymbolExpr, TreeMap<Long, Set<SymbolExpr>>> baseToFieldsMap;
-    Map<SymbolExpr, SymbolExpr> fieldToBaseMap;
-    Map<SymbolExpr.Attribute, Set<SymbolExpr>> attributeToExpr;
+    Map<NMAE, TypeConstraint> exprToConstraintBeforeMerge;
+    Map<NMAE, TreeMap<Long, Set<NMAE>>> baseToFieldsMap;
+    Map<NMAE, NMAE> fieldToBaseMap;
+    Map<NMAE.Attribute, Set<NMAE>> attributeToExpr;
     InterSolver interCtx;
-    Map<SymbolExpr, DataType> exprToDecompilerInferredType;
+    Map<NMAE, DataType> exprToDecompilerInferredType;
 
     // mem alias related fields
-    public Map<SymbolExpr, Set<SymbolExpr>> fastMayMemAliasCache;
+    public Map<NMAE, Set<NMAE>> fastMayMemAliasCache;
 
-    public SymbolExprManager(InterSolver interCtx) {
+    public NMAEManager(InterSolver interCtx) {
         exprToConstraintBeforeMerge = new HashMap<>();
 
         baseToFieldsMap = new HashMap<>();
@@ -41,7 +41,7 @@ public class SymbolExprManager {
      * @param offset the offset value
      * @return the fieldAccess Expressions
      */
-    public Optional<Set<SymbolExpr>> getFieldExprsByOffset(SymbolExpr base, long offset) {
+    public Optional<Set<NMAE>> getFieldExprsByOffset(NMAE base, long offset) {
         if (baseToFieldsMap.containsKey(base)) {
             return Optional.ofNullable(baseToFieldsMap.get(base).get(offset));
         } else {
@@ -52,7 +52,7 @@ public class SymbolExprManager {
     /**
      * Update the SymbolExpr's field relationship
      */
-    public void addFieldRelation(SymbolExpr base, long offset, SymbolExpr field) {
+    public void addFieldRelation(NMAE base, long offset, NMAE field) {
         // fieldExprsMap's Value is a Set, because there may be multiple fieldsAccessExpr
         // For example:
         // a: { 0x8: [ *(a + 0x8), *(a + b * 0x10 + 0x8) ] }
@@ -65,12 +65,12 @@ public class SymbolExprManager {
      * @param expr the expression to add attribute to
      * @param attr the attribute to add
      */
-    public void addExprAttribute(SymbolExpr expr, SymbolExpr.Attribute attr) {
+    public void addExprAttribute(NMAE expr, NMAE.Attribute attr) {
         expr.addAttribute(attr);
         attributeToExpr.computeIfAbsent(attr, k -> new HashSet<>()).add(expr);
     }
 
-    public Set<SymbolExpr> getExprsByAttribute(SymbolExpr.Attribute attr) {
+    public Set<NMAE> getExprsByAttribute(NMAE.Attribute attr) {
         return attributeToExpr.getOrDefault(attr, new HashSet<>());
     }
 
@@ -78,7 +78,7 @@ public class SymbolExprManager {
      * Create a TypeConstraint for the given expression
      * @param expr the expression to create constraint for
      */
-    public TypeConstraint createConstraint(SymbolExpr expr) {
+    public TypeConstraint createConstraint(NMAE expr) {
         TypeConstraint constraint = new TypeConstraint();
         exprToConstraintBeforeMerge.put(expr, constraint);
         Logging.debug("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
@@ -90,7 +90,7 @@ public class SymbolExprManager {
      * @param expr the expression to get constraint for
      * @return the TypeConstraint for the given expression
      */
-    public TypeConstraint getConstraint(SymbolExpr expr) {
+    public TypeConstraint getConstraint(NMAE expr) {
         if (exprToConstraintBeforeMerge.containsKey(expr)) {
             Logging.debug("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr, exprToConstraintBeforeMerge.get(expr)));
             return exprToConstraintBeforeMerge.get(expr);
@@ -104,7 +104,7 @@ public class SymbolExprManager {
      * Get or create a TypeConstraint for the given expression
      * @return the TypeConstraint for the given expression
      */
-    public TypeConstraint getOrCreateConstraint(SymbolExpr expr) {
+    public TypeConstraint getOrCreateConstraint(NMAE expr) {
         var result = getConstraint(expr);
         if (result == null) {
             return createConstraint(expr);
@@ -112,11 +112,11 @@ public class SymbolExprManager {
         return result;
     }
 
-    public void addDecompilerInferredType(SymbolExpr expr, DataType dataType) {
+    public void addDecompilerInferredType(NMAE expr, DataType dataType) {
         exprToDecompilerInferredType.put(expr, dataType);
     }
 
-    public Optional<DataType> getInferredType(SymbolExpr expr) {
+    public Optional<DataType> getInferredType(NMAE expr) {
         return Optional.ofNullable(exprToDecompilerInferredType.get(expr));
     }
 
@@ -125,7 +125,7 @@ public class SymbolExprManager {
      * @param expr the expression to get mayMemAliases for
      * @return the mayMemAliases of the given expression
      */
-    public Set<SymbolExpr> fastGetMayMemAliases(SymbolExpr expr) {
+    public Set<NMAE> fastGetMayMemAliases(NMAE expr) {
         // get from cache first
         if (fastMayMemAliasCache.containsKey(expr)) {
             Logging.debug("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
@@ -140,9 +140,9 @@ public class SymbolExprManager {
         var scaleExpr = parsedExpr.scale;
         var offset = parsedExpr.offsetValue;
 
-        var mayAliasExpr = new HashSet<SymbolExpr>();
+        var mayAliasExpr = new HashSet<NMAE>();
 
-        var taG = interCtx.typeRelationManager.getTypeRelationGraph(baseExpr);
+        var taG = interCtx.graphManager.getTypeRelationGraph(baseExpr);
         if (taG == null) {
             return mayAliasExpr;
         }
@@ -161,7 +161,7 @@ public class SymbolExprManager {
 
         for (var path: paths) {
             for (var node: path.nodes) {
-                var result = getFieldExprsByOffset((SymbolExpr) node, offset);
+                var result = getFieldExprsByOffset((NMAE) node, offset);
                 if (result.isPresent()) {
                     mayAliasExpr.addAll(result.get());
                 }
@@ -182,7 +182,7 @@ public class SymbolExprManager {
      * Add operation on two SymbolExpr
      * @return the result of the add operation
      */
-    public SymbolExpr add(SymbolExpr a, SymbolExpr b) {
+    public NMAE add(NMAE a, NMAE b) {
         if (a.hasIndexScale() && b.hasIndexScale()) {
             Logging.error("SymbolExprManager", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
             return null;
@@ -206,9 +206,9 @@ public class SymbolExprManager {
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
-                interCtx.addTypeRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeRelationGraph.EdgeType.INDIRECT);
+                interCtx.addTypeRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeFlowGraph.EdgeType.INDIRECT);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
-                addExprAttribute(a, SymbolExpr.Attribute.MAY_ARRAY_PTR);
+                addExprAttribute(a, NMAE.Attribute.MAY_ARRAY_PTR);
             } else {
                 builder.base(a).offset(b);
             }
@@ -229,7 +229,7 @@ public class SymbolExprManager {
                 builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(add(a.offsetExpr, b));
             } else {
                 builder.base(a.baseExpr).index(a.indexExpr).scale(a.scaleExpr).offset(b);
-                addExprAttribute(a, SymbolExpr.Attribute.MAY_ARRAY_PTR);
+                addExprAttribute(a, NMAE.Attribute.MAY_ARRAY_PTR);
             }
         }
         else {
@@ -243,7 +243,7 @@ public class SymbolExprManager {
      * Multiply operation on two SymbolExpr
      * @return the result of the multiply operation
      */
-    public SymbolExpr multiply(SymbolExpr a, SymbolExpr b) {
+    public NMAE multiply(NMAE a, NMAE b) {
         if (!a.isConst() && !b.isConst) {
             Logging.warn("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
             return null;
@@ -279,13 +279,13 @@ public class SymbolExprManager {
      * Dereference operation on a SymbolExpr
      * @return the result of the dereference operation
      */
-    public SymbolExpr dereference(SymbolExpr a) {
+    public NMAE dereference(NMAE a) {
         if (a.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot dereference a constant value.");
         }
         var newExpr = new Builder().dereference(a).build();
         if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            interCtx.addTypeRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeRelationGraph.EdgeType.INDIRECT);
+            interCtx.addTypeRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeFlowGraph.EdgeType.INDIRECT);
         }
         return newExpr;
     }
@@ -294,7 +294,7 @@ public class SymbolExprManager {
      * Reference operation on a SymbolExpr
      * @return the result of the reference operation
      */
-    public SymbolExpr reference(SymbolExpr a) {
+    public NMAE reference(NMAE a) {
         if (a.isNoZeroConst()) {
             throw new IllegalArgumentException("Cannot reference a constant value.");
         }
@@ -306,24 +306,24 @@ public class SymbolExprManager {
      * Builder Pattern for creating SymbolExpr
      */
     public static class Builder {
-        private static final Map<Integer, SymbolExpr> builderCache = new HashMap<>();
-        private static final Map<String, SymbolExpr> exprStringToExpr = new HashMap<>();
-        public SymbolExpr baseExpr = null;
-        public SymbolExpr indexExpr = null;
-        public SymbolExpr scaleExpr = null;
-        public SymbolExpr offsetExpr = null;
+        private static final Map<Integer, NMAE> builderCache = new HashMap<>();
+        private static final Map<String, NMAE> exprStringToExpr = new HashMap<>();
+        public NMAE baseExpr = null;
+        public NMAE indexExpr = null;
+        public NMAE scaleExpr = null;
+        public NMAE offsetExpr = null;
         public HighSymbol rootSym = null;
         public long constant = 0;
         public boolean dereference = false;
         public boolean reference = false;
-        public SymbolExpr nestedExpr = null;
+        public NMAE nestedExpr = null;
         public boolean isConst = false;
         public boolean isGlobal = false;
         public Address globalAddr = null;
         public boolean isTemp = false;
         public Varnode temp = null;
 
-        public Builder base(SymbolExpr base) {
+        public Builder base(NMAE base) {
             this.baseExpr = base;
 
             if (base.isGlobal) {
@@ -333,17 +333,17 @@ public class SymbolExprManager {
             return this;
         }
 
-        public Builder index(SymbolExpr index) {
+        public Builder index(NMAE index) {
             this.indexExpr = index;
             return this;
         }
 
-        public Builder scale(SymbolExpr scale) {
+        public Builder scale(NMAE scale) {
             this.scaleExpr = scale;
             return this;
         }
 
-        public Builder offset(SymbolExpr offset) {
+        public Builder offset(NMAE offset) {
             this.offsetExpr = offset;
             return this;
         }
@@ -359,7 +359,7 @@ public class SymbolExprManager {
             return this;
         }
 
-        public Builder dereference(SymbolExpr nested) {
+        public Builder dereference(NMAE nested) {
             this.dereference = true;
             this.nestedExpr = nested;
             this.isGlobal = nested.isGlobal;
@@ -367,7 +367,7 @@ public class SymbolExprManager {
             return this;
         }
 
-        public Builder reference(SymbolExpr nested) {
+        public Builder reference(NMAE nested) {
             this.reference = true;
             this.nestedExpr = nested;
             this.isGlobal = nested.isGlobal;
@@ -382,7 +382,7 @@ public class SymbolExprManager {
             return this;
         }
 
-        public SymbolExpr build() {
+        public NMAE build() {
             if ((indexExpr != null && scaleExpr == null) || (indexExpr == null && scaleExpr != null)) {
                 throw new IllegalArgumentException("indexExpr and scaleExpr must either both be null or both be non-null.");
             }
@@ -408,7 +408,7 @@ public class SymbolExprManager {
                 return builderCache.get(hash);
             }
 
-            SymbolExpr expr = new SymbolExpr(this);
+            NMAE expr = new NMAE(this);
             builderCache.put(hash, expr);
             exprStringToExpr.put(expr.toString(), expr);
             return expr;
