@@ -54,7 +54,11 @@ public class IntraSolver {
         this.tracedVarnodes = new HashSet<>();
         this.dataFlowFacts = new HashMap<>();
         this.returnExprs = new HashSet<>();
+
+        // Following Components are derived from InterSolver
         this.exprManager = exprManager;
+        this.graphManager = graphManager;
+        this.APs = APs;
 
         this.visitor = new PCodeVisitor(this.funcNode, this, true);
     }

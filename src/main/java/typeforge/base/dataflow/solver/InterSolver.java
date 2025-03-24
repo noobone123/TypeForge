@@ -45,7 +45,9 @@ public class InterSolver {
     }
 
     public IntraSolver createIntraSolver(FunctionNode funcNode) {
-        IntraSolver intraSolver = new IntraSolver(funcNode, symExprManager, graphManager, APs);
+        IntraSolver intraSolver =
+                new IntraSolver(funcNode, symExprManager, graphManager, APs);
+
         intraSolverMap.put(funcNode, intraSolver);
         return intraSolver;
     }
