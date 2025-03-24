@@ -111,6 +111,19 @@ public class TypeAnalyzer {
         var decompiledFuncCnt = callback.decompileCount;
         Logging.info("TypeAnalyzer", String.format("Decompiled function count: %d", decompiledFuncCnt));
 
+        // Do some post-decompile preparation
+        for (var funcNode: sortedFuncs) {
+            // Fix function prototype
+            if (funcNode.needFixPrototype) {
+                var success = funcNode.fixFunctionProto();
+                if (!success) {
+                    Logging.error("TypeAnalyzer", "Failed to fix function prototype: " + funcNode.value.getName());
+                } else {
+                    Logging.info("TypeAnalyzer", "Fixed function prototype: " + funcNode.value.getName());
+                }
+            }
+        }
+
         Global.prepareAnalysisEndTime = System.currentTimeMillis();
     }
 

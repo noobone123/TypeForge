@@ -75,8 +75,47 @@ public class FunctionNode extends NodeBase<Function> {
         super(value, id);
     }
 
-    public void setTypeAgnostic() {
-        isTypeAgnostic = true;
+    /**
+     * Initialize the function node, including:
+     * 1. Check if the function prototype need to be fixed
+     * 2. Check if the local variables need to be fixed
+     * 3. Check if the local variables need to be split
+     * 4. Collect pcode, set parameters, local variables and global variables
+     */
+    public boolean initialize() {
+        if (!isDecompiled) {
+            Logging.warn("FunctionNode", "Function not decompiled: " + value.getName());
+            return false;
+        }
+
+        var newParams = checkPrototype();
+        // Prototype fix should be done after all functions are decompiled,
+        // because it may influence other function's decompile result
+        if (newParams.isPresent()) {
+            needFixPrototype = true;
+            this.newParams = newParams.get();
+        }
+
+        var result = checkNeedSplitParams();
+        if (result.isPresent()) {
+            var splitCandidates = new HashSet<>(result.get());
+            for (var sym : splitCandidates) {
+                splitMergedVariables(sym);
+            }
+            if (!reDecompile()) { return false; }
+        }
+
+        var fixCandidates = checkLocalVariables();
+        if (fixCandidates.isPresent()) {
+            fixLocalVariableDataType(fixCandidates.get());
+            if (!reDecompile()) { return false; }
+        }
+
+        setPCodeInfo();
+        setParameters();
+        setLocalVariables();
+        setGlobalVariables();
+        return true;
     }
 
     /**
@@ -110,7 +149,7 @@ public class FunctionNode extends NodeBase<Function> {
         }
     }
 
-    private void fixFuncProto(List<HighSymbol> newParams) {
+    private void doPrototypeFix(List<HighSymbol> newParams) {
         // init newParamsDef with newParams
         var newParamsDef = new ParameterDefinition[newParams.size()];
         for (var i = 0; i < newParams.size(); i++) {
@@ -146,15 +185,22 @@ public class FunctionNode extends NodeBase<Function> {
         return result.isEmpty() ? Optional.empty() : Optional.of(result);
     }
 
-
-    private void fixLocalVariableDataType(Set<HighSymbol> candidates) {
-        for (var sym : candidates) {
-            var newDT = DataTypeHelper.getDataTypeByName("void");
-            if (newDT == null) {
-                Logging.warn("FunctionNode", "Failed to find datatype");
-                continue;
+    public void setPCodeInfo() {
+        returnOp = null;
+        callSites.clear();
+        for (var block : hFunc.getBasicBlocks()) {
+            var iter = block.getIterator();
+            while (iter.hasNext()) {
+                PcodeOp op = iter.next();
+                pCodes.add(op);
+                if (op.getOpcode() == PcodeOp.RETURN) {
+                    returnOp = op;
+                }
+                if (op.getOpcode() == PcodeOp.CALL) {
+                    var callSite = new CallSite(op.getInput(0).getAddress(), op);
+                    callSites.put(op, callSite);
+                }
             }
-            DecompilerHelper.setLocalVariableDataType(sym, newDT, 1);
         }
     }
 
@@ -246,83 +292,22 @@ public class FunctionNode extends NodeBase<Function> {
         return decompileResults.getDecompiledFunction().getC();
     }
 
-
-    public boolean initCheck() {
+    /**
+     * Fix the function's prototype using the new parameters
+     * @return Whether the prototype is fixed successfully
+     */
+    public boolean fixFunctionProto() {
         // Be careful: fix current function's prototype may influence other function's decompile result
         // So fix function's prototype should be done after all functions are decompiled
-        if (needFixPrototype) {
-            Logging.info("FunctionNode", "Need to fix function prototype");
-            fixFuncProto(this.newParams);
-            if (!reDecompile()) { return false; }
-            setPCodeInfo();
-            setParameters();
-            setLocalVariables();
-            setGlobalVariables();
-        }
-        return true;
-    }
-
-
-    /**
-     * Initialize the function node, including:
-     * 1. Check if the function prototype need to be fixed
-     * 2. Check if the local variables need to be fixed
-     * 3. Check if the local variables need to be split
-     * 4. Collect pcode, set parameters, local variables and global variables
-     */
-    public boolean initialize() {
-        if (!isDecompiled) {
-            Logging.warn("FunctionNode", "Function not decompiled: " + value.getName());
-            return false;
-        }
-
-        var newParams = checkPrototype();
-        // Prototype fix should be done after all functions are decompiled,
-        // because it may influence other function's decompile result
-        if (newParams.isPresent()) {
-            needFixPrototype = true;
-            this.newParams = newParams.get();
-        }
-
-        var result = checkNeedSplitParams();
-        if (result.isPresent()) {
-            var splitCandidates = new HashSet<>(result.get());
-            for (var sym : splitCandidates) {
-                splitMergedVariables(sym);
-            }
-            if (!reDecompile()) { return false; }
-        }
-
-        var fixCandidates = checkLocalVariables();
-        if (fixCandidates.isPresent()) {
-            fixLocalVariableDataType(fixCandidates.get());
-            if (!reDecompile()) { return false; }
-        }
-
+        doPrototypeFix(this.newParams);
+        // After fixing prototype, we need to re-decompile the function
+        // and update the decompile result
+        if (!reDecompile()) { return false; }
         setPCodeInfo();
         setParameters();
         setLocalVariables();
         setGlobalVariables();
         return true;
-    }
-
-    public void setPCodeInfo() {
-        returnOp = null;
-        callSites.clear();
-        for (var block : hFunc.getBasicBlocks()) {
-            var iter = block.getIterator();
-            while (iter.hasNext()) {
-                PcodeOp op = iter.next();
-                pCodes.add(op);
-                if (op.getOpcode() == PcodeOp.RETURN) {
-                    returnOp = op;
-                }
-                if (op.getOpcode() == PcodeOp.CALL) {
-                    var callSite = new CallSite(op.getInput(0).getAddress(), op);
-                    callSites.put(op, callSite);
-                }
-            }
-        }
     }
 
     /**
@@ -419,6 +404,20 @@ public class FunctionNode extends NodeBase<Function> {
         }
     }
 
+    private void fixLocalVariableDataType(Set<HighSymbol> candidates) {
+        for (var sym : candidates) {
+            var newDT = DataTypeHelper.getDataTypeByName("void");
+            if (newDT == null) {
+                Logging.warn("FunctionNode", "Failed to find datatype");
+                continue;
+            }
+            DecompilerHelper.setLocalVariableDataType(sym, newDT, 1);
+        }
+    }
+
+    public void setTypeAgnostic() {
+        isTypeAgnostic = true;
+    }
 
     public DataType getDecompilerInferredDT(VariableStorage storage) {
         return decompilerInferredDT.get(storage);

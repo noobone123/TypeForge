@@ -49,9 +49,6 @@ public class IntraContext {
     }
 
     public boolean initialize() {
-        // initialize current function
-        if (!funcNode.initCheck()) { return false; }
-
         /*
          * IMPORTANT: Update the candidate HighSymbols that need to collect data-flow facts
          * Currently, we only collect data-flow facts on :
