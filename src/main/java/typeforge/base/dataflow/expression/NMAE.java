@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.SymbolExpr;
+package typeforge.base.dataflow.expression;
 
 import typeforge.utils.Logging;
 import ghidra.program.model.address.Address;

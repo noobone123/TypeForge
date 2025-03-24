@@ -1,11 +1,11 @@
 package typeforge.base.dataflow.skeleton;
 
-import typeforge.base.dataflow.SymbolExpr.ParsedExpr;
-import typeforge.base.dataflow.SymbolExpr.NMAE;
-import typeforge.base.dataflow.SymbolExpr.NMAEManager;
+import typeforge.base.dataflow.expression.ParsedExpr;
+import typeforge.base.dataflow.expression.NMAE;
+import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
-import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
-import typeforge.base.dataflow.typeRelation.TypeRelationPath;
+import typeforge.base.dataflow.TFG.TypeFlowGraph;
+import typeforge.base.dataflow.TFG.TypeRelationPath;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import typeforge.utils.TCHelper;

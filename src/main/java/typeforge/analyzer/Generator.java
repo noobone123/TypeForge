@@ -2,8 +2,8 @@ package typeforge.analyzer;
 
 import ghidra.program.model.data.Structure;
 import typeforge.base.dataflow.Range;
-import typeforge.base.dataflow.SymbolExpr.NMAE;
-import typeforge.base.dataflow.SymbolExpr.NMAEManager;
+import typeforge.base.dataflow.expression.NMAE;
+import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.skeleton.Skeleton;
 import typeforge.base.dataflow.skeleton.SkeletonCollector;
 import typeforge.base.passes.SlidingWindowProcessor;

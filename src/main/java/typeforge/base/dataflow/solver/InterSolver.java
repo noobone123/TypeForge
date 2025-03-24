@@ -1,19 +1,16 @@
 package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.AccessPoints;
-import typeforge.base.dataflow.SymbolExpr.ParsedExpr;
-import typeforge.base.dataflow.SymbolExpr.NMAEManager;
+import typeforge.base.dataflow.expression.ParsedExpr;
+import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.skeleton.SkeletonCollector;
-import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
 import typeforge.base.dataflow.skeleton.TypeConstraint;
-import typeforge.base.dataflow.typeRelation.TFGManager;
+import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.Logging;
-import typeforge.base.dataflow.SymbolExpr.NMAE;
-import ghidra.program.model.data.DataType;
+import typeforge.base.dataflow.expression.NMAE;
 import ghidra.program.model.listing.Function;
-import ghidra.program.model.pcode.PcodeOp;
 
 
 import java.util.*;
@@ -29,11 +26,10 @@ public class InterSolver {
     /** The set of solved functions */
     public Set<FunctionNode> solvedFunc;
 
-    public HashMap<FunctionNode, IntraContext> intraCtxMap;
+    public HashMap<FunctionNode, IntraSolver> intraSolverMap;
 
     public AccessPoints APs;
-    public TFGManager<NMAE> graphManager;
-    public Set<NMAE> fieldExprCandidates;
+    public TFGManager graphManager;
     public NMAEManager symExprManager;
     public SkeletonCollector skeletonCollector;
 
@@ -41,39 +37,21 @@ public class InterSolver {
         this.callGraph = cg;
         this.workList = new LinkedList<>();
         this.solvedFunc = new HashSet<>();
-        this.intraCtxMap = new HashMap<>();
+        this.intraSolverMap = new HashMap<>();
         this.APs = new AccessPoints();
-        this.graphManager = new TFGManager<>();
-        this.fieldExprCandidates = new HashSet<>();
-        this.symExprManager = new NMAEManager(this);
+        this.graphManager = new TFGManager();
+        this.symExprManager = new NMAEManager(this.graphManager);
         this.skeletonCollector = new SkeletonCollector(symExprManager);
     }
 
-    public void createIntraContext(FunctionNode funcNode) {
-        IntraContext intraCtx = new IntraContext(funcNode, symExprManager);
-        intraCtxMap.put(funcNode, intraCtx);
+    public IntraSolver createIntraSolver(FunctionNode funcNode) {
+        IntraSolver intraSolver = new IntraSolver(funcNode, symExprManager, graphManager, APs);
+        intraSolverMap.put(funcNode, intraSolver);
+        return intraSolver;
     }
 
-    public IntraContext getIntraContext(FunctionNode funcNode) {
-        return intraCtxMap.get(funcNode);
-    }
-
-    public void addFieldAccessExpr(NMAE expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType, Function function) {
-        fieldExprCandidates.add(expr);
-        APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType, function);
-    }
-
-    public void addTypeRelation(NMAE from, NMAE to, TypeFlowGraph.EdgeType edgeType) {
-        if (from.equals(to)) {
-            return;
-        }
-
-        if (isMergedVariableExpr(from) || isMergedVariableExpr(to)) {
-            Logging.info("InterContext", String.format("Skip adding type alias relation between merged variables: %s and %s", from, to));
-            return;
-        }
-
-        graphManager.addEdge(from, to, edgeType);
+    public IntraSolver getIntraSolver(FunctionNode funcNode) {
+        return intraSolverMap.get(funcNode);
     }
 
     /**
@@ -82,7 +60,7 @@ public class InterSolver {
      */
     public void collectSkeletons() {
         // Parsing all fieldAccess Expressions first to build the constraint's skeleton
-        for (var symExpr : fieldExprCandidates) {
+        for (var symExpr : symExprManager.getFieldExprSet()) {
             buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
@@ -209,18 +187,6 @@ public class InterSolver {
         baseConstraint.addFieldExpr(offsetValue, fieldExpr);
         for (var ap: fieldAPs) {
             baseConstraint.addFieldAccess(offsetValue, ap);
-        }
-    }
-
-    private boolean isMergedVariableExpr(NMAE expr) {
-        if (expr.isTemp) { return false; }
-        var rootSym = expr.getRootHighSymbol();
-        if (rootSym.isGlobal()) { return false; }
-        var function = rootSym.getHighFunction().getFunction();
-        var funcNode = callGraph.getNode(function);
-        if (funcNode.mergedVariables.isEmpty()) { return false; }
-        else {
-            return funcNode.mergedVariables.contains(rootSym);
         }
     }
 

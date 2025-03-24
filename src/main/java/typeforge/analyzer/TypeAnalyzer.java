@@ -4,7 +4,6 @@ import ghidra.app.decompiler.parallel.ParallelDecompiler;
 import ghidra.program.model.listing.Function;
 import ghidra.util.task.TaskMonitor;
 import typeforge.base.dataflow.solver.InterSolver;
-import typeforge.base.dataflow.solver.IntraSolver;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.base.parallel.PrepareFunctionNodeCallback;
@@ -140,12 +139,14 @@ public class TypeAnalyzer {
                 continue;
             }
 
-            interSolver.createIntraContext(funcNode);
-            IntraSolver intraSolver = new IntraSolver(funcNode, interSolver, interSolver.getIntraContext(funcNode));
+            var intraSolver = interSolver.createIntraSolver(funcNode);
             intraSolver.solve();
 
             interSolver.solvedFunc.add(funcNode);
         }
+
+        // TODO: handle Call and add TFG connection after finishing intra-procedural analysis
+        // interSolver.run();
 
         // interSolver.collectSkeletons();
 

@@ -1,6 +1,6 @@
 package typeforge.base.dataflow;
 
-import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.expression.NMAE;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Logging;
 import ghidra.program.model.data.*;

@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.skeleton;
 
 import typeforge.base.dataflow.Range;
-import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.expression.NMAE;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;

@@ -23,22 +23,6 @@ import java.util.*;
 
 public class FunctionNode extends NodeBase<Function> {
 
-    public static class CallSite {
-        public Address calleeAddr;
-        public PcodeOp callOp;
-        public List<Varnode> arguments;
-
-        public CallSite(Address CalleeAddr, PcodeOp callOp) {
-            this.calleeAddr = CalleeAddr;
-            this.callOp = callOp;
-            this.arguments = new ArrayList<>();
-            for (int i = 1; i < callOp.getNumInputs(); i++) {
-                arguments.add(callOp.getInput(i));
-            }
-        }
-    }
-
-
     /** Whether the function is a leaf node in the call graph */
     public boolean isLeaf = false;
     public boolean isMeaningful = false;

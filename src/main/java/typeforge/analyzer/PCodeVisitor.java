@@ -2,11 +2,10 @@ package typeforge.analyzer;
 
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
-import typeforge.base.dataflow.SymbolExpr.NMAE;
-import typeforge.base.dataflow.SymbolExpr.NMAEManager;
-import typeforge.base.dataflow.solver.InterSolver;
-import typeforge.base.dataflow.solver.IntraContext;
-import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
+import typeforge.base.dataflow.expression.NMAE;
+import typeforge.base.dataflow.expression.NMAEManager;
+import typeforge.base.dataflow.solver.IntraSolver;
+import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.DecompilerHelper;
 import typeforge.utils.Global;
@@ -21,23 +20,22 @@ import static typeforge.utils.DecompilerHelper.getSigned;
 
 public class PCodeVisitor {
 
-    public InterSolver interCtx;
-    public IntraContext intraCtx;
     public FunctionNode funcNode;
-    public NMAEManager symExprManager;
+    public IntraSolver intraSolver;
+    public NMAEManager exprManager;
 
     /** The workList queue of current function */
     public LinkedList<PcodeOpAST> workList = new LinkedList<>();
 
     /** If trace all generated expressions during the abstract interpretation */
+    // TODO: maybe tracing only user-specified highSymbol in the future
     private boolean traceAllExprs = false;
 
-    public PCodeVisitor(FunctionNode funcNode, InterSolver interCtx, IntraContext intraCtx, boolean traceAllExprs) {
+    public PCodeVisitor(FunctionNode funcNode, IntraSolver intraSolver, boolean traceAllExprs) {
         this.funcNode = funcNode;
-        this.interCtx = interCtx;
-        this.intraCtx = intraCtx;
-        symExprManager = intraCtx.exprManager;
+        this.intraSolver = intraSolver;
         this.traceAllExprs = traceAllExprs;
+        this.exprManager = intraSolver.exprManager;
     }
 
     /**
@@ -137,12 +135,12 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
         Varnode output = pcodeOp.getOutput();
 
-        if (!intraCtx.isTracedVn(inputs[0])) {
+        if (!intraSolver.isTracedVn(inputs[0])) {
             Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
-        var inputFact_0 = intraCtx.getDataFlowFacts(inputs[0]);
+        var inputFact_0 = intraSolver.getDataFlowFacts(inputs[0]);
         assert inputFact_0 != null;
 
         if (inputs[1].isConstant()) {
@@ -150,23 +148,23 @@ public class PCodeVisitor {
                 var delta = (pcodeOp.getOpcode() == PcodeOp.INT_ADD ? getSigned(inputs[1]) : -getSigned(inputs[1]));
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new NMAEManager.Builder().constant(delta).build();
-                    var newExpr = symExprManager.add(symExpr, deltaSym);
+                    var newExpr = exprManager.add(symExpr, deltaSym);
                     if (newExpr != null) {
-                        intraCtx.updateDataFlowFacts(output, newExpr);
+                        intraSolver.updateDataFlowFacts(output, newExpr);
                     }
                 }
             }
         } else {
-            if (!intraCtx.isTracedVn(inputs[1])) {
+            if (!intraSolver.isTracedVn(inputs[1])) {
                 Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
-            var inputFact_1 = intraCtx.getDataFlowFacts(inputs[1]);
+            var inputFact_1 = intraSolver.getDataFlowFacts(inputs[1]);
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
-                    var newExpr = symExprManager.add(symExpr, symExpr_1);
+                    var newExpr = exprManager.add(symExpr, symExpr_1);
                     if (newExpr != null) {
-                        intraCtx.updateDataFlowFacts(output, newExpr);
+                        intraSolver.updateDataFlowFacts(output, newExpr);
                     }
                 }
             }
@@ -178,21 +176,21 @@ public class PCodeVisitor {
         var inputVn = pcodeOp.getInput(0);
         var outputVn = pcodeOp.getOutput();
 
-        if (!intraCtx.isTracedVn(inputVn)) {
+        if (!intraSolver.isTracedVn(inputVn)) {
             return;
         }
 
-        var inputFact = intraCtx.getDataFlowFacts(inputVn);
+        var inputFact = intraSolver.getDataFlowFacts(inputVn);
 
         // If output has already held symbolExpr, we can update the symbol alias map
-        var outputFacts = intraCtx.getDataFlowFacts(outputVn);
+        var outputFacts = intraSolver.getDataFlowFacts(outputVn);
         for (var inputSymExpr: inputFact) {
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    interCtx.addTypeRelation(inputSymExpr, outputSymExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addTFGEdges(inputSymExpr, outputSymExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
-            intraCtx.updateDataFlowFacts(outputVn, inputSymExpr);
+            intraSolver.updateDataFlowFacts(outputVn, inputSymExpr);
         }
     }
 
@@ -206,28 +204,28 @@ public class PCodeVisitor {
     private void handlePtrAdd(PcodeOp pcodeOp) {
         Varnode[] inputs = pcodeOp.getInputs();
 
-        if (!intraCtx.isTracedVn(inputs[0])) {
+        if (!intraSolver.isTracedVn(inputs[0])) {
             Logging.debug("PCOdeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
-        var input0Fact = intraCtx.getDataFlowFacts(inputs[0]);
+        var input0Fact = intraSolver.getDataFlowFacts(inputs[0]);
 
         if (inputs[1].isConstant() && inputs[2].isConstant()) {
             for (var symExpr: input0Fact) {
                 var delta = getSigned(inputs[1]) * getSigned(inputs[2]);
                 if (OffsetSanityCheck(delta)) {
                     var deltaSym = new NMAEManager.Builder().constant(delta).build();
-                    var newExpr = symExprManager.add(symExpr, deltaSym);
+                    var newExpr = exprManager.add(symExpr, deltaSym);
                     if (newExpr != null) {
-                        intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), newExpr);
+                        intraSolver.updateDataFlowFacts(pcodeOp.getOutput(), newExpr);
                     }
                 }
             }
         }
         // inputs[1] is index and inputs[2] is element size
         else if (!inputs[1].isConstant() && inputs[2].isConstant()) {
-            if (!intraCtx.isTracedVn(inputs[1])) {
+            if (!intraSolver.isTracedVn(inputs[1])) {
                 Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
@@ -238,13 +236,13 @@ public class PCodeVisitor {
             }
             var scaleExpr = new NMAEManager.Builder().constant(scaleValue).build();
             for (var symExpr: input0Fact) {
-                var indexFacts = intraCtx.getDataFlowFacts(inputs[1]);
+                var indexFacts = intraSolver.getDataFlowFacts(inputs[1]);
                 for (var indexExpr: indexFacts) {
-                    var newIndexScale = symExprManager.multiply(indexExpr, scaleExpr);
+                    var newIndexScale = exprManager.multiply(indexExpr, scaleExpr);
                     if (newIndexScale != null) {
-                        var newExpr = symExprManager.add(symExpr, newIndexScale);
+                        var newExpr = exprManager.add(symExpr, newIndexScale);
                         if (newExpr != null) {
-                            intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), newExpr);
+                            intraSolver.updateDataFlowFacts(pcodeOp.getOutput(), newExpr);
                         }
                     }
                 }
@@ -280,7 +278,7 @@ public class PCodeVisitor {
                 if (offset.getHigh().getSymbol() != null) {
                     var sym = offset.getHigh().getSymbol();
                     outputExpr = new NMAEManager.Builder().rootSymbol(sym).build();
-                    outputExpr = symExprManager.reference(outputExpr);
+                    outputExpr = exprManager.reference(outputExpr);
                 } else {
                     Logging.warn("PCodeVisitor", String.format("PtrSub handler found an unresolved variable %s", pcodeOp));
                     return;
@@ -295,16 +293,16 @@ public class PCodeVisitor {
             // Global symbol
             var sym = offset.getHigh().getSymbol();
             outputExpr = new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(sym), sym).build();
-            outputExpr = symExprManager.reference(outputExpr);
+            outputExpr = exprManager.reference(outputExpr);
         }
         // if base is a traced varnode, means it's a fieldAccess of a structure
-        else if (intraCtx.isTracedVn(base) && offset.isConstant()) {
-            var baseExprs = intraCtx.getDataFlowFacts(base);
+        else if (intraSolver.isTracedVn(base) && offset.isConstant()) {
+            var baseExprs = intraSolver.getDataFlowFacts(base);
             var offsetValue = getSigned(offset);
             if (OffsetSanityCheck(offsetValue)) {
                 var offsetExpr = new NMAEManager.Builder().constant(offsetValue).build();
                 for (var baseExpr: baseExprs) {
-                    outputExpr = symExprManager.add(baseExpr, offsetExpr);
+                    outputExpr = exprManager.add(baseExpr, offsetExpr);
                 }
             }
         }
@@ -314,13 +312,13 @@ public class PCodeVisitor {
         }
 
         if (outputExpr != null) {
-            var leftExprs = intraCtx.getDataFlowFacts(pcodeOp.getOutput());
+            var leftExprs = intraSolver.getDataFlowFacts(pcodeOp.getOutput());
             if (leftExprs != null) {
                 for (var leftExpr : leftExprs) {
-                    interCtx.addTypeRelation(outputExpr, leftExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addTFGEdges(outputExpr, leftExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
-            intraCtx.updateDataFlowFacts(pcodeOp.getOutput(), outputExpr);
+            intraSolver.updateDataFlowFacts(pcodeOp.getOutput(), outputExpr);
         } else {
             Logging.warn("PCodeVisitor", String.format("PtrSub handler can not resolve %s", pcodeOp));
         }
@@ -334,13 +332,13 @@ public class PCodeVisitor {
         if (output.getHigh() != null && output.getHigh().getSymbol() != null) {
             var highSym = output.getHigh().getSymbol();
             if (!highSym.isGlobal()) {
-                intraCtx.updateDataFlowFacts(output, new NMAEManager.Builder().rootSymbol(highSym).build());
+                intraSolver.updateDataFlowFacts(output, new NMAEManager.Builder().rootSymbol(highSym).build());
             } else {
-                intraCtx.updateDataFlowFacts(output, new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(highSym), highSym).build());
+                intraSolver.updateDataFlowFacts(output, new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(highSym), highSym).build());
             }
         } else {
             for (var input : inputs) {
-                intraCtx.mergeDataFlowFacts(input, output, false);
+                intraSolver.mergeDataFlowFacts(input, output, false);
             }
         }
 
@@ -351,15 +349,15 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
 
-        if (!intraCtx.isTracedVn(input)) {
+        if (!intraSolver.isTracedVn(input)) {
             Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
-        var inputFacts = intraCtx.getDataFlowFacts(input);
+        var inputFacts = intraSolver.getDataFlowFacts(input);
         for (var symExpr : inputFacts) {
             // TODO: IntZext need add constraint ?
-            intraCtx.updateDataFlowFacts(output, symExpr);
+            intraSolver.updateDataFlowFacts(output, symExpr);
         }
     }
 
@@ -368,15 +366,15 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(0);
         var output = pcodeOp.getOutput();
 
-        if (!intraCtx.isTracedVn(input)) {
+        if (!intraSolver.isTracedVn(input)) {
             Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
-        var inputFacts = intraCtx.getDataFlowFacts(input);
+        var inputFacts = intraSolver.getDataFlowFacts(input);
         for (var symExpr : inputFacts) {
             // TODO: IntSext need add constraint ?
-            intraCtx.updateDataFlowFacts(output, symExpr);
+            intraSolver.updateDataFlowFacts(output, symExpr);
         }
     }
 
@@ -385,7 +383,7 @@ public class PCodeVisitor {
         var input0 = pcodeOp.getInput(0);
         var input1 = pcodeOp.getInput(1);
 
-        if (!intraCtx.isTracedVn(input0) && !intraCtx.isTracedVn(input1)) {
+        if (!intraSolver.isTracedVn(input0) && !intraSolver.isTracedVn(input1)) {
             Logging.debug("PCodeVisitor", String.format("both %s * %s is not traced", input0, input1));
             return;
         }
@@ -399,19 +397,19 @@ public class PCodeVisitor {
         KSet<NMAE> inputFacts;
         long size = 0;
         if (input0.isConstant()) {
-            inputFacts = intraCtx.getDataFlowFacts(input1);
+            inputFacts = intraSolver.getDataFlowFacts(input1);
             size = getSigned(input0);
         } else {
-            inputFacts = intraCtx.getDataFlowFacts(input0);
+            inputFacts = intraSolver.getDataFlowFacts(input0);
             size = getSigned(input1);
         }
 
         if (OffsetSanityCheck(size)) {
             var sizeExpr = new NMAEManager.Builder().constant(size).build();
             for (var symExpr : inputFacts) {
-                var newExpr = symExprManager.multiply(symExpr, sizeExpr);
+                var newExpr = exprManager.multiply(symExpr, sizeExpr);
                 if (newExpr != null) {
-                    intraCtx.updateDataFlowFacts(output, newExpr);
+                    intraSolver.updateDataFlowFacts(output, newExpr);
                 }
             }
         }
@@ -439,30 +437,30 @@ public class PCodeVisitor {
         var input = pcodeOp.getInput(1);
         var output = pcodeOp.getOutput();
 
-        if (!intraCtx.isTracedVn(input)) {
+        if (!intraSolver.isTracedVn(input)) {
             Logging.debug("PCodeVisitor", "[PCode] Load addr is not interested: " + input);
             return;
         }
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
-        var leftValueExprs = intraCtx.getDataFlowFacts(output);
-        var loadAddrExprs = intraCtx.getDataFlowFacts(input);
+        var leftValueExprs = intraSolver.getDataFlowFacts(output);
+        var loadAddrExprs = intraSolver.getDataFlowFacts(input);
         for (var loadAddrExpr : loadAddrExprs) {
-            var loadedValueExpr = symExprManager.dereference(loadAddrExpr);
+            var loadedValueExpr = exprManager.dereference(loadAddrExpr);
 
-            interCtx.addFieldAccessExpr(loadedValueExpr, pcodeOp, outDT, AccessPoints.AccessType.LOAD, funcNode.value);
+            intraSolver.addFieldAccessExpr(loadedValueExpr, pcodeOp, outDT, AccessPoints.AccessType.LOAD, funcNode.value);
 
             // If Loaded value is not null, means:
             // a = *(b), so set a and *(b) as type alias
             if (leftValueExprs != null) {
                 for (var leftValueExpr : leftValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Loaded varnode has already held %s, set type alias of %s and %s", leftValueExpr, loadedValueExpr, leftValueExpr));
-                    interCtx.addTypeRelation(loadedValueExpr, leftValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addTFGEdges(loadedValueExpr, leftValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
 
-            intraCtx.updateDataFlowFacts(output, loadedValueExpr);
+            intraSolver.updateDataFlowFacts(output, loadedValueExpr);
         }
     }
 
@@ -475,21 +473,21 @@ public class PCodeVisitor {
         var storedAddrVn = pcodeOp.getInput(1);
         var rightValueVn = pcodeOp.getInput(2);
 
-        if (!intraCtx.isTracedVn(storedAddrVn)) {
+        if (!intraSolver.isTracedVn(storedAddrVn)) {
             Logging.debug("PCodeVisitor", "Store address is not interested: " + storedAddrVn);
             return;
         }
 
-        var rightValueExprs = intraCtx.getDataFlowFacts(rightValueVn);
+        var rightValueExprs = intraSolver.getDataFlowFacts(rightValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
-        for (var storedAddrExpr : intraCtx.getDataFlowFacts(storedAddrVn)) {
-            var storedValueExpr = symExprManager.dereference(storedAddrExpr);
-            interCtx.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE, funcNode.value);
+        for (var storedAddrExpr : intraSolver.getDataFlowFacts(storedAddrVn)) {
+            var storedValueExpr = exprManager.dereference(storedAddrExpr);
+            intraSolver.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE, funcNode.value);
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));
-                    interCtx.addTypeRelation(rightValueExpr, storedValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addTFGEdges(rightValueExpr, storedValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
         }
@@ -497,126 +495,128 @@ public class PCodeVisitor {
 
     private void handleINDCall(PcodeOp pcodeOp) {
         var indirectCallVn = pcodeOp.getInput(0);
-        if (!intraCtx.isTracedVn(indirectCallVn)) {
+        if (!intraSolver.isTracedVn(indirectCallVn)) {
             Logging.debug("PCodeVisitor", "[PCode] Indirect Call is not interested: " + indirectCallVn);
             return;
         }
 
-        var indirectCallFacts = intraCtx.getDataFlowFacts(indirectCallVn);
+        var indirectCallFacts = intraSolver.getDataFlowFacts(indirectCallVn);
         for (var symExpr : indirectCallFacts) {
-            symExprManager.addExprAttribute(symExpr, NMAE.Attribute.CODE_PTR);
+            exprManager.addExprAttribute(symExpr, NMAE.Attribute.CODE_PTR);
         }
     }
 
 
     private void handleReturn(PcodeOp pcodeOp) {
         for (var retVn : pcodeOp.getInputs()) {
-            if (!intraCtx.isTracedVn(retVn)) {
+            if (!intraSolver.isTracedVn(retVn)) {
                 Logging.debug("PCodeVisitor", "[PCode] Return value is not interested: " + retVn);
                 continue;
             }
 
-            var retFacts = intraCtx.getDataFlowFacts(retVn);
+            var retFacts = intraSolver.getDataFlowFacts(retVn);
             for (var retExpr : retFacts) {
-                intraCtx.setReturnExpr(retExpr);
-                symExprManager.addExprAttribute(retExpr, NMAE.Attribute.RETURN);
+                intraSolver.setReturnExpr(retExpr);
+                exprManager.addExprAttribute(retExpr, NMAE.Attribute.RETURN);
                 Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
     }
 
     private void handleCall(PcodeOp pcodeOp) {
-        var calleeAddr = pcodeOp.getInput(0).getAddress();
-        var calleeNode = interCtx.callGraph.getNodebyAddr(calleeAddr);
-        var callSite = funcNode.callSites.get(pcodeOp);
+        // TODO: handle Call and add TFG connection after finishing intra-procedural analysis
+        // var callSite = funcNode.callSites.get(pcodeOp);
 
-        if (calleeNode == null) {
-            Logging.warn("PCodeVisitor", "Callee function is not found: " + calleeAddr);
-            return;
-        }
-        if (!interCtx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
-            Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
-            return;
-        } else if (calleeNode.isTypeAgnostic) {
-            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is type agnostic, skip.");
-            return;
-        } else if (calleeNode.isExternal) {
-            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is an external function");
-        } else {
-            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");
-        }
+//        var calleeAddr = pcodeOp.getInput(0).getAddress();
+//        var calleeNode = interCtx.callGraph.getNodebyAddr(calleeAddr);
 
-        var totalArgNum = 0;
-        if (calleeNode.isVarArg) {
-            Logging.info("PCodeVisitor", String.format("Callee function %s is vararg", calleeNode.value.getName()));
-            totalArgNum = calleeNode.fixedParamNum;
-            if (totalArgNum > calleeNode.parameters.size()) {
-                totalArgNum = calleeNode.parameters.size();
-            }
-        } else {
-            totalArgNum = calleeNode.parameters.size();
-        }
-
-        for (int argIdx = 0; argIdx < totalArgNum; argIdx++) {
-            var argVn = callSite.arguments.get(argIdx);
-            if (!intraCtx.isTracedVn(argVn)) {
-                Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
-                continue;
-            }
-
-            var argFacts = intraCtx.getDataFlowFacts(argVn);
-            for (var argExpr : argFacts) {
-                symExprManager.addExprAttribute(argExpr, NMAE.Attribute.ARGUMENT);
-
-                if (!calleeNode.isExternal) {
-                    var param = calleeNode.parameters.get(argIdx);
-                    var paramExpr = new NMAEManager.Builder().rootSymbol(param).build();
-                    interCtx.addTypeRelation(argExpr, paramExpr, TypeFlowGraph.EdgeType.CALL);
-                }
-            }
-        }
-
-        if (calleeNode.isExternal) {
-            handleExternalCall(pcodeOp, calleeNode);
-            return;
-        }
-
-        // handle ReturnValue's receiver
-        var receiverVn = pcodeOp.getOutput();
-        if (receiverVn != null) {
-            var retExprs = interCtx.intraCtxMap.get(calleeNode).getReturnExpr();
-            if (retExprs.isEmpty()) {
-                Logging.warn("PCodeVisitor", "Callee's Return Value is not set but Receiver exists.");
-            } else {
-                Logging.info("PCodeVisitor", "setting callsite receiver ...");
-                var receiverFacts = intraCtx.getDataFlowFacts(receiverVn);
-                if (receiverFacts != null) {
-                    for (var receiverExpr : receiverFacts) {
-                        for (var retValueExpr : retExprs) {
-                            interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
-                        }
-                    }
-                } else {
-                    if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
-                        Logging.warn("PCodeVisitor", String.format("Receiver's %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
-                    }
-                    else {
-                        var receiverLongDescend = receiverVn.getLoneDescend();
-                        var outputVn = receiverLongDescend.getOutput();
-                        var newReceiverFacts = intraCtx.getDataFlowFacts(outputVn);
-                        if (newReceiverFacts != null) {
-                            for (var receiverExpr : newReceiverFacts) {
-                                for (var retValueExpr : retExprs) {
-                                    interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
-                                }
-                            }
-                        } else {
-                            Logging.warn("PCodeVisitor", "????????????????????");
-                        }
-                    }
-                }
-            }
-        }
+//        if (calleeNode == null) {
+//            Logging.warn("PCodeVisitor", "Callee function is not found: " + calleeAddr);
+//            return;
+//        }
+//        if (!interCtx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
+//            Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
+//            return;
+//        } else if (calleeNode.isTypeAgnostic) {
+//            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is type agnostic, skip.");
+//            return;
+//        } else if (calleeNode.isExternal) {
+//            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is an external function");
+//        } else {
+//            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");
+//        }
+//
+//        var totalArgNum = 0;
+//        if (calleeNode.isVarArg) {
+//            Logging.info("PCodeVisitor", String.format("Callee function %s is vararg", calleeNode.value.getName()));
+//            totalArgNum = calleeNode.fixedParamNum;
+//            if (totalArgNum > calleeNode.parameters.size()) {
+//                totalArgNum = calleeNode.parameters.size();
+//            }
+//        } else {
+//            totalArgNum = calleeNode.parameters.size();
+//        }
+//
+//        for (int argIdx = 0; argIdx < totalArgNum; argIdx++) {
+//            var argVn = callSite.arguments.get(argIdx);
+//            if (!intraSolver.isTracedVn(argVn)) {
+//                Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
+//                continue;
+//            }
+//
+//            var argFacts = intraSolver.getDataFlowFacts(argVn);
+//            for (var argExpr : argFacts) {
+//                exprManager.addExprAttribute(argExpr, NMAE.Attribute.ARGUMENT);
+//
+//                if (!calleeNode.isExternal) {
+//                    var param = calleeNode.parameters.get(argIdx);
+//                    var paramExpr = new NMAEManager.Builder().rootSymbol(param).build();
+//                    interCtx.addTypeRelation(argExpr, paramExpr, TypeFlowGraph.EdgeType.CALL);
+//                }
+//            }
+//        }
+//
+//        if (calleeNode.isExternal) {
+//            handleExternalCall(pcodeOp, calleeNode);
+//            return;
+//        }
+//
+//        // handle ReturnValue's receiver
+//        var receiverVn = pcodeOp.getOutput();
+//        if (receiverVn != null) {
+//            var retExprs = interCtx.intraSolverMap.get(calleeNode).getReturnExpr();
+//            if (retExprs.isEmpty()) {
+//                Logging.warn("PCodeVisitor", "Callee's Return Value is not set but Receiver exists.");
+//            } else {
+//                Logging.info("PCodeVisitor", "setting callsite receiver ...");
+//                var receiverFacts = intraSolver.getDataFlowFacts(receiverVn);
+//                if (receiverFacts != null) {
+//                    for (var receiverExpr : receiverFacts) {
+//                        for (var retValueExpr : retExprs) {
+//                            interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
+//                        }
+//                    }
+//                } else {
+//                    if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
+//                        Logging.warn("PCodeVisitor", String.format("Receiver's %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
+//                    }
+//                    else {
+//                        var receiverLongDescend = receiverVn.getLoneDescend();
+//                        var outputVn = receiverLongDescend.getOutput();
+//                        var newReceiverFacts = intraSolver.getDataFlowFacts(outputVn);
+//                        if (newReceiverFacts != null) {
+//                            for (var receiverExpr : newReceiverFacts) {
+//                                for (var retValueExpr : retExprs) {
+//                                    intraSolver.addTFGEdges(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
+//                                }
+//                            }
+//                        } else {
+//                            Logging.warn("PCodeVisitor", "????????????????????");
+//                        }
+//                    }
+//                }
+//            }
+//        }
     }
 
 
@@ -628,9 +628,9 @@ public class PCodeVisitor {
             case "memset" -> {
                 var lengthArg = pcodeOp.getInput(3);
                 if (lengthArg.isConstant()) {
-                    var ptrExprs = intraCtx.getDataFlowFacts(pcodeOp.getInput(1));
+                    var ptrExprs = intraSolver.getDataFlowFacts(pcodeOp.getInput(1));
                     for (var ptrExpr : ptrExprs) {
-                        symExprManager.getOrCreateConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
+                        exprManager.getOrCreateConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
                         Logging.info("PCodeVisitor", "memset: " + ptrExpr + " size: " + lengthArg.getOffset());
                     }
                 }
@@ -640,18 +640,18 @@ public class PCodeVisitor {
                 var dstVn = pcodeOp.getInput(1);
                 var srcVn = pcodeOp.getInput(2);
                 var lengthVn = pcodeOp.getInput(3);
-                if (!intraCtx.isTracedVn(dstVn) || !intraCtx.isTracedVn(srcVn)) {
+                if (!intraSolver.isTracedVn(dstVn) || !intraSolver.isTracedVn(srcVn)) {
                     return;
                 }
-                var dstExprs = intraCtx.getDataFlowFacts(dstVn);
-                var srcExprs = intraCtx.getDataFlowFacts(srcVn);
+                var dstExprs = intraSolver.getDataFlowFacts(dstVn);
+                var srcExprs = intraSolver.getDataFlowFacts(srcVn);
                 for (var dstExpr : dstExprs) {
                     for (var srcExpr : srcExprs) {
                         // interCtx.addTypeRelation(srcExpr, dstExpr, TypeRelationGraph.EdgeType.DATAFLOW);
                         Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
                         if (lengthVn.isConstant()) {
-                            symExprManager.getOrCreateConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
-                            symExprManager.getOrCreateConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
+                            exprManager.getOrCreateConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
+                            exprManager.getOrCreateConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
                             dstExpr.setVariableSize(lengthVn.getOffset());
                             dstExpr.setVariableSize(lengthVn.getOffset());
                             Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());

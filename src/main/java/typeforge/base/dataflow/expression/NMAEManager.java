@@ -1,8 +1,8 @@
-package typeforge.base.dataflow.SymbolExpr;
+package typeforge.base.dataflow.expression;
 
 import typeforge.base.dataflow.skeleton.TypeConstraint;
-import typeforge.base.dataflow.solver.InterSolver;
-import typeforge.base.dataflow.typeRelation.TypeFlowGraph;
+import typeforge.base.dataflow.TFG.TFGManager;
+import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
@@ -13,23 +13,24 @@ import java.util.*;
 
 public class NMAEManager {
 
+    Set<NMAE> fieldExprSet = new HashSet<>();
     Map<NMAE, TypeConstraint> exprToConstraintBeforeMerge;
     Map<NMAE, TreeMap<Long, Set<NMAE>>> baseToFieldsMap;
     Map<NMAE, NMAE> fieldToBaseMap;
     Map<NMAE.Attribute, Set<NMAE>> attributeToExpr;
-    InterSolver interCtx;
+    TFGManager graphManager;
     Map<NMAE, DataType> exprToDecompilerInferredType;
 
     // mem alias related fields
     public Map<NMAE, Set<NMAE>> fastMayMemAliasCache;
 
-    public NMAEManager(InterSolver interCtx) {
+    public NMAEManager(TFGManager graphManager) {
         exprToConstraintBeforeMerge = new HashMap<>();
 
         baseToFieldsMap = new HashMap<>();
         fieldToBaseMap = new HashMap<>();
         attributeToExpr = new HashMap<>();
-        this.interCtx = interCtx;
+        this.graphManager = graphManager;
 
         exprToDecompilerInferredType = new HashMap<>();
         fastMayMemAliasCache = new HashMap<>();
@@ -47,6 +48,14 @@ public class NMAEManager {
         } else {
             return Optional.empty();
         }
+    }
+
+    public void addFieldExpr(NMAE fieldExpr) {
+        fieldExprSet.add(fieldExpr);
+    }
+
+    public Set<NMAE> getFieldExprSet() {
+        return fieldExprSet;
     }
 
     /**
@@ -142,7 +151,7 @@ public class NMAEManager {
 
         var mayAliasExpr = new HashSet<NMAE>();
 
-        var taG = interCtx.graphManager.getTypeRelationGraph(baseExpr);
+        var taG = graphManager.getTypeRelationGraph(baseExpr);
         if (taG == null) {
             return mayAliasExpr;
         }
@@ -206,7 +215,9 @@ public class NMAEManager {
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
             if (b.hasIndexScale()) {
                 // Set `base + index * scale` and `base` type alias
-                interCtx.addTypeRelation(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(), a, TypeFlowGraph.EdgeType.INDIRECT);
+                graphManager.addEdge(new Builder().base(a).index(b.indexExpr).scale(b.scaleExpr).build(),
+                        a,
+                        TypeFlowGraph.EdgeType.ALIAS);
                 builder.base(a).index(b.indexExpr).scale(b.scaleExpr).offset(b.offsetExpr);
                 addExprAttribute(a, NMAE.Attribute.MAY_ARRAY_PTR);
             } else {
@@ -285,7 +296,9 @@ public class NMAEManager {
         }
         var newExpr = new Builder().dereference(a).build();
         if (a.hasBase() && a.hasIndexScale() && !a.hasOffset()) {
-            interCtx.addTypeRelation(newExpr, new Builder().dereference(a.baseExpr).build(), TypeFlowGraph.EdgeType.INDIRECT);
+            graphManager.addEdge(newExpr,
+                    new Builder().dereference(a.baseExpr).build(),
+                    TypeFlowGraph.EdgeType.ALIAS);
         }
         return newExpr;
     }

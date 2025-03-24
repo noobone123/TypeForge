@@ -1,7 +1,7 @@
-package typeforge.base.dataflow.typeRelation;
+package typeforge.base.dataflow.TFG;
 
-import typeforge.base.dataflow.SymbolExpr.NMAE;
-import typeforge.base.dataflow.SymbolExpr.NMAEManager;
+import typeforge.base.dataflow.expression.NMAE;
+import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
 import typeforge.base.dataflow.skeleton.Skeleton;
 import typeforge.base.dataflow.skeleton.SkeletonCollector;

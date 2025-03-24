@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.skeleton;
 
 import typeforge.base.dataflow.AccessPoints;
-import typeforge.base.dataflow.SymbolExpr.NMAE;
+import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.types.TypeDescriptor;
 import typeforge.utils.Logging;
 

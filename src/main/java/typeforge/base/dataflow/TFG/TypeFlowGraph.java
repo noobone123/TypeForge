@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.typeRelation;
+package typeforge.base.dataflow.TFG;
 
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
@@ -16,8 +16,7 @@ public class TypeFlowGraph<T> {
         RETURN,
         DATAFLOW,
         REFERENCE,
-        INDIRECT,
-        MEMALIAS,
+        ALIAS,
     }
 
     public static class TypeRelationEdge extends DefaultEdge {
