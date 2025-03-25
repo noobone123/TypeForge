@@ -291,6 +291,7 @@ public class IntraSolver {
 
 
     private boolean isMergedVariableExpr(NMAE expr) {
+        if (expr.isConst) { return false; }
         if (expr.isTemp) { return false; }
         var rootSym = expr.getRootHighSymbol();
         if (rootSym.isGlobal()) { return false; }

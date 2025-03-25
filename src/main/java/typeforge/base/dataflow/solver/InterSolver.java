@@ -1,6 +1,7 @@
 package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.AccessPoints;
+import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.skeleton.SkeletonCollector;
@@ -91,6 +92,7 @@ public class InterSolver {
 
         var intraSolver = intraSolverMap.get(funcNode);
         var bridgeInfo = intraSolver.bridgeInfo;
+        // Iterate each callSite in the function
         for (var callSite: bridgeInfo.keySet()) {
             var calleeNode = callGraph.getNodebyAddr(callSite.calleeAddr);
             if (calleeNode == null) {
@@ -105,7 +107,49 @@ public class InterSolver {
             else {
                 Logging.debug("InterSolver", "Callee node is normal");
 
+                // Handling arguments and parameters
+                var considerParamNum = 0;
+                if (calleeNode.isVarArg) {
+                    Logging.info("InterSolver", "Callee node is vararg: " + callSite.calleeAddr);
+                    considerParamNum = calleeNode.fixedParamNum;
+                } else {
+                    considerParamNum = calleeNode.parameters.size();
+                }
 
+                for (int argIdx = 0; argIdx < considerParamNum; argIdx++) {
+                    var argVn = callSite.arguments.get(argIdx);
+                    if (!intraSolver.isTracedVn(argVn)) {
+                        continue;
+                    }
+
+                    var argFacts = bridgeInfo.get(callSite).get(argVn);
+                    for (var argExpr: argFacts) {
+                        var param = calleeNode.parameters.get(argIdx);
+                        var paramExpr = new NMAEManager.Builder().rootSymbol(param).build();
+                        intraSolver.addTFGEdges(argExpr, paramExpr, TypeFlowGraph.EdgeType.CALL);
+                    }
+                }
+
+                // Handling return value and receiver
+                if (!callSite.hasReceiver()) {
+                    continue;
+                }
+
+                var recevierVn = callSite.receiver;
+                var recevierFacts = bridgeInfo.get(callSite).get(recevierVn);
+                var retExprs = intraSolverMap.get(calleeNode).getReturnExpr();
+                if (retExprs.isEmpty()) {
+                    Logging.warn("InterSolver",
+                            String.format("Callsite %s has receiver but callee %s has no traced return expression",
+                                    callSite, calleeNode.value.getName()));
+                    continue;
+                }
+
+                for (var recevierExpr: recevierFacts) {
+                    for (var retExpr: retExprs) {
+                        intraSolver.addTFGEdges(retExpr, recevierExpr, TypeFlowGraph.EdgeType.RETURN);
+                    }
+                }
             }
         }
     }

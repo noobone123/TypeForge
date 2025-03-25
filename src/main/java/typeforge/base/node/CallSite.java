@@ -3,6 +3,7 @@ package typeforge.base.node;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
+import jnr.ffi.Struct;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,14 @@ public class CallSite {
 
     public boolean hasReceiver() {
         return hasReceiver;
+    }
+
+    @Override
+    public String toString() {
+        return String.format(
+                "CallSite{calleeAddr=%s, PCodeOp=%s",
+                calleeAddr, callOp.toString()
+        );
     }
 
     @Override

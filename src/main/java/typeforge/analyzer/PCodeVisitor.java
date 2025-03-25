@@ -439,7 +439,7 @@ public class PCodeVisitor {
         var output = pcodeOp.getOutput();
 
         if (!intraSolver.isTracedVn(input)) {
-            Logging.debug("PCodeVisitor", "[PCode] Load addr is not interested: " + input);
+            Logging.debug("PCodeVisitor", "Load addr is not interested: " + input);
             return;
         }
 
@@ -497,7 +497,7 @@ public class PCodeVisitor {
     private void handleINDCall(PcodeOp pcodeOp) {
         var indirectCallVn = pcodeOp.getInput(0);
         if (!intraSolver.isTracedVn(indirectCallVn)) {
-            Logging.debug("PCodeVisitor", "[PCode] Indirect Call is not interested: " + indirectCallVn);
+            Logging.debug("PCodeVisitor", "Indirect Call is not interested: " + indirectCallVn);
             return;
         }
 
@@ -511,7 +511,7 @@ public class PCodeVisitor {
     private void handleReturn(PcodeOp pcodeOp) {
         for (var retVn : pcodeOp.getInputs()) {
             if (!intraSolver.isTracedVn(retVn)) {
-                Logging.debug("PCodeVisitor", "[PCode] Return value is not interested: " + retVn);
+                Logging.debug("PCodeVisitor", "Return value is not interested: " + retVn);
                 continue;
             }
 
@@ -519,13 +519,12 @@ public class PCodeVisitor {
             for (var retExpr : retFacts) {
                 intraSolver.setReturnExpr(retExpr);
                 exprManager.addExprAttribute(retExpr, NMAE.Attribute.RETURN);
-                Logging.debug("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
+                Logging.debug("PCodeVisitor", "Setting Return Value: " + retExpr);
             }
         }
     }
 
     private void handleCall(PcodeOp pcodeOp) {
-        // TODO: handle Call and add TFG connection after finishing intra-procedural analysis
         var callSite = funcNode.callSites.get(pcodeOp);
         var argToFacts = new HashMap<Varnode, KSet<NMAE>>();
 
@@ -557,63 +556,8 @@ public class PCodeVisitor {
             }
         }
 
-        // Update the bridgeInfo for the callSite
+        // Update the bridgeInfo for the arguments / parameters
         intraSolver.bridgeInfo.put(callSite, argToFacts);
-
-//        var calleeAddr = pcodeOp.getInput(0).getAddress();
-//        var calleeNode = interCtx.callGraph.getNodebyAddr(calleeAddr);
-
-//        if (calleeNode == null) {
-//            Logging.warn("PCodeVisitor", "Callee function is not found: " + calleeAddr);
-//            return;
-//        }
-//        if (!interCtx.isFunctionSolved(calleeNode) && !calleeNode.isExternal) {
-//            Logging.warn("PCodeVisitor", "Callee function is not solved yet: " + calleeNode.value.getName());
-//            return;
-//        } else if (calleeNode.isTypeAgnostic) {
-//            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is type agnostic, skip.");
-//            return;
-//        } else if (calleeNode.isExternal) {
-//            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is an external function");
-//        } else {
-//            Logging.info("PCodeVisitor", "Callee function: " + calleeNode.value.getName() + " is solved");
-//        }
-//
-//        var totalArgNum = 0;
-//        if (calleeNode.isVarArg) {
-//            Logging.info("PCodeVisitor", String.format("Callee function %s is vararg", calleeNode.value.getName()));
-//            totalArgNum = calleeNode.fixedParamNum;
-//            if (totalArgNum > calleeNode.parameters.size()) {
-//                totalArgNum = calleeNode.parameters.size();
-//            }
-//        } else {
-//            totalArgNum = calleeNode.parameters.size();
-//        }
-//
-//        for (int argIdx = 0; argIdx < totalArgNum; argIdx++) {
-//            var argVn = callSite.arguments.get(argIdx);
-//            if (!intraSolver.isTracedVn(argVn)) {
-//                Logging.debug("PCodeVisitor", "Argument is not interested: " + argVn);
-//                continue;
-//            }
-//
-//            var argFacts = intraSolver.getDataFlowFacts(argVn);
-//            for (var argExpr : argFacts) {
-//                exprManager.addExprAttribute(argExpr, NMAE.Attribute.ARGUMENT);
-//
-//                if (!calleeNode.isExternal) {
-//                    var param = calleeNode.parameters.get(argIdx);
-//                    var paramExpr = new NMAEManager.Builder().rootSymbol(param).build();
-//                    interCtx.addTypeRelation(argExpr, paramExpr, TypeFlowGraph.EdgeType.CALL);
-//                }
-//            }
-//        }
-//
-//        if (calleeNode.isExternal) {
-//            handleExternalCall(pcodeOp, calleeNode);
-//            return;
-//        }
-//
 
         // handle ReturnValue's receiver
         if (!callSite.hasReceiver()) {
@@ -637,6 +581,7 @@ public class PCodeVisitor {
                 var newReceiverVn = receiverLongDescend.getOutput();
                 var newReceiverFacts = intraSolver.getDataFlowFacts(newReceiverVn);
                 if (newReceiverFacts != null) {
+                    callSite.receiver = newReceiverVn;
                     intraSolver.bridgeInfo.computeIfAbsent(
                             callSite,
                             k -> new HashMap<>()
@@ -646,43 +591,6 @@ public class PCodeVisitor {
                 }
             }
         }
-
-
-//        var receiverVn = pcodeOp.getOutput();
-//        if (receiverVn != null) {
-//            var retExprs = interCtx.intraSolverMap.get(calleeNode).getReturnExpr();
-//            if (retExprs.isEmpty()) {
-//                Logging.warn("PCodeVisitor", "Callee's Return Value is not set but Receiver exists.");
-//            } else {
-//                Logging.info("PCodeVisitor", "setting callsite receiver ...");
-//                var receiverFacts = intraSolver.getDataFlowFacts(receiverVn);
-//                if (receiverFacts != null) {
-//                    for (var receiverExpr : receiverFacts) {
-//                        for (var retValueExpr : retExprs) {
-//                            interCtx.addTypeRelation(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
-//                        }
-//                    }
-//                } else {
-//                    if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
-//                        Logging.warn("PCodeVisitor", String.format("Receiver %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
-//                    }
-//                    else {
-//                        var receiverLongDescend = receiverVn.getLoneDescend();
-//                        var outputVn = receiverLongDescend.getOutput();
-//                        var newReceiverFacts = intraSolver.getDataFlowFacts(outputVn);
-//                        if (newReceiverFacts != null) {
-//                            for (var receiverExpr : newReceiverFacts) {
-//                                for (var retValueExpr : retExprs) {
-//                                    intraSolver.addTFGEdges(retValueExpr, receiverExpr, TypeFlowGraph.EdgeType.RETURN);
-//                                }
-//                            }
-//                        } else {
-//                            Logging.warn("PCodeVisitor", "????????????????????");
-//                        }
-//                    }
-//                }
-//            }
-//        }
     }
 
 
