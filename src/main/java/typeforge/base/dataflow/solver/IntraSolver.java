@@ -43,7 +43,6 @@ public class IntraSolver {
     public HashSet<NMAE> returnExprs;
     public int dataFlowFactKSize = 10;
 
-    // TODO: save bridge information used for connecting TFG between functions
     /** The bridge information used for connecting TFG between functions in inter-solver */
     public Map<CallSite, Map<Varnode, KSet<NMAE>>> bridgeInfo;
 
@@ -59,6 +58,8 @@ public class IntraSolver {
         this.exprManager = exprManager;
         this.graphManager = graphManager;
         this.APs = APs;
+
+        this.bridgeInfo = new HashMap<>();
 
         this.visitor = new PCodeVisitor(this.funcNode, this, true);
     }
@@ -115,12 +116,12 @@ public class IntraSolver {
 
     public void addTracedSymbol(HighSymbol highSymbol) {
         tracedSymbols.add(highSymbol);
-        Logging.info("IntraContext", "Add traced symbol: " + highSymbol.getName());
+        Logging.debug("IntraSolver", "Add traced symbol: " + highSymbol.getName());
     }
 
     public void addTracedVarnode(Varnode vn) {
         tracedVarnodes.add(vn);
-        Logging.debug("IntraContext", "Add traced varnode: " + vn.toString());
+        Logging.debug("IntraSolver", "Add traced varnode: " + vn.toString());
     }
 
     /**
@@ -128,7 +129,7 @@ public class IntraSolver {
      */
     public void initDataFlowFacts() {
         for (var symbol: tracedSymbols) {
-            Logging.info("IntraContext", "Candidate HighSymbol: " + symbol.getName());
+            Logging.debug("IntraSolver", "Candidate HighSymbol: " + symbol.getName());
 
             NMAE expr;
             TypeConstraint constraint;
@@ -155,26 +156,26 @@ public class IntraSolver {
 
             if (DataTypeHelper.isCompositeOrArray(dt)) {
                 if (dt instanceof Array array) {
-                    Logging.info("IntraContext", "Found Array " + dt.getName());
+                    Logging.info("IntraSolver", String.format("Found Array: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.ARRAY);
                     expr.setVariableSize(array.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                 }
                 else if (dt instanceof Structure structure) {
-                    Logging.info("IntraContext", "Found Structure " + dt.getName());
+                    Logging.info("IntraSolver", String.format("Found Structure: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.STRUCT);
                     expr.setVariableSize(structure.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                 }
                 else if (dt instanceof Union union) {
-                    Logging.info("IntraContext", "Found Union " + dt.getName());
+                    Logging.info("IntraSolver", String.format("Found Union: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.UNION);
                     expr.setVariableSize(union.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                 }
             } else if (dt instanceof Pointer ptrDT) {
                 if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
-                    Logging.info("IntraContext", "Found Pointer " + ptrDT.getName());
+                    Logging.info("IntraSolver", String.format("Found Pointer to Composite: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_COMPOSITE);
                     if (ptrDT.getDataType() instanceof Array array) {
                         constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
@@ -185,14 +186,16 @@ public class IntraSolver {
                     }
                 }
             } else {
-                Logging.info("IntraContext", "Found Primitive " + dt.getName());
+                Logging.debug("IntraSolver", String.format("Found Primitive: %s -> %s", expr.toString(), dt.getName()));
             }
 
             // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:
             // 1. HighSymbol is not used in the function
-            // 2. HighSymbol is used in the function, but ghidra's decompiler failed to find the HighVariable
+            // 2. Global Variable
+            // 3. Stack Array or Structure
+            // (PS: Stack Array or Structure are actually traced represented as `&varname[Composite]` in the PCodeVisitor)
             if (symbol.getHighVariable() == null) {
-                Logging.warn("IntraContext", funcNode.value.getName() + " -> HighSymbol: " + symbol.getName() + " has no HighVariable");
+                Logging.warn("IntraSolver", funcNode.value.getName() + " -> HighSymbol: " + symbol.getName() + " has no HighVariable");
             } else {
                 // Initialize the dataFlowFacts using the interested varnodes and add
                 // all varnode instances of the HighVariable to the IntraContext's tracedVarnodes
@@ -212,7 +215,7 @@ public class IntraSolver {
     public void updateDataFlowFacts(Varnode vn, NMAE symbolExpr) {
         var curDataFlowFact = dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(dataFlowFactKSize));
         if (curDataFlowFact.add(symbolExpr)) {
-            Logging.debug("IntraContext", "New " + vn + " -> " + curDataFlowFact);
+            Logging.debug("IntraSolver", "New " + vn + " -> " + curDataFlowFact);
         }
         addTracedVarnode(vn);
     }
@@ -239,7 +242,7 @@ public class IntraSolver {
         var inputFacts = dataFlowFacts.get(input);
 
         if (inputFacts == null) {
-            Logging.warn("Context", "Failed to get dataflow fact for " + input);
+            Logging.warn("IntraSolver", "Failed to get dataflow fact for " + input);
             return;
         }
 
@@ -250,7 +253,7 @@ public class IntraSolver {
 
         outputFacts.merge(inputFacts);
         addTracedVarnode(output);
-        Logging.debug("IntraContext", "Merge " + output + " -> " + outputFacts);
+        Logging.debug("IntraSolver", "Merge " + output + " -> " + outputFacts);
     }
 
     /**
@@ -278,7 +281,7 @@ public class IntraSolver {
         }
 
         if (isMergedVariableExpr(from) || isMergedVariableExpr(to)) {
-            Logging.info("TFGManager",
+            Logging.info("IntraSolver",
                     String.format("Skip adding TFG Edges between merged variables: %s and %s", from, to));
             return;
         }

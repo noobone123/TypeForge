@@ -11,6 +11,8 @@ public class CallSite {
     public Address calleeAddr;
     public PcodeOp callOp;
     public List<Varnode> arguments;
+    public Varnode receiver;
+    private boolean hasReceiver = false;
 
     public CallSite(Address CalleeAddr, PcodeOp callOp) {
         this.calleeAddr = CalleeAddr;
@@ -19,6 +21,15 @@ public class CallSite {
         for (int i = 1; i < callOp.getNumInputs(); i++) {
             arguments.add(callOp.getInput(i));
         }
+
+        receiver = callOp.getOutput();
+        if (receiver != null) {
+            hasReceiver = true;
+        }
+    }
+
+    public boolean hasReceiver() {
+        return hasReceiver;
     }
 
     @Override

@@ -91,7 +91,7 @@ public class NMAE {
             this.prefix = String.format("[%s]-%s", this.function.getEntryPoint().toString(), this.function.getName());
         }
 
-        Logging.info("SymbolExpr","Created new SymbolExpr: " + this);
+        Logging.debug("SymbolExpr","Created new SymbolExpr: " + this);
     }
 
     public NMAE getBase() {

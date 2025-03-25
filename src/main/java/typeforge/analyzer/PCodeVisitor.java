@@ -1,5 +1,6 @@
 package typeforge.analyzer;
 
+import ghidra.dbg.target.TargetMemory;
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.expression.NMAE;
@@ -518,14 +519,46 @@ public class PCodeVisitor {
             for (var retExpr : retFacts) {
                 intraSolver.setReturnExpr(retExpr);
                 exprManager.addExprAttribute(retExpr, NMAE.Attribute.RETURN);
-                Logging.info("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
+                Logging.debug("PCodeVisitor", "[PCode] Setting Return Value: " + retExpr);
             }
         }
     }
 
     private void handleCall(PcodeOp pcodeOp) {
         // TODO: handle Call and add TFG connection after finishing intra-procedural analysis
-        // var callSite = funcNode.callSites.get(pcodeOp);
+        var callSite = funcNode.callSites.get(pcodeOp);
+        var argToFacts = new HashMap<Varnode, KSet<NMAE>>();
+
+        for (var arg: callSite.arguments) {
+            // We consider constant callsite arguments because it's useful for following analysis.
+            if (arg.isConstant()) {
+                Logging.debug("PCodeVisitor",
+                        String.format("Argument %s is a constant.", arg));
+
+                var constExpr = new NMAEManager.Builder().constant(getSigned(arg)).build();
+                intraSolver.updateDataFlowFacts(arg, constExpr);
+            }
+
+            if (!intraSolver.isTracedVn(arg)) {
+                if (arg.isUnique()) {
+                    Logging.debug("PCodeVisitor",
+                            String.format("Argument %s maybe an unique string.", arg));
+                }
+
+                Logging.warn("PCodeVisitor", "Argument is not interested: " + arg);
+                continue;
+            }
+
+            var argFacts = intraSolver.getDataFlowFacts(arg);
+            argToFacts.put(arg, argFacts);
+
+            for (var argExpr : argFacts) {
+                exprManager.addExprAttribute(argExpr, NMAE.Attribute.ARGUMENT);
+            }
+        }
+
+        // Update the bridgeInfo for the callSite
+        intraSolver.bridgeInfo.put(callSite, argToFacts);
 
 //        var calleeAddr = pcodeOp.getInput(0).getAddress();
 //        var calleeNode = interCtx.callGraph.getNodebyAddr(calleeAddr);
@@ -581,7 +614,40 @@ public class PCodeVisitor {
 //            return;
 //        }
 //
-//        // handle ReturnValue's receiver
+
+        // handle ReturnValue's receiver
+        if (!callSite.hasReceiver()) {
+            return;
+        }
+
+        var receiverVn = callSite.receiver;
+        var receiverFacts = intraSolver.getDataFlowFacts(receiverVn);
+
+        if (receiverFacts != null) {
+            intraSolver.bridgeInfo.computeIfAbsent(
+                    callSite,
+                    k -> new HashMap<>()
+            ).put(receiverVn, receiverFacts);
+        } else {
+            if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
+                Logging.warn("PCodeVisitor", String.format("Receiver %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
+            }
+            else {
+                var receiverLongDescend = receiverVn.getLoneDescend();
+                var newReceiverVn = receiverLongDescend.getOutput();
+                var newReceiverFacts = intraSolver.getDataFlowFacts(newReceiverVn);
+                if (newReceiverFacts != null) {
+                    intraSolver.bridgeInfo.computeIfAbsent(
+                            callSite,
+                            k -> new HashMap<>()
+                    ).put(newReceiverVn, newReceiverFacts);
+                } else {
+                    Logging.warn("PCodeVisitor", "????????????????????");
+                }
+            }
+        }
+
+
 //        var receiverVn = pcodeOp.getOutput();
 //        if (receiverVn != null) {
 //            var retExprs = interCtx.intraSolverMap.get(calleeNode).getReturnExpr();
@@ -598,7 +664,7 @@ public class PCodeVisitor {
 //                    }
 //                } else {
 //                    if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
-//                        Logging.warn("PCodeVisitor", String.format("Receiver's %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
+//                        Logging.warn("PCodeVisitor", String.format("Receiver %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
 //                    }
 //                    else {
 //                        var receiverLongDescend = receiverVn.getLoneDescend();
