@@ -24,7 +24,9 @@ public class InterSolver {
     /** The workList queue of the whole program */
     public Queue<FunctionNode> workList;
     /** The set of solved functions */
-    public Set<FunctionNode> solvedFunc;
+    public Set<FunctionNode> visitedFunc;
+    /** The set of functions that are stitched with its callee */
+    public Set<FunctionNode> stitchedFunc;
 
     public HashMap<FunctionNode, IntraSolver> intraSolverMap;
 
@@ -36,7 +38,8 @@ public class InterSolver {
     public InterSolver(CallGraph cg) {
         this.callGraph = cg;
         this.workList = new LinkedList<>();
-        this.solvedFunc = new HashSet<>();
+        this.visitedFunc = new HashSet<>();
+        this.stitchedFunc = new HashSet<>();
         this.intraSolverMap = new HashMap<>();
         this.APs = new AccessPoints();
         this.graphManager = new TFGManager();
@@ -54,6 +57,57 @@ public class InterSolver {
 
     public IntraSolver getIntraSolver(FunctionNode funcNode) {
         return intraSolverMap.get(funcNode);
+    }
+
+    /**
+     * Build the whole program TFG by stitching all the function TFGs together.
+     */
+    public void buildWholeProgramTFG() {
+        while (!workList.isEmpty()) {
+            var funcNode = workList.poll();
+            if (!funcNode.isMeaningful) {
+                Logging.info("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
+                continue;
+            }
+            stitchTFG(funcNode);
+            stitchedFunc.add(funcNode);
+        }
+
+        if (stitchedFunc.size() == visitedFunc.size()) {
+            Logging.info("InterSolver", String.format("Stitching succeeded: %d/%d functions are stitched",
+                    stitchedFunc.size(), visitedFunc.size()));
+        } else {
+            Logging.warn("InterSolver", String.format("Stitching failed: %d/%d functions are stitched",
+                    stitchedFunc.size(), visitedFunc.size()));
+        }
+    }
+
+    /**
+     * Stitch the TFG by argument <-> parameter, return value <-> receiver
+     * @param funcNode the stitching function
+     */
+    private void stitchTFG(FunctionNode funcNode) {
+        Logging.info("InterSolver", String.format("Stitching function %s", funcNode.value.getName()));
+
+        var intraSolver = intraSolverMap.get(funcNode);
+        var bridgeInfo = intraSolver.bridgeInfo;
+        for (var callSite: bridgeInfo.keySet()) {
+            var calleeNode = callGraph.getNodebyAddr(callSite.calleeAddr);
+            if (calleeNode == null) {
+                Logging.warn("InterSolver", "Callee node is null: " + callSite.calleeAddr);
+                continue;
+            }
+
+            if (calleeNode.isExternal) {
+                Logging.debug("InterSolver", "Callee node is external: " + callSite.calleeAddr);
+            }
+            // We should keep the callee function is already stitched when we are stitching the caller function
+            else {
+                Logging.debug("InterSolver", "Callee node is normal");
+
+
+            }
+        }
     }
 
     /**
@@ -193,6 +247,6 @@ public class InterSolver {
     }
 
     public boolean isFunctionSolved(FunctionNode funcNode) {
-        return solvedFunc.contains(funcNode);
+        return visitedFunc.contains(funcNode);
     }
 }

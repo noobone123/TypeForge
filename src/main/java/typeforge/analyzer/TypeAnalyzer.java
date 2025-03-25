@@ -36,7 +36,7 @@ public class TypeAnalyzer {
         }
 
         // TODO: just for testing
-        setTypeAgnosticFunctions();
+        // setTypeAgnosticFunctions();
 
         Logging.info("TypeAnalyzer", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
         Logging.info("TypeAnalyzer", String.format("Function count in workList: %d", interSolver.workList.size()));
@@ -132,9 +132,13 @@ public class TypeAnalyzer {
     public void run() {
         markVarArgFunctions();
 
-        while (!interSolver.workList.isEmpty()) {
-            FunctionNode funcNode = interSolver.workList.poll();
-            if (!funcNode.isMeaningful || funcNode.isTypeAgnostic) {
+        // Intra-procedural analysis, build TFG of each function
+        // TODO: intra-procedural analysis in parallel
+        var workListCopy = new LinkedList<>(interSolver.workList);
+
+        while (!workListCopy.isEmpty()) {
+            FunctionNode funcNode = workListCopy.poll();
+            if (!funcNode.isMeaningful) {
                 Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
@@ -142,11 +146,10 @@ public class TypeAnalyzer {
             var intraSolver = interSolver.createIntraSolver(funcNode);
             intraSolver.solve();
 
-            interSolver.solvedFunc.add(funcNode);
+            interSolver.visitedFunc.add(funcNode);
         }
 
-        // TODO: handle Call and add TFG connection after finishing intra-procedural analysis
-        // interSolver.run();
+        interSolver.buildWholeProgramTFG();
 
         // interSolver.collectSkeletons();
 
