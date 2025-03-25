@@ -7,7 +7,7 @@ import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.skeleton.TypeConstraint;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.types.TypeDescriptorManager;
@@ -152,25 +152,27 @@ public class IntraSolver {
                 }
             }
             exprManager.addDecompilerInferredType(expr, dt);
+            // TODO: how to represent these stack allocated HighSymbol,
+            //  as they always have no corresponding HighVariable and Varnodes.
             constraint = exprManager.createConstraint(expr);
 
             if (DataTypeHelper.isCompositeOrArray(dt)) {
                 if (dt instanceof Array array) {
                     Logging.info("IntraSolver", String.format("Found Array: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.ARRAY);
-                    expr.setVariableSize(array.getLength());
+                    // expr.setVariableSize(array.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
                 }
                 else if (dt instanceof Structure structure) {
                     Logging.info("IntraSolver", String.format("Found Structure: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.STRUCT);
-                    expr.setVariableSize(structure.getLength());
+                    // expr.setVariableSize(structure.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                 }
                 else if (dt instanceof Union union) {
                     Logging.info("IntraSolver", String.format("Found Union: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.UNION);
-                    expr.setVariableSize(union.getLength());
+                    // expr.setVariableSize(union.getLength());
                     constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
                 }
             } else if (dt instanceof Pointer ptrDT) {

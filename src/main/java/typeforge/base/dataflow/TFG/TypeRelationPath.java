@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.TFG;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.skeleton.TypeConstraint;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.utils.Logging;
 import org.jgrapht.GraphPath;
 

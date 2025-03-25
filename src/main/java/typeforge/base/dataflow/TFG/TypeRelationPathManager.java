@@ -3,9 +3,9 @@ package typeforge.base.dataflow.TFG;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
-import typeforge.base.dataflow.skeleton.Skeleton;
-import typeforge.base.dataflow.skeleton.SkeletonCollector;
-import typeforge.base.dataflow.skeleton.TypeConstraint;
+import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeHintCollector;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.types.Layout;
 import typeforge.utils.Logging;
 import ghidra.program.model.listing.Function;
@@ -331,7 +331,7 @@ public class TypeRelationPathManager<T> {
     }
 
 
-    public void buildSkeletons(SkeletonCollector collector) {
+    public void buildSkeletons(TypeHintCollector collector) {
         /* init sourceGroups */
         for (var src: source) {
             sourceGroups.add(src);
@@ -391,7 +391,7 @@ public class TypeRelationPathManager<T> {
         }
     }
 
-    public void buildSkeleton(SkeletonCollector collector, Set<T> sources) {
+    public void buildSkeleton(TypeHintCollector collector, Set<T> sources) {
         var mergedConstraints = new TypeConstraint();
         for (var src: sources) {
             mergedConstraints.mergeOther(sourceToConstraints.get(src));

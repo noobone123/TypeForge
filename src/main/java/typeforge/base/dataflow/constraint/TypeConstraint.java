@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.skeleton;
+package typeforge.base.dataflow.constraint;
 
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.expression.NMAE;
@@ -42,7 +42,8 @@ public class TypeConstraint {
 
     public final Set<TypeDescriptor> polymorphicTypes;
 
-    public Set<Long> totalSize;
+    public boolean sizeKnown = false;
+    public long size = 0;
     public Set<Long> elementSize;
 
     public TypeConstraint() {
@@ -56,7 +57,6 @@ public class TypeConstraint {
         globalAttrs = new HashSet<>();
         accessOffsets = new HashMap<>();
         polymorphicTypes = new HashSet<>();
-        totalSize = new HashSet<>();
         elementSize = new HashSet<>();
     }
 
@@ -88,7 +88,8 @@ public class TypeConstraint {
 
         this.polymorphicTypes = new HashSet<>(other.polymorphicTypes);
 
-        this.totalSize = new HashSet<>(other.totalSize);
+        this.sizeKnown = other.sizeKnown;
+        this.size = other.size;
 
         this.elementSize = new HashSet<>(other.elementSize);
     }
@@ -125,9 +126,19 @@ public class TypeConstraint {
         }
     }
 
-    public void setTotalSize(long size) {
-        this.totalSize.add(size);
-        Logging.info("TypeConstraint", String.format("Constraint_%s setting total size: %d", shortUUID, size));
+    public void setSize(long size) {
+        if (!this.sizeKnown) {
+            this.sizeKnown = true;
+            this.size = size;
+            Logging.info("TypeConstraint", String.format("Constraint_%s setting size: %d", shortUUID, size));
+        } else {
+            if (this.size == size) {
+                return;
+            } else if (this.size < size) {
+                this.size = size;
+                Logging.info("TypeConstraint", String.format("Constraint_%s setting size: %d", shortUUID, size));
+            }
+        }
     }
 
     public void setElementSize(long size) {
@@ -198,8 +209,9 @@ public class TypeConstraint {
             this.accessOffsets.get(ap).addAll(offsets);
         });
 
+        // TODO: checking sizeKnown / size
         // Merging size
-        this.totalSize.addAll(other.totalSize);
+        this.size = other.size;
         this.elementSize.addAll(other.elementSize);
 
         // Merging polymorphicTypes
@@ -229,7 +241,7 @@ public class TypeConstraint {
     }
 
     public boolean isEmpty() {
-        return fieldAccess.isEmpty() && fieldAttrs.isEmpty() && polymorphicTypes.isEmpty() && totalSize.isEmpty() && elementSize.isEmpty();
+        return fieldAccess.isEmpty() && fieldAttrs.isEmpty() && polymorphicTypes.isEmpty() && (size == 0) && elementSize.isEmpty();
     }
 
     public void addPolymorphicType(TypeDescriptor type) {

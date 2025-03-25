@@ -1,6 +1,6 @@
 package typeforge.base.dataflow.expression;
 
-import typeforge.base.dataflow.skeleton.TypeConstraint;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.utils.Logging;
@@ -14,6 +14,8 @@ import java.util.*;
 public class NMAEManager {
 
     Set<NMAE> fieldExprSet = new HashSet<>();
+
+    // Before Path-Aware Type Hint Propagation. Each NMAE has a corresponding TypeConstraint
     Map<NMAE, TypeConstraint> exprToConstraintBeforeMerge;
     Map<NMAE, TreeMap<Long, Set<NMAE>>> baseToFieldsMap;
     Map<NMAE, NMAE> fieldToBaseMap;

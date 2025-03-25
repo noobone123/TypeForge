@@ -4,10 +4,11 @@ import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.skeleton.SkeletonCollector;
-import typeforge.base.dataflow.skeleton.TypeConstraint;
+import typeforge.base.dataflow.constraint.TypeHintCollector;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
+import typeforge.base.node.CallSite;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.Logging;
 import typeforge.base.dataflow.expression.NMAE;
@@ -33,8 +34,8 @@ public class InterSolver {
 
     public AccessPoints APs;
     public TFGManager graphManager;
-    public NMAEManager symExprManager;
-    public SkeletonCollector skeletonCollector;
+    public NMAEManager exprManager;
+    public TypeHintCollector typeHintCollector;
 
     public InterSolver(CallGraph cg) {
         this.callGraph = cg;
@@ -44,20 +45,16 @@ public class InterSolver {
         this.intraSolverMap = new HashMap<>();
         this.APs = new AccessPoints();
         this.graphManager = new TFGManager();
-        this.symExprManager = new NMAEManager(this.graphManager);
-        this.skeletonCollector = new SkeletonCollector(symExprManager);
+        this.exprManager = new NMAEManager(this.graphManager);
+        this.typeHintCollector = new TypeHintCollector(exprManager);
     }
 
     public IntraSolver createIntraSolver(FunctionNode funcNode) {
         IntraSolver intraSolver =
-                new IntraSolver(funcNode, symExprManager, graphManager, APs);
+                new IntraSolver(funcNode, exprManager, graphManager, APs);
 
         intraSolverMap.put(funcNode, intraSolver);
         return intraSolver;
-    }
-
-    public IntraSolver getIntraSolver(FunctionNode funcNode) {
-        return intraSolverMap.get(funcNode);
     }
 
     /**
@@ -102,6 +99,7 @@ public class InterSolver {
 
             if (calleeNode.isExternal) {
                 Logging.debug("InterSolver", "Callee node is external: " + callSite.calleeAddr);
+                handleExternalCall(callSite, calleeNode, intraSolver);
             }
             // We should keep the callee function is already stitched when we are stitching the caller function
             else {
@@ -155,34 +153,84 @@ public class InterSolver {
     }
 
     /**
+     * Handle the external function call.
+     * @param callSite the callsite
+     * @param calleeNode the callee node
+     * @param intraSolver the intraSolver of the caller function
+     */
+    private void handleExternalCall(CallSite callSite, FunctionNode calleeNode, IntraSolver intraSolver) {
+        var externalFuncName = calleeNode.value.getName();
+
+        // TODO: add alloc functions, malloc/calloc/realloc
+        switch (externalFuncName) {
+            case "memset" -> {
+                var lengthArg = callSite.arguments.get(2);
+                if (lengthArg.isConstant()) {
+                    var ptrExprs = intraSolver.getDataFlowFacts(callSite.arguments.get(0));
+                    for (var expr: ptrExprs) {
+                        exprManager.getOrCreateConstraint(expr)
+                                .setSize(lengthArg.getOffset());
+                        Logging.info("InterSolver",
+                                String.format("Set size of constraint: %s to %d", expr, lengthArg.getOffset()));
+                    }
+                }
+            }
+
+            case "memcpy" -> {
+                var dstVn = callSite.arguments.get(0);
+                var srcVn = callSite.arguments.get(1);
+                var lengthVn = callSite.arguments.get(2);
+                if (!intraSolver.isTracedVn(dstVn) || !intraSolver.isTracedVn(srcVn)) {
+                    return;
+                }
+                var dstExprs = intraSolver.getDataFlowFacts(dstVn);
+                var srcExprs = intraSolver.getDataFlowFacts(srcVn);
+                for (var dstExpr : dstExprs) {
+                    for (var srcExpr : srcExprs) {
+                        // interCtx.addTypeRelation(srcExpr, dstExpr, TypeRelationGraph.EdgeType.DATAFLOW);
+                        Logging.info("InterSolver", "memcpy: " + dstExpr + " <- " + srcExpr);
+                        if (lengthVn.isConstant()) {
+                            exprManager.getOrCreateConstraint(dstExpr)
+                                    .setSize(lengthVn.getOffset());
+                            exprManager.getOrCreateConstraint(srcExpr)
+                                    .setSize(lengthVn.getOffset());
+                            Logging.info("InterSolver", "memcpy size: " + lengthVn.getOffset());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
-    public void collectSkeletons() {
+    public void typeHintPropagation() {
         // Parsing all fieldAccess Expressions first to build the constraint's skeleton
-        for (var symExpr : symExprManager.getFieldExprSet()) {
+        for (var symExpr : exprManager.getFieldExprSet()) {
             buildConstraintByFieldAccessExpr(symExpr, null, 0);
         }
 
-        buildSkeletons(skeletonCollector);
+        buildSkeletons(typeHintCollector);
 
 
         /* Following handler's order is important */
-        skeletonCollector.mergeSkeletons();
+        typeHintCollector.mergeSkeletons();
         /* Important: handle Type Alias first, then handle Final Constraint. Due to Type Alias may have a negative impact on soundness */
-        skeletonCollector.handleTypeAlias();
-        skeletonCollector.handleFinalConstraint();
-        skeletonCollector.handleAPSets();
-        skeletonCollector.handleUnreasonableSkeleton();
-        skeletonCollector.handlePtrReference();
-        skeletonCollector.handleDecompilerInferredTypes();
-        skeletonCollector.handleNesting(symExprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
-        skeletonCollector.handleMemberConflict();
+        typeHintCollector.handleTypeAlias();
+        typeHintCollector.handleFinalConstraint();
+        typeHintCollector.handleAPSets();
+        typeHintCollector.handleUnreasonableSkeleton();
+        typeHintCollector.handlePtrReference();
+        typeHintCollector.handleDecompilerInferredTypes();
+        typeHintCollector.handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
+        typeHintCollector.handleMemberConflict();
         // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
 
 
-    private void buildSkeletons(SkeletonCollector collector) {
+    private void buildSkeletons(TypeHintCollector collector) {
         Logging.info("InterContext", "========================= Start to merge type constraints =========================");
         Logging.info("InterContext", "Total Graph Number: " + graphManager.getGraphs().size());
         graphManager.buildAllPathManagers();
@@ -194,8 +242,8 @@ public class InterSolver {
             if (graph.pathManager.hasSrcSink) {
                 Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
-                graph.pathManager.tryMergeOnPath(symExprManager);
-                graph.pathManager.tryMergePathsFromSameSource(symExprManager);
+                graph.pathManager.tryMergeOnPath(exprManager);
+                graph.pathManager.tryMergePathsFromSameSource(exprManager);
                 graph.pathManager.tryHandleConflictNodes();
                 var removeEdges = graph.pathManager.getEdgesToRemove();
                 for (var edge: removeEdges) {
@@ -232,7 +280,7 @@ public class InterSolver {
             if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
                 continue;
             }
-            graph.pathManager.mergeOnPath(symExprManager);
+            graph.pathManager.mergeOnPath(exprManager);
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
 
@@ -263,9 +311,9 @@ public class InterSolver {
             parsed = parsedExpr.get();
         }
 
-        var baseConstraint = symExprManager.getOrCreateConstraint(parsed.base);
+        var baseConstraint = exprManager.getOrCreateConstraint(parsed.base);
         updateFieldAccessConstraint(baseConstraint, parsed.offsetValue, expr);
-        symExprManager.addFieldRelation(parsed.base, parsed.offsetValue, expr);
+        exprManager.addFieldRelation(parsed.base, parsed.offsetValue, expr);
         if (parentTypeConstraint != null) {
             baseConstraint.addFieldAttr(parsed.offsetValue, TypeConstraint.Attribute.POINTER);
         }

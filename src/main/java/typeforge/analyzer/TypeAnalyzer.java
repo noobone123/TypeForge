@@ -151,7 +151,7 @@ public class TypeAnalyzer {
 
         interSolver.buildWholeProgramTFG();
 
-        // interSolver.collectSkeletons();
+        // interSolver.typeHintPropagation();
 
         /* try {
             var outputFile = new File(Global.outputDirectory);

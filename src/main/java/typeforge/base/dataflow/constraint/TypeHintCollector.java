@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.skeleton;
+package typeforge.base.dataflow.constraint;
 
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAE;
@@ -12,7 +12,7 @@ import typeforge.utils.TCHelper;
 
 import java.util.*;
 
-public class SkeletonCollector {
+public class TypeHintCollector {
     private final Set<Skeleton> skeletons;
     /* Map[SymbolExpr, Set[Skeleton]]: this is temp data structure before handling skeletons */
     private final Map<NMAE, Set<Skeleton>> exprToSkeletons_T;
@@ -33,7 +33,7 @@ public class SkeletonCollector {
     public final Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
     public final Set<NMAE> injuredNode = new HashSet<>();
 
-    public SkeletonCollector(NMAEManager exprManager) {
+    public TypeHintCollector(NMAEManager exprManager) {
         this.skeletons = new HashSet<>();
         this.exprToSkeletons_T = new HashMap<>();
         this.exprToSkeletonMap = new HashMap<>();

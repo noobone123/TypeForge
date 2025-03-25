@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.skeleton;
+package typeforge.base.dataflow.constraint;
 
 import typeforge.base.dataflow.Range;
 import typeforge.base.dataflow.expression.NMAE;

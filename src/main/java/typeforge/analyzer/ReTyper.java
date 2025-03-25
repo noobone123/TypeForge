@@ -14,7 +14,7 @@ import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAE;
-import typeforge.base.dataflow.skeleton.Skeleton;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.DecompilerHelper;
 import typeforge.utils.Global;

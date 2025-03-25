@@ -1,6 +1,6 @@
 package typeforge.base.dataflow.types;
 
-import typeforge.base.dataflow.skeleton.TypeConstraint;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 
 import java.util.*;
 

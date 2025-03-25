@@ -1,6 +1,6 @@
 package typeforge.base.passes;
 
-import typeforge.base.dataflow.skeleton.Skeleton;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
 

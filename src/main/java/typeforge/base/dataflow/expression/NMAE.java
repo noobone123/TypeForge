@@ -51,7 +51,6 @@ public class NMAE {
     public Varnode varnode;
 
     public Set<Attribute> attributes = new HashSet<>();
-    public long variableSize = 0;
 
     public NMAE(NMAEManager.Builder builder) {
         // Be careful, for global variables, the same global variable have different HighSymbol instances
@@ -185,10 +184,6 @@ public class NMAE {
 
     public boolean hasAttribute(Attribute attr) {
         return attributes.contains(attr);
-    }
-
-    public void setVariableSize(long size) {
-        this.variableSize = size;
     }
 
     public List<Attribute> getAttributes() {

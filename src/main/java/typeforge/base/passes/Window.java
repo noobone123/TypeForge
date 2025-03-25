@@ -1,7 +1,7 @@
 package typeforge.base.passes;
 
 import typeforge.base.dataflow.AccessPoints;
-import typeforge.base.dataflow.skeleton.Skeleton;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Global;
 import ghidra.program.model.data.DataType;

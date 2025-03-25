@@ -4,8 +4,8 @@ import ghidra.program.model.data.Structure;
 import typeforge.base.dataflow.Range;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.skeleton.Skeleton;
-import typeforge.base.dataflow.skeleton.SkeletonCollector;
+import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeHintCollector;
 import typeforge.base.passes.SlidingWindowProcessor;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Logging;
@@ -32,13 +32,13 @@ import java.util.*;
  * Finally, We take the pseudocode and Calculate the score for them, and find the best one as the final Structure Type
  */
 public class Generator {
-    public SkeletonCollector skeletonCollector;
+    public TypeHintCollector typeHintCollector;
     public NMAEManager exprManager;
     private final Set<Skeleton> finalSkeletons;
 
 
-    public Generator(SkeletonCollector skeletonCollector, NMAEManager exprManager) {
-        this.skeletonCollector = skeletonCollector;
+    public Generator(TypeHintCollector typeHintCollector, NMAEManager exprManager) {
+        this.typeHintCollector = typeHintCollector;
         this.exprManager = exprManager;
         this.finalSkeletons = new HashSet<>();
     }
@@ -49,7 +49,7 @@ public class Generator {
 
     public Map<NMAE, Skeleton> getExprToSkeletonMap() {
         var exprToSkeletonMap = new HashMap<NMAE, Skeleton>();
-        for (var entry: skeletonCollector.exprToSkeletonMap.entrySet()) {
+        for (var entry: typeHintCollector.exprToSkeletonMap.entrySet()) {
             var expr = entry.getKey();
             var skt = entry.getValue();
             if (finalSkeletons.contains(skt)) {
@@ -94,7 +94,7 @@ public class Generator {
     }
 
     private void generation() {
-        var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
+        var exprToSkeletonMap = typeHintCollector.exprToSkeletonMap;
 
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isPointerToPrimitive) {
@@ -442,7 +442,7 @@ public class Generator {
     }
 
     public void explore() {
-        var exprToSkeletonMap = skeletonCollector.exprToSkeletonMap;
+        var exprToSkeletonMap = typeHintCollector.exprToSkeletonMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
@@ -451,16 +451,16 @@ public class Generator {
             skt.dumpInfo();
         }
 
-        Logging.info("Generator", String.format("Evil Sources (%d):", skeletonCollector.evilSource.size()));
-        for (var source: skeletonCollector.evilSource) {
+        Logging.info("Generator", String.format("Evil Sources (%d):", typeHintCollector.evilSource.size()));
+        for (var source: typeHintCollector.evilSource) {
             Logging.info("Generator", source.toString());
         }
-        Logging.info("Generator", String.format("Evil Nodes (%d):", skeletonCollector.evilNodes.size()));
-        for (var node: skeletonCollector.evilNodes) {
+        Logging.info("Generator", String.format("Evil Nodes (%d):", typeHintCollector.evilNodes.size()));
+        for (var node: typeHintCollector.evilNodes) {
             Logging.info("Generator", node.toString());
         }
-        Logging.info("Generator", String.format("Evil Paths (%d):", skeletonCollector.evilPaths.size()));
-        for (var path: skeletonCollector.evilPaths) {
+        Logging.info("Generator", String.format("Evil Paths (%d):", typeHintCollector.evilPaths.size()));
+        for (var path: typeHintCollector.evilPaths) {
             Logging.info("Generator", path.toString());
         }
     }

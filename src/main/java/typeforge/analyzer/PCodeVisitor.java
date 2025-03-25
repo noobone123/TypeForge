@@ -1,6 +1,5 @@
 package typeforge.analyzer;
 
-import ghidra.dbg.target.TargetMemory;
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.expression.NMAE;
@@ -592,50 +591,6 @@ public class PCodeVisitor {
             }
         }
     }
-
-
-    private void handleExternalCall(PcodeOp pcodeOp, FunctionNode calleeNode) {
-        var externalFuncName = calleeNode.value.getName();
-        Logging.info("PCodeVisitor", "External function call: " + externalFuncName);
-
-        switch (externalFuncName) {
-            case "memset" -> {
-                var lengthArg = pcodeOp.getInput(3);
-                if (lengthArg.isConstant()) {
-                    var ptrExprs = intraSolver.getDataFlowFacts(pcodeOp.getInput(1));
-                    for (var ptrExpr : ptrExprs) {
-                        exprManager.getOrCreateConstraint(ptrExpr).setTotalSize(lengthArg.getOffset());
-                        Logging.info("PCodeVisitor", "memset: " + ptrExpr + " size: " + lengthArg.getOffset());
-                    }
-                }
-            }
-
-            case "memcpy" -> {
-                var dstVn = pcodeOp.getInput(1);
-                var srcVn = pcodeOp.getInput(2);
-                var lengthVn = pcodeOp.getInput(3);
-                if (!intraSolver.isTracedVn(dstVn) || !intraSolver.isTracedVn(srcVn)) {
-                    return;
-                }
-                var dstExprs = intraSolver.getDataFlowFacts(dstVn);
-                var srcExprs = intraSolver.getDataFlowFacts(srcVn);
-                for (var dstExpr : dstExprs) {
-                    for (var srcExpr : srcExprs) {
-                        // interCtx.addTypeRelation(srcExpr, dstExpr, TypeRelationGraph.EdgeType.DATAFLOW);
-                        Logging.info("PCodeVisitor", "memcpy: " + dstExpr + " <- " + srcExpr);
-                        if (lengthVn.isConstant()) {
-                            exprManager.getOrCreateConstraint(dstExpr).setTotalSize(lengthVn.getOffset());
-                            exprManager.getOrCreateConstraint(srcExpr).setTotalSize(lengthVn.getOffset());
-                            dstExpr.setVariableSize(lengthVn.getOffset());
-                            dstExpr.setVariableSize(lengthVn.getOffset());
-                            Logging.info("PCodeVisitor", "memcpy size: " + lengthVn.getOffset());
-                        }
-                    }
-                }
-            }
-        }
-    }
-
 
     private boolean checkIfHoldsCompositeType(NMAE expr) {
         return expr.hasAttribute(NMAE.Attribute.ARRAY) ||
