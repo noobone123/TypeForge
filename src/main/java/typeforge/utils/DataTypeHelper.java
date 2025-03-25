@@ -333,6 +333,12 @@ public class DataTypeHelper {
         return result;
     }
 
+    public static DataType getTypeDefBaseDataType(DataType dt) {
+        if (dt instanceof TypeDef typedef) {
+            return getTypeDefBaseDataType(typedef.getBaseDataType());
+        }
+        return dt;
+    }
 
     public static boolean isCompositeOrArray(DataType dt) {
         if (dt instanceof TypeDef typDef) {

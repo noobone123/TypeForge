@@ -1,8 +1,8 @@
 package typeforge.base.dataflow.constraint;
 
+import ghidra.program.model.data.DataType;
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.expression.NMAE;
-import typeforge.base.dataflow.types.TypeDescriptor;
 import typeforge.utils.Logging;
 
 import java.util.*;
@@ -40,11 +40,14 @@ public class TypeConstraint {
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
 
-    public final Set<TypeDescriptor> polymorphicTypes;
+    public final Set<DataType> polymorphicTypes;
 
     public boolean sizeKnown = false;
     public long size = 0;
     public Set<Long> elementSize;
+
+    /** If the TypeConstraint indicates a composite type */
+    private boolean isComposite = false;
 
     public TypeConstraint() {
         uuid = UUID.randomUUID();
@@ -91,7 +94,13 @@ public class TypeConstraint {
         this.sizeKnown = other.sizeKnown;
         this.size = other.size;
 
+        this.isComposite = other.isComposite;
+
         this.elementSize = new HashSet<>(other.elementSize);
+    }
+
+    public void setComposite(boolean isComposite) {
+        this.isComposite = isComposite;
     }
 
     public void addFieldAccess(long offset, AccessPoints.AP ap) {
@@ -244,9 +253,9 @@ public class TypeConstraint {
         return fieldAccess.isEmpty() && fieldAttrs.isEmpty() && polymorphicTypes.isEmpty() && (size == 0) && elementSize.isEmpty();
     }
 
-    public void addPolymorphicType(TypeDescriptor type) {
-        polymorphicTypes.add(type);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding polymorphicType: %s", shortUUID, type.getName()));
+    public void addPolymorphicType(DataType dataType) {
+        polymorphicTypes.add(dataType);
+        Logging.info("TypeConstraint", String.format("Constraint_%s adding polymorphicType: %s", shortUUID, dataType.getName()));
     }
 
     public int getAllFieldsAccessCount() {

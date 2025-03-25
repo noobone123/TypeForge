@@ -1,4 +1,4 @@
-package typeforge.base.dataflow.types;
+package typeforge.base.dataflow;
 
 import typeforge.base.dataflow.constraint.TypeConstraint;
 

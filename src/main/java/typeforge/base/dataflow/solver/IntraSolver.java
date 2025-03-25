@@ -10,7 +10,6 @@ import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
-import typeforge.base.dataflow.types.TypeDescriptorManager;
 import typeforge.base.node.CallSite;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.DataTypeHelper;
@@ -71,6 +70,7 @@ public class IntraSolver {
             Logging.warn("IntraSolver", "Failed to initialize intraContext: " + funcNode.value.getName());
             return;
         }
+
         visitor.prepare();
         visitor.run();
 
@@ -133,61 +133,83 @@ public class IntraSolver {
 
             NMAE expr;
             TypeConstraint constraint;
-            DataType dt;
+            DataType decompilerDT;
 
             // Create the SymbolExpr and Constraint for the HighSymbol
             if (symbol.isGlobal()) {
                 expr = new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
                 exprManager.addExprAttribute(expr, NMAE.Attribute.GLOBAL);
-                dt = symbol.getDataType();
+                decompilerDT = symbol.getDataType();
             } else {
                 expr = new NMAEManager.Builder().rootSymbol(symbol).build();
-                dt = funcNode.getDecompilerInferredDT(symbol.getStorage());
-                if (dt == null) {
-                    dt = symbol.getDataType();
+                decompilerDT = funcNode.getDecompilerInferredDT(symbol.getStorage());
+                if (decompilerDT == null) {
+                    decompilerDT = symbol.getDataType();
                 }
 
                 if (funcNode.parameters.contains(symbol)) {
                     expr.isParameter = true;
                 }
             }
-            exprManager.addDecompilerInferredType(expr, dt);
-            // TODO: how to represent these stack allocated HighSymbol,
-            //  as they always have no corresponding HighVariable and Varnodes.
-            //  Maybe reference to them? like. &varname[Composite]
-            constraint = exprManager.createConstraint(expr);
 
-            if (DataTypeHelper.isCompositeOrArray(dt)) {
-                if (dt instanceof Array array) {
-                    Logging.info("IntraSolver", String.format("Found Array: %s -> %s", expr.toString(), dt.getName()));
+            if (DataTypeHelper.isCompositeOrArray(decompilerDT)) {
+                // Initialize Stack-allocated Composite DataType
+                decompilerDT = DataTypeHelper.getTypeDefBaseDataType(decompilerDT);
+                if (decompilerDT instanceof Array array) {
+                    expr = getExprForStackAllocated(expr);
                     exprManager.addExprAttribute(expr, NMAE.Attribute.ARRAY);
-                    // expr.setVariableSize(array.getLength());
-                    constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
+                    constraint = exprManager.getOrCreateConstraint(expr);
+                    constraint.setComposite(true);
+                    constraint.setSize(array.getLength());
+                    constraint.addPolymorphicType(array);
+
+                    Logging.info("IntraSolver", String.format("Found Array: %s -> %s", expr, decompilerDT.getName()));
                 }
-                else if (dt instanceof Structure structure) {
-                    Logging.info("IntraSolver", String.format("Found Structure: %s -> %s", expr.toString(), dt.getName()));
+                else if (decompilerDT instanceof Structure structure) {
+                    expr = getExprForStackAllocated(expr);
                     exprManager.addExprAttribute(expr, NMAE.Attribute.STRUCT);
-                    // expr.setVariableSize(structure.getLength());
-                    constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
+                    constraint = exprManager.getOrCreateConstraint(expr);
+                    constraint.setComposite(true);
+                    constraint.setSize(structure.getLength());
+                    constraint.addPolymorphicType(structure);
+
+                    Logging.info("IntraSolver", String.format("Found Structure: %s -> %s", expr, decompilerDT.getName()));
                 }
-                else if (dt instanceof Union union) {
-                    Logging.info("IntraSolver", String.format("Found Union: %s -> %s", expr.toString(), dt.getName()));
+                else if (decompilerDT instanceof Union union) {
+                    expr = getExprForStackAllocated(expr);
                     exprManager.addExprAttribute(expr, NMAE.Attribute.UNION);
-                    // expr.setVariableSize(union.getLength());
-                    constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
+                    constraint = exprManager.getOrCreateConstraint(expr);
+                    constraint.setComposite(true);
+                    constraint.setSize(union.getLength());
+                    constraint.addPolymorphicType(union);
+
+                    Logging.info("IntraSolver", String.format("Found Union: %s -> %s", expr, decompilerDT.getName()));
                 }
-            } else if (dt instanceof Pointer ptrDT) {
+            } else if (decompilerDT instanceof Pointer ptrDT) {
+                // Initialize Pointer to Composite DataType
                 if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
-                    Logging.info("IntraSolver", String.format("Found Pointer to Composite: %s -> %s", expr.toString(), dt.getName()));
-                    exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_COMPOSITE);
-                    if (ptrDT.getDataType() instanceof Structure structure) {
-                        constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
-                    } else if (ptrDT.getDataType() instanceof Union union) {
-                        constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));
+                    var pointTo = DataTypeHelper.getTypeDefBaseDataType(ptrDT.getDataType());
+                    if (pointTo instanceof Structure structure) {
+                        exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_STRUCT);
+                        constraint = exprManager.getOrCreateConstraint(expr);
+                        constraint.setComposite(true);
+                        constraint.setSize(structure.getLength());
+                        constraint.addPolymorphicType(structure);
+
+                        Logging.info("IntraSolver", String.format("Found Pointer to Struct: %s -> %s", expr, decompilerDT.getName()));
+                    }
+                    else if (pointTo instanceof Union union) {
+                        exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_UNION);
+                        constraint = exprManager.getOrCreateConstraint(expr);
+                        constraint.setComposite(true);
+                        constraint.setSize(union.getLength());
+                        constraint.addPolymorphicType(union);
+
+                        Logging.info("IntraSolver", String.format("Found Pointer to Union: %s -> %s", expr, decompilerDT.getName()));
                     }
                 }
             } else {
-                Logging.debug("IntraSolver", String.format("Found Primitive: %s -> %s", expr.toString(), dt.getName()));
+                Logging.debug("IntraSolver", String.format("Found Primitive: %s -> %s", expr.toString(), decompilerDT.getName()));
             }
 
             // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:
@@ -300,5 +322,19 @@ public class IntraSolver {
         else {
             return funcNode.mergedVariables.contains(rootSym);
         }
+    }
+
+    /**
+     * NMAE -> TypeConstraint is a mapping indicating that the NMAE is pointed to
+     * a Composite Type described by the TypeConstraint.
+     * So, for stack-allocated variables, we need to create its reference.
+     *
+     * For example, `local_10` -> `&local_10[Composite]`
+     *
+     * @param baseExpr original stack-allocated NMAE
+     * @return the reference NMAE
+     */
+    private NMAE getExprForStackAllocated(NMAE baseExpr) {
+        return exprManager.reference(baseExpr);
     }
 }

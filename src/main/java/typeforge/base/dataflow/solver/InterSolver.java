@@ -223,7 +223,7 @@ public class InterSolver {
         typeHintCollector.handleAPSets();
         typeHintCollector.handleUnreasonableSkeleton();
         typeHintCollector.handlePtrReference();
-        typeHintCollector.handleDecompilerInferredTypes();
+        // typeHintCollector.handleDecompilerInferredTypes();
         typeHintCollector.handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
         typeHintCollector.handleMemberConflict();
         // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));

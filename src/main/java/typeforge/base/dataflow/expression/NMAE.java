@@ -21,7 +21,8 @@ public class NMAE {
         STRUCT,
         UNION,
         GLOBAL,
-        POINTER_TO_COMPOSITE,
+        POINTER_TO_STRUCT,
+        POINTER_TO_UNION,
         MAY_ARRAY_PTR,
         CODE_PTR
     }
@@ -243,7 +244,7 @@ public class NMAE {
         }
 
         if ((hasAttribute(Attribute.ARRAY) || hasAttribute(Attribute.STRUCT) || hasAttribute(Attribute.UNION)) &&
-              !hasAttribute(Attribute.POINTER_TO_COMPOSITE)) {
+              !hasAttribute(Attribute.POINTER_TO_STRUCT)) {
             sb.append("[Composite]");
         }
 

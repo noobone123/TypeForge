@@ -1,6 +1,7 @@
 package typeforge.base.dataflow.types;
 
 import org.junit.jupiter.api.Test;
+import typeforge.base.dataflow.Layout;
 
 import java.util.ArrayList;
 import java.util.HashSet;

@@ -116,7 +116,9 @@ public class NMAEManager {
     }
 
     /**
-     * Get or create a TypeConstraint for the given expression
+     * Get or create a TypeConstraint for the given expression.
+     * The created TypeConstraint will be auto associated with
+     *  the expression in the `exprToConstraintBeforeMerge` map.
      * @return the TypeConstraint for the given expression
      */
     public TypeConstraint getOrCreateConstraint(NMAE expr) {
@@ -125,14 +127,6 @@ public class NMAEManager {
             return createConstraint(expr);
         }
         return result;
-    }
-
-    public void addDecompilerInferredType(NMAE expr, DataType dataType) {
-        exprToDecompilerInferredType.put(expr, dataType);
-    }
-
-    public Optional<DataType> getInferredType(NMAE expr) {
-        return Optional.ofNullable(exprToDecompilerInferredType.get(expr));
     }
 
     /**
@@ -319,7 +313,6 @@ public class NMAEManager {
         }
         return new Builder().reference(a).build();
     }
-
 
     /**
      * Builder Pattern for creating SymbolExpr

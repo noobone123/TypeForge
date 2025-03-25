@@ -6,7 +6,7 @@ import typeforge.base.dataflow.UnionFind;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.constraint.TypeHintCollector;
 import typeforge.base.dataflow.constraint.TypeConstraint;
-import typeforge.base.dataflow.types.Layout;
+import typeforge.base.dataflow.Layout;
 import typeforge.utils.Logging;
 import ghidra.program.model.listing.Function;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;

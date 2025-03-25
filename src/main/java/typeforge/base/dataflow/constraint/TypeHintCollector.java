@@ -422,8 +422,8 @@ public class TypeHintCollector {
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             for (var expr: skt.exprs) {
                 if (expr.isVariable()) {
-                    var inferredType = exprManager.getInferredType(expr);
-                    inferredType.ifPresent(skt::updateDecompilerInferredTypes);
+                    // var inferredType = exprManager.getInferredType(expr);
+                    // inferredType.ifPresent(skt::updateDecompilerInferredTypes);
                 }
             }
         }

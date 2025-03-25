@@ -267,12 +267,13 @@ public class PCodeVisitor {
 
         if (base.isRegister()) {
             var reg = Global.currentProgram.getRegister(base);
-            // may be a reference of a local array or a stack structure or a stack array.
+            // may be a reference of a stack-allocated array or structure
             // For Example:
             // 114_(unique, 0x3200, 8)[noHighSym], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16700_(const, 0xffffffffffffff58, 8)[local_a8]
             // 133_(unique, 0x3200, 8)[local_28], PTRSUB, 10973_(register, 0x20, 8)[noHighSym], 16702_(const, 0xffffffffffffff58, 8)[local_a8]
-            // 133_(unique, 0x3200, 8) and 114_(unique, 0x3200, 8) are actually the same symbol, but ghidra internal can not resolve it, so we manually recover it
-            // 114_(unique, 0x3200, 8)[noHighSym] has no initial Facts but 133_(unique, 0x3200, 8)[local_28] has initial Facts
+            // Where `local_a8` is stack-allocated composite type 133_(unique, 0x3200, 8) and 114_(unique, 0x3200, 8) are actually the same symbol,
+            //      but ghidra internal can not resolve it, so we manually recover it
+            // Based on the design of TFG, `local_a8` should be represented as a `&local_a8` in the TFG
             if (reg.getName().equals("RSP")) {
                 // local symbol
                 if (offset.getHigh().getSymbol() != null) {
