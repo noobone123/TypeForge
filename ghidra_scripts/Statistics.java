@@ -62,7 +62,7 @@ public class Statistics extends GhidraScript {
                 var paramDataType = param.getDataType();
                 parameterCount++;
                 Logging.info("GhidraScript","Parameter: " + paramDataType.getName());
-                if (DataTypeHelper.isComplexTypeAware(paramDataType)) {
+                if (DataTypeHelper.isComplexType(paramDataType)) {
                     complexDataTypeAwareParameterCount++;
                     isComplexDataTypeAware = true;
                     visited.add(DataTypeHelper.getBaseDataType(paramDataType));

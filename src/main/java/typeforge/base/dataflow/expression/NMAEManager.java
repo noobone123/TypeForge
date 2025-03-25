@@ -15,7 +15,11 @@ public class NMAEManager {
 
     Set<NMAE> fieldExprSet = new HashSet<>();
 
-    // Before Path-Aware Type Hint Propagation. Each NMAE has a corresponding TypeConstraint
+    /**
+     * Before Path-Aware Type Hint Propagation. Each `NMAE` has a corresponding `TypeConstraint`
+     * `TypeConstraint` is the constraint of the composite type pointed by the NMAE.
+     * If there exist a stack-allocated variable, then its pointer should be represented as `&stack_variable`.
+     */
     Map<NMAE, TypeConstraint> exprToConstraintBeforeMerge;
     Map<NMAE, TreeMap<Long, Set<NMAE>>> baseToFieldsMap;
     Map<NMAE, NMAE> fieldToBaseMap;

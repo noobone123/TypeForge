@@ -154,6 +154,7 @@ public class IntraSolver {
             exprManager.addDecompilerInferredType(expr, dt);
             // TODO: how to represent these stack allocated HighSymbol,
             //  as they always have no corresponding HighVariable and Varnodes.
+            //  Maybe reference to them? like. &varname[Composite]
             constraint = exprManager.createConstraint(expr);
 
             if (DataTypeHelper.isCompositeOrArray(dt)) {
@@ -179,9 +180,7 @@ public class IntraSolver {
                 if (DataTypeHelper.isPointerToCompositeDataType(ptrDT)) {
                     Logging.info("IntraSolver", String.format("Found Pointer to Composite: %s -> %s", expr.toString(), dt.getName()));
                     exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_COMPOSITE);
-                    if (ptrDT.getDataType() instanceof Array array) {
-                        constraint.addPolymorphicType(TypeDescriptorManager.createArrayTypeDescriptor(array));
-                    } else if (ptrDT.getDataType() instanceof Structure structure) {
+                    if (ptrDT.getDataType() instanceof Structure structure) {
                         constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(structure));
                     } else if (ptrDT.getDataType() instanceof Union union) {
                         constraint.addPolymorphicType(TypeDescriptorManager.createCompositeTypeDescriptor(union));

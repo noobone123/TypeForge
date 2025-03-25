@@ -70,12 +70,12 @@ public class DataTypeHelper {
      * @param dt the data type
      * @return true/false
      */
-    public static boolean isComplexTypeAware(DataType dt) {
+    public static boolean isComplexType(DataType dt) {
         if (dt instanceof Pointer pointer) {
-            return isComplexTypeAware(pointer.getDataType());
+            return isComplexType(pointer.getDataType());
 
         } else if (dt instanceof TypeDef typedef) {
-            return isComplexTypeAware(typedef.getBaseDataType());
+            return isComplexType(typedef.getBaseDataType());
 
         } else {
             return dt instanceof Composite || dt instanceof Array;
@@ -335,11 +335,12 @@ public class DataTypeHelper {
 
 
     public static boolean isCompositeOrArray(DataType dt) {
-        return dt instanceof Structure || dt instanceof Array || dt instanceof Union;
-    }
+        if (dt instanceof TypeDef typDef) {
+            dt = typDef.getBaseDataType();
+            return isCompositeOrArray(dt);
+        }
 
-    public static boolean isPointerDataType(DataType dt) {
-        return dt instanceof Pointer;
+        return dt instanceof Structure || dt instanceof Array || dt instanceof Union;
     }
 
     public static boolean isPointerToCompositeDataType(DataType dt) {
