@@ -2,7 +2,6 @@ package typeforge.base.dataflow.solver;
 
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.PcodeOp;
-import typeforge.analyzer.PCodeVisitor;
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.expression.NMAE;
@@ -160,7 +159,7 @@ public class IntraSolver {
                     exprManager.addExprAttribute(expr, NMAE.Attribute.ARRAY);
                     constraint = exprManager.getOrCreateConstraint(expr);
                     constraint.setComposite(true);
-                    constraint.setSize(array.getLength());
+                    constraint.setSizeFromExpr(array.getLength(), expr);
                     constraint.addPolymorphicType(array);
 
                     Logging.info("IntraSolver", String.format("Found Array: %s -> %s", expr, decompilerDT.getName()));
@@ -170,7 +169,7 @@ public class IntraSolver {
                     exprManager.addExprAttribute(expr, NMAE.Attribute.STRUCT);
                     constraint = exprManager.getOrCreateConstraint(expr);
                     constraint.setComposite(true);
-                    constraint.setSize(structure.getLength());
+                    constraint.setSizeFromExpr(structure.getLength(), expr);
                     constraint.addPolymorphicType(structure);
 
                     Logging.info("IntraSolver", String.format("Found Structure: %s -> %s", expr, decompilerDT.getName()));
@@ -180,7 +179,7 @@ public class IntraSolver {
                     exprManager.addExprAttribute(expr, NMAE.Attribute.UNION);
                     constraint = exprManager.getOrCreateConstraint(expr);
                     constraint.setComposite(true);
-                    constraint.setSize(union.getLength());
+                    constraint.setSizeFromExpr(union.getLength(), expr);
                     constraint.addPolymorphicType(union);
 
                     Logging.info("IntraSolver", String.format("Found Union: %s -> %s", expr, decompilerDT.getName()));
@@ -193,7 +192,7 @@ public class IntraSolver {
                         exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_STRUCT);
                         constraint = exprManager.getOrCreateConstraint(expr);
                         constraint.setComposite(true);
-                        constraint.setSize(structure.getLength());
+                        constraint.setSizeFromExpr(structure.getLength(), expr);
                         constraint.addPolymorphicType(structure);
 
                         Logging.info("IntraSolver", String.format("Found Pointer to Struct: %s -> %s", expr, decompilerDT.getName()));
@@ -202,7 +201,7 @@ public class IntraSolver {
                         exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_UNION);
                         constraint = exprManager.getOrCreateConstraint(expr);
                         constraint.setComposite(true);
-                        constraint.setSize(union.getLength());
+                        constraint.setSizeFromExpr(union.getLength(), expr);
                         constraint.addPolymorphicType(union);
 
                         Logging.info("IntraSolver", String.format("Found Pointer to Union: %s -> %s", expr, decompilerDT.getName()));

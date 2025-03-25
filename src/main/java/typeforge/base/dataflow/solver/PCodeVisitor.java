@@ -1,10 +1,9 @@
-package typeforge.analyzer;
+package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.solver.IntraSolver;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.DecompilerHelper;

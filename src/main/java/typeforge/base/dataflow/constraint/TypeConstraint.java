@@ -3,6 +3,7 @@ package typeforge.base.dataflow.constraint;
 import ghidra.program.model.data.DataType;
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.expression.NMAE;
+import typeforge.base.node.CallSite;
 import typeforge.utils.Logging;
 
 import java.util.*;
@@ -42,12 +43,13 @@ public class TypeConstraint {
 
     public final Set<DataType> polymorphicTypes;
 
-    public boolean sizeKnown = false;
-    public long size = 0;
     public Set<Long> elementSize;
 
     /** If the TypeConstraint indicates a composite type */
     private boolean isComposite = false;
+
+    /** Recording where this size information comes from */
+    private final Set<SizeSource> sizeSources;
 
     public TypeConstraint() {
         uuid = UUID.randomUUID();
@@ -61,6 +63,7 @@ public class TypeConstraint {
         accessOffsets = new HashMap<>();
         polymorphicTypes = new HashSet<>();
         elementSize = new HashSet<>();
+        sizeSources = new HashSet<>();
     }
 
     public TypeConstraint(TypeConstraint other) {
@@ -91,9 +94,7 @@ public class TypeConstraint {
 
         this.polymorphicTypes = new HashSet<>(other.polymorphicTypes);
 
-        this.sizeKnown = other.sizeKnown;
-        this.size = other.size;
-
+        this.sizeSources = new HashSet<>(other.sizeSources);
         this.isComposite = other.isComposite;
 
         this.elementSize = new HashSet<>(other.elementSize);
@@ -135,19 +136,18 @@ public class TypeConstraint {
         }
     }
 
-    public void setSize(long size) {
-        if (!this.sizeKnown) {
-            this.sizeKnown = true;
-            this.size = size;
-            Logging.info("TypeConstraint", String.format("Constraint_%s setting size: %d", shortUUID, size));
-        } else {
-            if (this.size == size) {
-                return;
-            } else if (this.size < size) {
-                this.size = size;
-                Logging.info("TypeConstraint", String.format("Constraint_%s setting size: %d", shortUUID, size));
-            }
-        }
+    public void setSizeFromCallSite(long size, CallSite callSite) {
+        var source = new SizeSource(size, callSite);
+        sizeSources.add(source);
+    }
+
+    public void setSizeFromExpr(long size, NMAE expr) {
+        var source = new SizeSource(size, expr);
+        sizeSources.add(source);
+    }
+
+    public Set<SizeSource> getSizeSources() {
+        return sizeSources;
     }
 
     public void setElementSize(long size) {
@@ -220,7 +220,7 @@ public class TypeConstraint {
 
         // TODO: checking sizeKnown / size
         // Merging size
-        this.size = other.size;
+        this.sizeSources.addAll(other.sizeSources);
         this.elementSize.addAll(other.elementSize);
 
         // Merging polymorphicTypes
@@ -250,7 +250,9 @@ public class TypeConstraint {
     }
 
     public boolean isEmpty() {
-        return fieldAccess.isEmpty() && fieldAttrs.isEmpty() && polymorphicTypes.isEmpty() && (size == 0) && elementSize.isEmpty();
+        return fieldAccess.isEmpty() && fieldAttrs.isEmpty() &&
+                polymorphicTypes.isEmpty() && sizeSources.isEmpty()
+                && elementSize.isEmpty();
     }
 
     public void addPolymorphicType(DataType dataType) {

@@ -160,46 +160,8 @@ public class InterSolver {
      */
     private void handleExternalCall(CallSite callSite, FunctionNode calleeNode, IntraSolver intraSolver) {
         var externalFuncName = calleeNode.value.getName();
-
-        // TODO: add alloc functions, malloc/calloc/realloc
-        // TODO: Constraint Size 的设置需要考虑 Set 的 CallSite, 是否位于同一个函数
-        switch (externalFuncName) {
-            case "memset" -> {
-                var lengthArg = callSite.arguments.get(2);
-                if (lengthArg.isConstant()) {
-                    var ptrExprs = intraSolver.getDataFlowFacts(callSite.arguments.get(0));
-                    for (var expr: ptrExprs) {
-                        exprManager.getOrCreateConstraint(expr)
-                                .setSize(lengthArg.getOffset());
-                        Logging.info("InterSolver",
-                                String.format("Set size of constraint: %s to %d", expr, lengthArg.getOffset()));
-                    }
-                }
-            }
-
-            case "memcpy" -> {
-                var dstVn = callSite.arguments.get(0);
-                var srcVn = callSite.arguments.get(1);
-                var lengthVn = callSite.arguments.get(2);
-                if (!intraSolver.isTracedVn(dstVn) || !intraSolver.isTracedVn(srcVn)) {
-                    return;
-                }
-                var dstExprs = intraSolver.getDataFlowFacts(dstVn);
-                var srcExprs = intraSolver.getDataFlowFacts(srcVn);
-                for (var dstExpr : dstExprs) {
-                    for (var srcExpr : srcExprs) {
-                        if (lengthVn.isConstant()) {
-                            exprManager.getOrCreateConstraint(dstExpr)
-                                    .setSize(lengthVn.getOffset());
-                            exprManager.getOrCreateConstraint(srcExpr)
-                                    .setSize(lengthVn.getOffset());
-                            Logging.info("InterSolver",
-                                    String.format("Memcpy from %s -> %s with size %d", srcExpr, dstExpr, lengthVn.getOffset()));
-                        }
-                    }
-                }
-            }
-        }
+        Logging.debug("InterSolver", "Handling external function: " + externalFuncName);
+        ExternalHandler.handle(callSite, externalFuncName, intraSolver, exprManager);
     }
 
     /**
