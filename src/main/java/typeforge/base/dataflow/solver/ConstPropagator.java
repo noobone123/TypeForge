@@ -1,5 +1,10 @@
 package typeforge.base.dataflow.solver;
 
+import typeforge.base.dataflow.expression.NMAE;
+import typeforge.utils.Global;
+
+import java.io.File;
+
 /**
  * There are many constants in the TFG, such as: malloc(0x10), memset(0x20), and sizes in built MMAE's skeletons.
  * These constants are useful for us to identify the size conflicts in the TFG, which always involve union/typecasting.
@@ -17,5 +22,57 @@ package typeforge.base.dataflow.solver;
  *  2. Propagate the skeleton's size info on the TFG and marking the size conflict.
  */
 public class ConstPropagator {
-    
+
+    InterSolver interSolver = null;
+
+    public ConstPropagator(InterSolver interSolver) {
+        this.interSolver = interSolver;
+    }
+
+    public void run() {
+        propagateArgConst();
+    }
+
+    private void propagateArgConst() {
+        var intraSolverMap = interSolver.intraSolverMap;
+        var graphManager = interSolver.graphManager;
+
+        var mallocCs = interSolver.mallocCs;
+        var callocCs = interSolver.callocCs;
+
+        for (var cs: callocCs) {
+            if (cs.caller.getName().equals("ck_calloc")) {
+                var arg1 = cs.arguments.get(0);
+                var arg2 = cs.arguments.get(1);
+                var receiver = cs.receiver;
+                var arg1Facts = intraSolverMap.get(cs.caller).getDataFlowFacts(arg1);
+                for (var arg1Fact: arg1Facts) {
+                    graphManager.dumpPartialTFG(arg1Fact, 5, new File(Global.outputDirectory));
+                }
+            }
+        }
+    }
+
+    // TODO:
+    //  1. Constructing CallSite when building CallGraph, there should be a Map<CallSite, Callee> and a Map<Callee, Set<CallSite>>
+    //  2. Reversing constructing the CallSite-Chain (Max-depth: 4? Because wrapper function is not that deep)
+    //  3. For each chain, start from the nearest CallSite, check:
+    //      1. If CallSite Args can not flow to the malloc(1) or calloc(2)'s corresponding arguments, return.
+    //      2. If there are No ConstArg, but arguments can flow to the malloc(1) or calloc(2)'s corresponding arguments, goto the next CallSite and check.
+    //      3. If there are ConstArg and can flow to the malloc(1) or calloc(2)'s corresponding arguments,
+    //          check if the malloc(1) or calloc(2)'s return value can flow to the current callSite's receiver.
+    //          If so, mark current callSite's receiver as composite and set the size, return.
+    //      We will not handle Partial ConstArg, because it's very very rare.
+    //  4. Build Map<Callee, Set<ReturnSize>> from the marked CallSites, if there are multiple sizes, mark it as EvilNode and mark RETURN edges from them as EvilEdges. (Actually TFG should be split)
+
+    // TODO:
+    //  1. If a variable is set to different size (with memset) with the same function, it must be a union, mark it as EvilNode and mark all edges to them as EvilEdges.
+    //  2. For those Skeletons with size, we propagate them along the TFG, propagate should be 波纹扩散法：
+    //      即：假设图中有 n 个这样的节点，每一轮我们都将节点的信息，沿着dataflow边传播到它的邻居节点，然后我们检查这些新传播到的邻居节点的信息是否存在冲突，如果不存在，那么
+    //      我们就把他们视作一个整体节点（邻居），然后继续传播。如果存在冲突，那么这个新的邻居节点就不应该被加入已有的整体节点，且该新节点和整体节点相连的所有的边都应该被删除。
+
+    // TODO: Implement me.
+    private boolean hasPathFromAllocPtrToReceiver(NMAE allocPtr, NMAE receiver) {
+        return false;
+    }
 }

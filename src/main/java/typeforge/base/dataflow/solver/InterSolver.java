@@ -10,13 +10,11 @@ import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.CallSite;
 import typeforge.base.node.FunctionNode;
-import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import typeforge.base.dataflow.expression.NMAE;
 import ghidra.program.model.listing.Function;
 
 
-import java.io.File;
 import java.util.*;
 
 /**
@@ -40,7 +38,7 @@ public class InterSolver {
     public TypeHintCollector typeHintCollector;
 
     /** Recording malloc/calloc function's callsites */
-    public Set<CallSite> mallocCS;
+    public Set<CallSite> mallocCs;
     public Set<CallSite> callocCs;
 
     public InterSolver(CallGraph cg) {
@@ -55,7 +53,7 @@ public class InterSolver {
         this.typeHintCollector = new TypeHintCollector(exprManager);
 
         // These CallSite is useful for Constant Propagation
-        this.mallocCS = new HashSet<>();
+        this.mallocCs = new HashSet<>();
         this.callocCs = new HashSet<>();
     }
 
@@ -177,7 +175,7 @@ public class InterSolver {
         var externalFuncName = calleeNode.value.getName();
         Logging.trace("InterSolver", "Handling external function: " + externalFuncName);
         if (externalFuncName.equals("malloc")) {
-            mallocCS.add(callSite);
+            mallocCs.add(callSite);
         } else if (externalFuncName.equals("calloc")) {
             callocCs.add(callSite);
         }
@@ -192,7 +190,9 @@ public class InterSolver {
     public void typeHintPropagation() {
         graphManager.earlyTFGStatistics();
 
-        simpleConstantPropagation();
+        // Run the ConstPropagator to propagate the constant information in the TFG
+        var constPropagator = new ConstPropagator(this);
+        constPropagator.run();
 
 //        // Parsing all fieldAccess Expressions first to build the constraint's skeleton
 //        for (var symExpr : exprManager.getFieldExprSet()) {
@@ -215,22 +215,6 @@ public class InterSolver {
 //        typeHintCollector.handleMemberConflict();
 //        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
-
-
-    private void simpleConstantPropagation() {
-        for (var cs: callocCs) {
-            if (cs.caller.getName().equals("ck_calloc")) {
-                var arg1 = cs.arguments.get(0);
-                var arg2 = cs.arguments.get(1);
-                var receiver = cs.receiver;
-                var arg1Facts = intraSolverMap.get(cs.caller).getDataFlowFacts(arg1);
-                for (var arg1Fact: arg1Facts) {
-                    graphManager.dumpPartialTFG(arg1Fact, 5, new File(Global.outputDirectory));
-                }
-            }
-        }
-    }
-
 
     private void buildSkeletons(TypeHintCollector collector) {
         Logging.debug("InterSolver", "========================= Start to merge skeletons =========================");
