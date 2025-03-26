@@ -37,6 +37,10 @@ public class InterSolver {
     public NMAEManager exprManager;
     public TypeHintCollector typeHintCollector;
 
+    /** Recording malloc/calloc function's callsites */
+    public Set<CallSite> mallocCS;
+    public Set<CallSite> callocCs;
+
     public InterSolver(CallGraph cg) {
         this.callGraph = cg;
         this.workList = new LinkedList<>();
@@ -47,6 +51,9 @@ public class InterSolver {
         this.graphManager = new TFGManager();
         this.exprManager = new NMAEManager(this.graphManager);
         this.typeHintCollector = new TypeHintCollector(exprManager);
+
+        this.mallocCS = new HashSet<>();
+        this.callocCs = new HashSet<>();
     }
 
     public IntraSolver createIntraSolver(FunctionNode funcNode) {
@@ -161,6 +168,11 @@ public class InterSolver {
     private void handleExternalCall(CallSite callSite, FunctionNode calleeNode, IntraSolver intraSolver) {
         var externalFuncName = calleeNode.value.getName();
         Logging.debug("InterSolver", "Handling external function: " + externalFuncName);
+        if (externalFuncName.equals("malloc")) {
+            mallocCS.add(callSite);
+        } else if (externalFuncName.equals("calloc")) {
+            callocCs.add(callSite);
+        }
         ExternalHandler.handle(callSite, externalFuncName, intraSolver, exprManager);
     }
 

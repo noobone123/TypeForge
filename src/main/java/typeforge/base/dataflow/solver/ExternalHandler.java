@@ -10,8 +10,6 @@ import java.util.Map;
 /**
  * Handler for external function calls.
  */
-// TODO: Composite Type的判断：所有的memset、memcpy、malloc等函数实际上都可以用于确定composite type
-// TODO: If a Const (Type: Argument) has a path to malloc/calloc's sensitive param, callsite's receiver's size should be set.
 public class ExternalHandler {
 
     /**
@@ -24,18 +22,67 @@ public class ExternalHandler {
         public abstract void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager);
     }
 
+    public static class Malloc extends Handler {
+        @Override
+        public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
+            var ptrExprs = intraSolver.getDataFlowFacts(callSite.receiver);
+            for (var expr: ptrExprs) {
+                Logging.info("ExternalHandler.Malloc",
+                        String.format("Set composite of constraint: %s to true", expr));
+                var constraint = exprManager.getOrCreateConstraint(expr);
+                constraint.setComposite(true);
+
+                var mallocSize = callSite.arguments.get(0);
+                if (mallocSize.isConstant()) {
+                    constraint.setSizeFromCallSite(mallocSize.getOffset(), callSite);
+                    Logging.info("ExternalHandler.Malloc",
+                            String.format("Set size of constraint: %s to %d", expr, callSite.arguments.get(0).getOffset()));
+                }
+            }
+        }
+    }
+
+    public static class Calloc extends Handler {
+        @Override
+        public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
+            var ptrExprs = intraSolver.getDataFlowFacts(callSite.receiver);
+            for (var expr: ptrExprs) {
+                Logging.info("ExternalHandler.Calloc",
+                        String.format("Set composite of constraint: %s to true", expr));
+                var constraint = exprManager.getOrCreateConstraint(expr);
+                constraint.setComposite(true);
+
+                var nmemblock = callSite.arguments.get(0);
+                var memsize = callSite.arguments.get(1);
+                if (nmemblock.isConstant() && memsize.isConstant()) {
+                    constraint.setSizeFromCallSite(nmemblock.getOffset() * memsize.getOffset(), callSite);
+                    Logging.info("ExternalHandler.Calloc",
+                            String.format("Set size of constraint: %s to %d", expr, nmemblock.getOffset() * memsize.getOffset()));
+                }
+            }
+        }
+    }
+
     /**
-     * Handler for memset function
+     * Handler for memset function.
+     * For memset-like functions, the first pointer argument is treated as a composite type.
+     * Because in the vast majority of scenarios, memset is used to initialize composite types,
+     * regardless of whether their length is a constant.
      */
     public static class Memset extends Handler {
         @Override
         public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
             var lengthArg = callSite.arguments.get(2);
-            if (lengthArg.isConstant()) {
-                var ptrExprs = intraSolver.getDataFlowFacts(callSite.arguments.get(0));
-                for (var expr: ptrExprs) {
-                    exprManager.getOrCreateConstraint(expr)
-                            .setSizeFromCallSite(lengthArg.getOffset(), callSite);
+
+            var ptrExprs = intraSolver.getDataFlowFacts(callSite.arguments.get(0));
+            for (var expr: ptrExprs) {
+                Logging.info("ExternalHandler.Memset",
+                        String.format("Set composite of constraint: %s to true", expr));
+                var constraint = exprManager.getOrCreateConstraint(expr);
+                constraint.setComposite(true);
+
+                if (lengthArg.isConstant()) {
+                    constraint.setSizeFromCallSite(lengthArg.getOffset(), callSite);
                     Logging.info("ExternalHandler.Memset",
                             String.format("Set size of constraint: %s to %d", expr, lengthArg.getOffset()));
                 }
@@ -44,7 +91,10 @@ public class ExternalHandler {
     }
 
     /**
-     * Handler for memcpy function
+     * Handler for memcpy function.
+     * For memcpy-like functions, the dst and src pointer arguments are treated as composite types
+     * only if the length argument is a constant.
+     * Because in other cases, the memcpy function is used to copy data from *char[]
      */
     public static class Memcpy extends Handler {
         @Override
@@ -59,13 +109,16 @@ public class ExternalHandler {
             var srcExprs = intraSolver.getDataFlowFacts(srcVn);
             for (var dstExpr : dstExprs) {
                 for (var srcExpr : srcExprs) {
+                    var dstConstraint = exprManager.getOrCreateConstraint(dstExpr);
+                    var srcConstraint = exprManager.getOrCreateConstraint(srcExpr);
+
                     if (lengthVn.isConstant()) {
-                        exprManager.getOrCreateConstraint(dstExpr)
-                                .setSizeFromCallSite(lengthVn.getOffset(), callSite);
-                        exprManager.getOrCreateConstraint(srcExpr)
-                                .setSizeFromCallSite(lengthVn.getOffset(), callSite);
+                        dstConstraint.setComposite(true);
+                        dstConstraint.setSizeFromCallSite(lengthVn.getOffset(), callSite);
+                        srcConstraint.setComposite(true);
+                        srcConstraint.setSizeFromCallSite(lengthVn.getOffset(), callSite);
                         Logging.info("ExternalHandler.Memcpy",
-                                String.format("Copy from %s -> %s with size %d", srcExpr, dstExpr, lengthVn.getOffset()));
+                                String.format("Set size and composite from %s -> %s with size %d", srcExpr, dstExpr, lengthVn.getOffset()));
                     }
                 }
             }
@@ -78,7 +131,11 @@ public class ExternalHandler {
     static {
         HANDLERS.put("memset", new Memset());
         HANDLERS.put("memcpy", new Memcpy());
-        // Add more handlers as needed
+        HANDLERS.put("mempcpy", new Memcpy());
+        HANDLERS.put("malloc", new Malloc());
+        HANDLERS.put("calloc", new Calloc());
+        // `calloc` and `malloc` are always used for allocating heap buffer for composite types
+        // while `realloc` is used for reallocating heap buffer for `char*`
     }
 
     /**

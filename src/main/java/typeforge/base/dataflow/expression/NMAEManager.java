@@ -30,6 +30,9 @@ public class NMAEManager {
     // mem alias related fields
     public Map<NMAE, Set<NMAE>> fastMayMemAliasCache;
 
+    public Set<NMAE> mallocSensitiveArg = new HashSet<>();
+    public Set<NMAE> callocSensitiveArg = new HashSet<>();
+
     public NMAEManager(TFGManager graphManager) {
         exprToConstraintBeforeMerge = new HashMap<>();
 

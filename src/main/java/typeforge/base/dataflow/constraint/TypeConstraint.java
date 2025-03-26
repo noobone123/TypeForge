@@ -100,6 +100,8 @@ public class TypeConstraint {
         this.elementSize = new HashSet<>(other.elementSize);
     }
 
+    /** If the TypeConstraint is considered as a composite type
+     * It's corresponding expr may be a pointer to a struct or union or array (including `char*`) */
     public void setComposite(boolean isComposite) {
         this.isComposite = isComposite;
     }
