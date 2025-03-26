@@ -93,7 +93,9 @@ public class TypeAnalyzer {
         var callback = new PrepareFunctionNodeCallback(
                 Global.currentProgram,
                 (ifc) -> {
-                    ifc.toggleCCode(true);
+                    ifc.toggleCCode(false);
+                    // PCodeSyntaxTree must be enabled to get HighSymbol
+                    ifc.toggleSyntaxTree(true);
                 },
                 addrToFuncNode
         );

@@ -38,9 +38,10 @@ public class CallSite {
 
     @Override
     public String toString() {
+        // It's really hard for ghidra to get the asm addr from pcode, so we use the BasicBlock addr instead.
         return String.format(
-                "CallSite{calleeAddr=%s, PCodeOp=%s",
-                calleeAddr, callOp.toString()
+                "CallSite{BBAddr=%s}",
+                callOp.getParent().getStart().toString()
         );
     }
 

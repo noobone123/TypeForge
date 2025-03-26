@@ -3,6 +3,7 @@ package typeforge.base.dataflow.expression;
 import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
+import typeforge.base.node.CallSite;
 import typeforge.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
@@ -206,13 +207,13 @@ public class NMAEManager {
         }
         // ensure that the index * scale is always on the right side of base
         if (a.hasIndexScale() && !a.hasBase()) {
-            if (!b.isConst()) {
+            if (!b.isNormalConst()) {
                 return add(b, a);
             }
         }
 
         Builder builder = new Builder();
-        if (a.isConst() && b.isConst()) {
+        if (a.isNormalConst() && b.isNormalConst()) {
             builder.constant(a.constant + b.constant);
         }
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
@@ -258,7 +259,7 @@ public class NMAEManager {
      * @return the result of the multiply operation
      */
     public NMAE multiply(NMAE a, NMAE b) {
-        if (!a.isConst() && !b.isConst) {
+        if (!a.isNormalConst() && !b.isNormalConst()) {
             Logging.warn("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
             return null;
         }
@@ -269,7 +270,7 @@ public class NMAEManager {
         }
 
         Builder builder = new Builder();
-        if (a.isConst() && b.isConst()) {
+        if (a.isNormalConst() && b.isNormalConst()) {
             builder.constant(a.constant * b.constant);
         }
         else if (a.isRootSymExpr() || a.isDereference() || a.isReference()) {
@@ -329,10 +330,13 @@ public class NMAEManager {
         public NMAE offsetExpr = null;
         public HighSymbol rootSym = null;
         public long constant = 0;
+        public CallSite callSite = null;
+        public int argIndex = -1;
         public boolean dereference = false;
         public boolean reference = false;
         public NMAE nestedExpr = null;
-        public boolean isConst = false;
+        public boolean isNormalConst = false;
+        public boolean isArgConst = false;
         public boolean isGlobal = false;
         public Address globalAddr = null;
         public boolean isTemp = false;
@@ -369,8 +373,16 @@ public class NMAEManager {
         }
 
         public Builder constant(long constant) {
-            this.isConst = true;
+            this.isNormalConst = true;
             this.constant = constant;
+            return this;
+        }
+
+        public Builder constArg(long constant, CallSite callSite, int index) {
+            this.isArgConst = true;
+            this.constant = constant;
+            this.callSite = callSite;
+            this.argIndex = index;
             return this;
         }
 
@@ -404,7 +416,7 @@ public class NMAEManager {
 
 
             int hash;
-            // IMPORTANT: modified the equals and hashCode should be careful the cache mechanism in Builder
+            // IMPORTANT: Following Hash Calculation should ba consistent with the `hash` function in `NMAE` class
             if (isGlobal) {
                 hash = Objects.hash(globalAddr, indexExpr, scaleExpr,
                         offsetExpr, constant, dereference, reference, nestedExpr);
@@ -414,9 +426,9 @@ public class NMAEManager {
             }
             else {
                 hash = Objects.hash(baseExpr, indexExpr, scaleExpr,
-                        offsetExpr, rootSym, constant,
+                        offsetExpr, rootSym, constant, callSite, argIndex,
                         dereference, reference, nestedExpr,
-                        isConst);
+                        isNormalConst, isArgConst);
             }
 
             if (builderCache.containsKey(hash)) {

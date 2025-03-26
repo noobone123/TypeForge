@@ -30,7 +30,7 @@ public class ParsedExpr {
             parsedExpr.scale = expr.getNestedExpr().getScale();
 
             if (parsedExpr.offset != null) {
-                if (!parsedExpr.offset.isConst()) {
+                if (!parsedExpr.offset.isNormalConst()) {
                     Logging.warn("ParsedExpr", String.format("Offset is not a constant: %s, Skipping...", expr));
                     return Optional.empty();
                 } else {

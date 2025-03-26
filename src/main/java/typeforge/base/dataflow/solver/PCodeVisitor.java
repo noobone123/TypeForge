@@ -527,14 +527,15 @@ public class PCodeVisitor {
         var callSite = funcNode.callSites.get(pcodeOp);
         var argToFacts = new HashMap<Varnode, KSet<NMAE>>();
 
-        for (var arg: callSite.arguments) {
+        for (int argIdx = 0; argIdx < callSite.arguments.size(); argIdx++) {
             // We consider constant callsite arguments because it's useful for following analysis.
+            var arg = callSite.arguments.get(argIdx);
             if (arg.isConstant()) {
-                Logging.trace("PCodeVisitor",
-                        String.format("Argument %s is a constant.", arg));
+                var constArgExpr = new NMAEManager.Builder().constArg(getSigned(arg), callSite, argIdx).build();
+                Logging.debug("PCodeVisitor",
+                        String.format("Argument %s is a constant.", constArgExpr));
 
-                var constExpr = new NMAEManager.Builder().constant(getSigned(arg)).build();
-                intraSolver.updateDataFlowFacts(arg, constExpr);
+                intraSolver.updateDataFlowFacts(arg, constArgExpr);
             }
 
             if (!intraSolver.isTracedVn(arg)) {

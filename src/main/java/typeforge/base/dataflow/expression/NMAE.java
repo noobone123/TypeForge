@@ -1,5 +1,6 @@
 package typeforge.base.dataflow.expression;
 
+import typeforge.base.node.CallSite;
 import typeforge.utils.Logging;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.listing.Function;
@@ -33,7 +34,11 @@ public class NMAE {
     public NMAE offsetExpr = null;
 
     public HighSymbol rootSym = null;
+
     public long constant = 0;
+    public CallSite callSite = null;
+    public int argIndex = -1;
+
     public boolean dereference = false;
     public boolean reference = false;
     public NMAE nestedExpr = null;
@@ -41,7 +46,8 @@ public class NMAE {
     public Function function = null;
     public String prefix = null;
 
-    public boolean isConst = false;
+    private boolean isNormalConst = false;
+    private boolean isArgConst = false;
     public boolean isGlobal = false;
     public Address globalAddr = null;
 
@@ -62,10 +68,13 @@ public class NMAE {
         this.offsetExpr = builder.offsetExpr;
         this.rootSym = builder.rootSym;
         this.constant = builder.constant;
+        this.callSite = builder.callSite;
+        this.argIndex = builder.argIndex;
         this.dereference = builder.dereference;
         this.reference = builder.reference;
         this.nestedExpr = builder.nestedExpr;
-        this.isConst = builder.isConst;
+        this.isNormalConst = builder.isNormalConst;
+        this.isArgConst = builder.isArgConst;
         this.isGlobal = builder.isGlobal;
         this.globalAddr = builder.globalAddr;
         this.isTemp = builder.isTemp;
@@ -81,7 +90,10 @@ public class NMAE {
 
         if (isGlobal) {
             this.prefix = "[Global]";
-        } else if (isConst()) {
+        } else if (isArgConst()) {
+            this.prefix = String.format("[ConstArg-%s-%d]", this.callSite, this.argIndex);
+            this.function = callSite.caller;
+        } else if (isNormalConst()) {
             this.prefix = "[Constant]";
         } else if (isTemp) {
             this.prefix = "[Temp]";
@@ -114,6 +126,20 @@ public class NMAE {
         return constant;
     }
 
+    public CallSite getCallSite() {
+        if (isArgConst && callSite != null && argIndex != -1) {
+            return callSite;
+        }
+        return null;
+    }
+
+    public int getArgIndex() {
+        if (isArgConst && callSite != null && argIndex != -1) {
+            return argIndex;
+        }
+        return -1;
+    }
+
     public boolean hasOffset() {
         return offsetExpr != null;
     }
@@ -127,11 +153,15 @@ public class NMAE {
     }
 
     public boolean isNoZeroConst() {
-        return isConst && constant != 0;
+        return isNormalConst && constant != 0;
     }
 
-    public boolean isConst() {
-        return isConst;
+    public boolean isNormalConst() {
+        return isNormalConst;
+    }
+
+    public boolean isArgConst() {
+        return isArgConst && callSite != null && argIndex != -1;
     }
 
     public boolean isRootSymExpr() {
@@ -179,6 +209,10 @@ public class NMAE {
         return null;
     }
 
+    public Function getFunction() {
+        return function;
+    }
+
     public void addAttribute(Attribute attr) {
         attributes.add(attr);
     }
@@ -211,7 +245,10 @@ public class NMAE {
         if (rootSym != null) {
             sb.append(rootSym.getName());
         }
-        else if (isConst) {
+        else if (isNormalConst) {
+            sb.append("0x").append(Long.toHexString(constant));
+        }
+        else if (isArgConst) {
             sb.append("0x").append(Long.toHexString(constant));
         }
         else if (isTemp) {
@@ -263,9 +300,9 @@ public class NMAE {
         }
         else {
             return Objects.hash(baseExpr, indexExpr, scaleExpr,
-                    offsetExpr, rootSym, constant,
+                    offsetExpr, rootSym, constant, callSite, argIndex,
                     dereference, reference, nestedExpr,
-                    isConst);
+                    isNormalConst, isArgConst);
         }
     }
 
