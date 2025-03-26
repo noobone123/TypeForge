@@ -10,11 +10,13 @@ import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.CallSite;
 import typeforge.base.node.FunctionNode;
+import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import typeforge.base.dataflow.expression.NMAE;
 import ghidra.program.model.listing.Function;
 
 
+import java.io.File;
 import java.util.*;
 
 /**
@@ -30,7 +32,7 @@ public class InterSolver {
     /** The set of functions that are stitched with its callee */
     public Set<FunctionNode> stitchedFunc;
 
-    public HashMap<FunctionNode, IntraSolver> intraSolverMap;
+    public HashMap<Function, IntraSolver> intraSolverMap;
 
     public AccessPoints APs;
     public TFGManager graphManager;
@@ -60,7 +62,7 @@ public class InterSolver {
         IntraSolver intraSolver =
                 new IntraSolver(funcNode, exprManager, graphManager, APs);
 
-        intraSolverMap.put(funcNode, intraSolver);
+        intraSolverMap.put(funcNode.value, intraSolver);
         return intraSolver;
     }
 
@@ -94,7 +96,7 @@ public class InterSolver {
     private void stitchTFG(FunctionNode funcNode) {
         Logging.debug("InterSolver", String.format("Stitching function %s", funcNode.value.getName()));
 
-        var intraSolver = intraSolverMap.get(funcNode);
+        var intraSolver = intraSolverMap.get(funcNode.value);
         var bridgeInfo = intraSolver.bridgeInfo;
         // Iterate each callSite in the function
         for (var callSite: bridgeInfo.keySet()) {
@@ -144,7 +146,7 @@ public class InterSolver {
 
                 var recevierVn = callSite.receiver;
                 var recevierFacts = bridgeInfo.get(callSite).get(recevierVn);
-                var retExprs = intraSolverMap.get(calleeNode).getReturnExpr();
+                var retExprs = intraSolverMap.get(calleeNode.value).getReturnExpr();
                 // It's common because some functions has primitive return type which we don't trace
                 if (retExprs.isEmpty()) {
                     Logging.warn("InterSolver",
@@ -182,11 +184,14 @@ public class InterSolver {
     }
 
     /**
-     * Build the complex data type's constraints for the HighSymbol based on the AccessPoints calculated from intraSolver.
+     * IMPORTANT: This function should be called after the whole program TFG is built.
+     * Build the complex data type's constraints for based on the WholeProgram TFG.
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void typeHintPropagation() {
-        graphManager.TFGStatistics();
+        graphManager.earlyTFGStatistics();
+
+        simpleConstantPropagation();
 
 //        // Parsing all fieldAccess Expressions first to build the constraint's skeleton
 //        for (var symExpr : exprManager.getFieldExprSet()) {
@@ -208,6 +213,30 @@ public class InterSolver {
 //        typeHintCollector.handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
 //        typeHintCollector.handleMemberConflict();
 //        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
+    }
+
+    /**
+     * This Simple Constant Propagation is used to propagate the constant arguments and check if they can propagate to the sensitive function's arguments.
+     * If so, we need update related TypeConstraints.
+     * For example, if
+     *  1. const_callsite_arg_1 -> wrapper_func_param1 -> malloc's size
+     *  2. const_callsize_arg_2 -> wrapper_func_param1 -> malloc's size
+     *  And there's also a path from malloc's return value to corresponding callsite's reciver
+     *  Then this receiver's TypeConstraint's size should be set.
+     *  And the wrapper function should also be identified and marked.
+     */
+    private void simpleConstantPropagation() {
+        for (var cs: callocCs) {
+            if (cs.caller.getName().equals("ck_calloc")) {
+                var arg1 = cs.arguments.get(0);
+                var arg2 = cs.arguments.get(1);
+                var receiver = cs.receiver;
+                var arg1Facts = intraSolverMap.get(cs.caller).getDataFlowFacts(arg1);
+                for (var arg1Fact: arg1Facts) {
+                    graphManager.dumpPartialTFG(arg1Fact, 5, new File(Global.outputDirectory));
+                }
+            }
+        }
     }
 
 

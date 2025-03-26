@@ -27,10 +27,10 @@ public class TypeHintCollector {
     /** fields for handle conflict paths and nodes */
     public final Set<TypeRelationPath<NMAE>> evilPaths = new HashSet<>();
     public final Set<NMAE> evilNodes = new HashSet<>();
-    public final Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
+    public final Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
     public final Set<NMAE> evilSource = new HashSet<>();
-    public final Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
-    public final Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
+    public final Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceLCSEdges = new HashMap<>();
+    public final Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceEndEdges = new HashMap<>();
     public final Set<NMAE> injuredNode = new HashSet<>();
 
     public TypeHintCollector(NMAEManager exprManager) {
@@ -566,15 +566,15 @@ public class TypeHintCollector {
     }
 
     public void updateEvilSource(Set<NMAE> evilSource,
-                                  Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceLCSEdges,
-                                  Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceEndEdges) {
+                                  Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceLCSEdges,
+                                  Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceEndEdges) {
         this.evilSource.addAll(evilSource);
         this.evilSourceLCSEdges.putAll(evilSourceLCSEdges);
         this.evilSourceEndEdges.putAll(evilSourceEndEdges);
     }
 
     public void updateEvilNodes(Set<NMAE> evilNodes,
-                                Map<NMAE, Set<TypeFlowGraph.TypeRelationEdge>> evilNodeEdges) {
+                                Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges) {
         this.evilNodes.addAll(evilNodes);
         this.evilNodeEdges.putAll(evilNodeEdges);
     }

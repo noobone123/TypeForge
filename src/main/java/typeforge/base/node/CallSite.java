@@ -1,6 +1,7 @@
 package typeforge.base.node;
 
 import ghidra.program.model.address.Address;
+import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.PcodeOp;
 import ghidra.program.model.pcode.Varnode;
 import jnr.ffi.Struct;
@@ -9,13 +10,15 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class CallSite {
+    public Function caller;
     public Address calleeAddr;
     public PcodeOp callOp;
     public List<Varnode> arguments;
     public Varnode receiver;
     private boolean hasReceiver = false;
 
-    public CallSite(Address CalleeAddr, PcodeOp callOp) {
+    public CallSite(Function caller, Address CalleeAddr, PcodeOp callOp) {
+        this.caller = caller;
         this.calleeAddr = CalleeAddr;
         this.callOp = callOp;
         this.arguments = new ArrayList<>();
@@ -43,7 +46,7 @@ public class CallSite {
 
     @Override
     public int hashCode() {
-        return callOp.hashCode() * 31 + calleeAddr.hashCode();
+        return caller.hashCode() * 31 + calleeAddr.hashCode() * 17 + callOp.hashCode();
     }
 
     @Override
@@ -54,6 +57,8 @@ public class CallSite {
         if (!(obj instanceof CallSite other)) {
             return false;
         }
-        return this.callOp.equals(other.callOp) && this.calleeAddr.equals(other.calleeAddr);
+        return this.caller.equals(other.caller) &&
+                this.calleeAddr.equals(other.calleeAddr) &&
+                this.callOp.equals(other.callOp);
     }
 }

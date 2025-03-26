@@ -19,10 +19,10 @@ public class TypeFlowGraph<T> {
         ALIAS,
     }
 
-    public static class TypeRelationEdge extends DefaultEdge {
+    public static class TypeFlowEdge extends DefaultEdge {
         private final EdgeType type;
 
-        public TypeRelationEdge(EdgeType type) {
+        public TypeFlowEdge(EdgeType type) {
             this.type = type;
         }
 
@@ -43,7 +43,7 @@ public class TypeFlowGraph<T> {
             if (obj == null || getClass() != obj.getClass()) {
                 return false;
             }
-            TypeRelationEdge other = (TypeRelationEdge) obj;
+            TypeFlowEdge other = (TypeFlowEdge) obj;
             return this.getSource().equals(other.getSource()) && this.getTarget().equals(other.getTarget()) && this.type == other.type;
         }
 
@@ -55,20 +55,20 @@ public class TypeFlowGraph<T> {
         }
     }
 
-    private final Graph<T, TypeRelationEdge> graph;
+    private final Graph<T, TypeFlowEdge> graph;
     private final UUID uuid;
     private final String shortUUID;
 
     public TypeRelationPathManager<T> pathManager;
 
     public TypeFlowGraph() {
-        graph = new DefaultDirectedGraph<>(TypeRelationEdge.class);
+        graph = new DefaultDirectedGraph<>(TypeFlowEdge.class);
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
 
         pathManager = new TypeRelationPathManager<T>(this);
 
-        Logging.trace("TypeRelationGraph", String.format("Create TypeRelationGraph_%s", shortUUID));
+        Logging.trace("TypeFlowGraph", String.format("Create TypeFlowGraph_%s", shortUUID));
     }
 
     public String getShortUUID() {
@@ -78,18 +78,18 @@ public class TypeFlowGraph<T> {
     public void addEdge(T src, T dst, EdgeType edgeType) {
         graph.addVertex(src);
         graph.addVertex(dst);
-        graph.addEdge(src, dst, new TypeRelationEdge(edgeType));
-        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
+        graph.addEdge(src, dst, new TypeFlowEdge(edgeType));
+        Logging.trace("TypeFlowGraph", String.format("TypeFlowGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
     }
 
     public void removeEdge(T src, T dst) {
         graph.removeEdge(src, dst);
-        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
+        Logging.trace("TypeFlowGraph", String.format("TypeFlowGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
     }
 
     public void removeNode(T node) {
         graph.removeVertex(node);
-        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove node: %s", shortUUID, node));
+        Logging.trace("TypeFlowGraph", String.format("TypeFlowGraph_%s Remove node: %s", shortUUID, node));
     }
 
     public int getNumNodes() {
@@ -100,7 +100,7 @@ public class TypeFlowGraph<T> {
         return graph.vertexSet();
     }
 
-    public Graph<T, TypeRelationEdge> getGraph() {
+    public Graph<T, TypeFlowEdge> getGraph() {
         return graph;
     }
 
@@ -109,28 +109,28 @@ public class TypeFlowGraph<T> {
             graph.addVertex(vertex);
         }
 
-        Set<TypeRelationEdge> edges = other.getGraph().edgeSet();
-        for (TypeRelationEdge edge: edges) {
+        Set<TypeFlowEdge> edges = other.getGraph().edgeSet();
+        for (TypeFlowEdge edge: edges) {
             T src = other.getGraph().getEdgeSource(edge);
             T dst = other.getGraph().getEdgeTarget(edge);
             var EdgeType = edge.getType();
 
-            TypeRelationEdge existingEdge = graph.getEdge(src, dst);
+            TypeFlowEdge existingEdge = graph.getEdge(src, dst);
             if (existingEdge == null) {
-                graph.addEdge(src, dst, new TypeRelationEdge(EdgeType));
+                graph.addEdge(src, dst, new TypeFlowEdge(EdgeType));
             } else if (existingEdge.getType() != EdgeType) {
-                Logging.warn("TypeRelationGraph", String.format("%s Merge conflict: %s ---> %s", other, src, dst));
+                Logging.warn("TypeFlowGraph", String.format("%s Merge conflict: %s ---> %s", other, src, dst));
             } else {
                 continue;
             }
         }
 
-        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Merge with %s", shortUUID, other));
+        Logging.trace("TypeFlowGraph", String.format("TypeFlowGraph_%s Merge with %s", shortUUID, other));
     }
 
 
     public List<Set<T>> getConnectedComponents() {
-        ConnectivityInspector<T, TypeRelationEdge> inspector = new ConnectivityInspector<>(graph);
+        ConnectivityInspector<T, TypeFlowEdge> inspector = new ConnectivityInspector<>(graph);
         var result = inspector.connectedSets();
 
         return result;
@@ -147,8 +147,8 @@ public class TypeFlowGraph<T> {
 
     public String toGraphviz() {
         StringBuilder builder = new StringBuilder();
-        builder.append("digraph TypeRelationGraph_").append(shortUUID).append(" {\n");
-        for (TypeRelationEdge edge : graph.edgeSet()) {
+        builder.append("digraph TypeFlowGraph_").append(shortUUID).append(" {\n");
+        for (TypeFlowEdge edge : graph.edgeSet()) {
             T src = graph.getEdgeSource(edge);
             T dst = graph.getEdgeTarget(edge);
             builder.append("  \"").append(src).append("\" -> \"").append(dst)
@@ -158,8 +158,93 @@ public class TypeFlowGraph<T> {
         return builder.toString();
     }
 
+    /**
+     * Write the partial TFG for a given NMAE node into one graphviz file.
+     * @param node The node to dump the TFG for
+     * @param maxDepth Max graph edge depth around the node
+     */
+    public String toPartialGraphviz(T node, int maxDepth) {
+        if (!graph.containsVertex(node)) {
+            return "digraph Empty {\n}";
+        }
+
+        Set<TypeFlowEdge> includedEdges = new HashSet<>();
+
+        // BFS to find nodes within maxDepth
+        Map<T, Integer> distanceMap = new HashMap<>();
+        Queue<T> queue = new LinkedList<>();
+
+        // Start with the given node
+        queue.add(node);
+        distanceMap.put(node, 0);
+
+        // Process outgoing edges (forward direction)
+        while (!queue.isEmpty()) {
+            T current = queue.poll();
+            int currentDistance = distanceMap.get(current);
+
+            if (currentDistance < maxDepth) {
+                // Process outgoing edges
+                for (TypeFlowEdge edge : graph.outgoingEdgesOf(current)) {
+                    T target = graph.getEdgeTarget(edge);
+                    if (!distanceMap.containsKey(target) || distanceMap.get(target) > currentDistance + 1) {
+                        distanceMap.put(target, currentDistance + 1);
+                        includedEdges.add(edge);
+                        queue.add(target);
+                    } else {
+                        includedEdges.add(edge);
+                    }
+                }
+            }
+        }
+
+        // Reset for backward traversal
+        queue.clear();
+        queue.add(node);
+        Map<T, Integer> reverseDistanceMap = new HashMap<>();
+        reverseDistanceMap.put(node, 0);
+
+        // Process incoming edges (backward direction)
+        while (!queue.isEmpty()) {
+            T current = queue.poll();
+            int currentDistance = reverseDistanceMap.get(current);
+
+            if (currentDistance < maxDepth) {
+                // Process incoming edges
+                for (TypeFlowEdge edge : graph.incomingEdgesOf(current)) {
+                    T source = graph.getEdgeSource(edge);
+                    if (!reverseDistanceMap.containsKey(source) || reverseDistanceMap.get(source) > currentDistance + 1) {
+                        reverseDistanceMap.put(source, currentDistance + 1);
+                        includedEdges.add(edge);
+                        queue.add(source);
+                    } else {
+                        includedEdges.add(edge);
+                    }
+                }
+            }
+        }
+
+        // Generate graphviz representation
+        StringBuilder builder = new StringBuilder();
+        builder.append("digraph Partial_TypeFlowGraph_").append(shortUUID).append(" {\n");
+
+        // Highlight the center node
+        builder.append("  \"").append(node).append("\" [style=filled, fillcolor=lightblue];\n");
+
+        // Add all edges
+        for (TypeFlowEdge edge : includedEdges) {
+            T src = graph.getEdgeSource(edge);
+            T dst = graph.getEdgeTarget(edge);
+            builder.append("  \"").append(src).append("\" -> \"").append(dst)
+                    .append("\" [label=\"").append(edge.getType()).append("\"];\n");
+        }
+
+        builder.append("}");
+        return builder.toString();
+    }
+
     public TypeFlowGraph<T> createCopy() {
-        Logging.trace("TypeRelationGraph", "Create copy of " + this);
+        Logging.trace("TypeFlowGraph", "Create copy of " + this);
         TypeFlowGraph<T> copy = new TypeFlowGraph<>();
         Graphs.addGraph(copy.graph, this.graph);
         return copy;
@@ -167,6 +252,6 @@ public class TypeFlowGraph<T> {
 
     @Override
     public String toString() {
-        return "TypeRelationGraph_" + shortUUID;
+        return "TypeFlowGraph_" + shortUUID;
     }
 }

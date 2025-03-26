@@ -28,16 +28,16 @@ public class TypeRelationPathManager<T> {
     /** fields for handle conflict paths and nodes */
     public final Set<TypeRelationPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
     public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
-    public final Map<T, Set<TypeFlowGraph.TypeRelationEdge>> evilNodeEdges = new HashMap<>();
+    public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
     public final Set<T> evilSource = new HashSet<>();
     public final Set<Function> evilFunction = new HashSet<>();
-    public final Map<T, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceLCSEdges = new HashMap<>();
-    public final Map<T, Set<TypeFlowGraph.TypeRelationEdge>> evilSourceEndEdges = new HashMap<>();
+    public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceLCSEdges = new HashMap<>();
+    public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceEndEdges = new HashMap<>();
 
     /** fields for handle edges that introduce conflicts */
-    public final Set<TypeFlowGraph.TypeRelationEdge> mustRemove = new HashSet<>();
-    public final Set<TypeFlowGraph.TypeRelationEdge> mayRemove = new HashSet<>();
-    public final Set<TypeFlowGraph.TypeRelationEdge> keepEdges = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeFlowEdge> mustRemove = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeFlowEdge> mayRemove = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeFlowEdge> keepEdges = new HashSet<>();
 
     /** Fields for build skeletons, not used for conflict checking
      * If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
@@ -258,7 +258,7 @@ public class TypeRelationPathManager<T> {
     /**
      * Removed edges are mustRemove + (mayRemove - keepEdges)
      */
-    public Set<TypeFlowGraph.TypeRelationEdge> getEdgesToRemove() {
+    public Set<TypeFlowGraph.TypeFlowEdge> getEdgesToRemove() {
         /* Add all edges of current conflict node to mustRemove */
         for (var node: evilNodes) {
             mayRemove.addAll(graph.getGraph().edgesOf(node));
@@ -511,15 +511,15 @@ public class TypeRelationPathManager<T> {
      * @param lcs given Longest Common Subpath in the set of paths
      * @param paths set of paths
      */
-    private Set<TypeFlowGraph.TypeRelationEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
-        Set<TypeFlowGraph.TypeRelationEdge> endEdges = new HashSet<>();
+    private Set<TypeFlowGraph.TypeFlowEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+        Set<TypeFlowGraph.TypeFlowEdge> endEdges = new HashSet<>();
         if (lcs.isEmpty()) {
             return endEdges;
         }
 
         for (var path: paths) {
             List<T> nodes = path.nodes;
-            List<TypeFlowGraph.TypeRelationEdge> edges = path.edges;
+            List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
 
             // Find the start index of the LCS in the current path
             int startIdx = Collections.indexOfSubList(nodes, lcs);
@@ -544,14 +544,14 @@ public class TypeRelationPathManager<T> {
     }
 
 
-    private Set<TypeFlowGraph.TypeRelationEdge> getEdgesInLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+    private Set<TypeFlowGraph.TypeFlowEdge> getEdgesInLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
         // Initialize a set to store the edges within the LCS
-        Set<TypeFlowGraph.TypeRelationEdge> lcsEdges = new HashSet<>();
+        Set<TypeFlowGraph.TypeFlowEdge> lcsEdges = new HashSet<>();
 
         // Loop through each path in the set
         for (TypeRelationPath<T> path : paths) {
             List<T> nodes = path.nodes;
-            List<TypeFlowGraph.TypeRelationEdge> edges = path.edges;
+            List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
 
             // Find the starting index of LCS in the current path
             int startIdx = Collections.indexOfSubList(nodes, lcs);
@@ -577,19 +577,19 @@ public class TypeRelationPathManager<T> {
     }
 
     private Set<TypeRelationPath<T>> splitPathsByLCS(Set<TypeRelationPath<T>> candidatePaths,
-                                                     Set<TypeFlowGraph.TypeRelationEdge> endEdgesOfLCS,
+                                                     Set<TypeFlowGraph.TypeFlowEdge> endEdgesOfLCS,
                                                      NMAEManager exprManager) {
         Set<TypeRelationPath<T>> newPaths = new HashSet<>();
 
         for (TypeRelationPath<T> path : candidatePaths) {
             List<T> nodes = path.nodes;
-            List<TypeFlowGraph.TypeRelationEdge> edges = path.edges;
+            List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
 
             var splitIndex = 0;
             for (int i = 0; i < edges.size(); i++) {
                 if (endEdgesOfLCS.contains(edges.get(i))) {
                     List<T> subPathNodes = new ArrayList<>(nodes.subList(0, i + 1));
-                    List<TypeFlowGraph.TypeRelationEdge> subPathEdges = new ArrayList<>(edges.subList(0, i));
+                    List<TypeFlowGraph.TypeFlowEdge> subPathEdges = new ArrayList<>(edges.subList(0, i));
 
                     if (!subPathNodes.isEmpty()) {
                         TypeRelationPath<T> newPath = new TypeRelationPath<>(subPathNodes, subPathEdges);
@@ -604,7 +604,7 @@ public class TypeRelationPathManager<T> {
             // Add the remaining part of the path as a new path if any
             if (splitIndex < nodes.size()) {
                 List<T> remainingNodes = new ArrayList<>(nodes.subList(splitIndex, nodes.size()));
-                List<TypeFlowGraph.TypeRelationEdge> remainingEdges = new ArrayList<>(edges.subList(splitIndex, edges.size()));
+                List<TypeFlowGraph.TypeFlowEdge> remainingEdges = new ArrayList<>(edges.subList(splitIndex, edges.size()));
 
                 if (!remainingNodes.isEmpty()) {
                     TypeRelationPath<T> newPath = new TypeRelationPath<>(remainingNodes, remainingEdges);

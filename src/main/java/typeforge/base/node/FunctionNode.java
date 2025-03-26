@@ -192,7 +192,7 @@ public class FunctionNode extends NodeBase<Function> {
                     returnOp = op;
                 }
                 if (op.getOpcode() == PcodeOp.CALL) {
-                    var callSite = new CallSite(op.getInput(0).getAddress(), op);
+                    var callSite = new CallSite(value, op.getInput(0).getAddress(), op);
                     callSites.put(op, callSite);
                 }
             }

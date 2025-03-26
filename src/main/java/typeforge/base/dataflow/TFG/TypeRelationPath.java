@@ -11,7 +11,7 @@ public class TypeRelationPath<T> {
     public final UUID uuid = UUID.randomUUID();
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
-    public List<TypeFlowGraph.TypeRelationEdge> edges;
+    public List<TypeFlowGraph.TypeFlowEdge> edges;
     public List<TypeConstraint> forwardMergedConstraints;
     public List<TypeConstraint> backwardMergedConstraints;
     public TypeConstraint finalConstraint = null;
@@ -19,14 +19,14 @@ public class TypeRelationPath<T> {
     public boolean noComposite = false;
     public T start;
     public T end;
-    public Set<TypeFlowGraph.TypeRelationEdge> evilEdges;
+    public Set<TypeFlowGraph.TypeFlowEdge> evilEdges;
 
     /**
      * Map[SUB_PATH_LENGTH, Map[HASH_CODE, SUB_PATH_NODES]]
      */
     public Map<Integer, Map<Integer, List<T>>> subPathsOfLengthWithHash = new HashMap<>();
 
-    public TypeRelationPath(GraphPath<T, TypeFlowGraph.TypeRelationEdge> path) {
+    public TypeRelationPath(GraphPath<T, TypeFlowGraph.TypeFlowEdge> path) {
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
@@ -39,7 +39,7 @@ public class TypeRelationPath<T> {
         this.evilEdges = new HashSet<>();
     }
 
-    public TypeRelationPath(List<T> nodes, List<TypeFlowGraph.TypeRelationEdge> edges) {
+    public TypeRelationPath(List<T> nodes, List<TypeFlowGraph.TypeFlowEdge> edges) {
         this.nodes = nodes;
         this.edges = edges;
 
@@ -211,8 +211,8 @@ public class TypeRelationPath<T> {
     }
 
 
-    public Set<TypeFlowGraph.TypeRelationEdge> getConnectedEdges(T node) {
-        var result = new HashSet<TypeFlowGraph.TypeRelationEdge>();
+    public Set<TypeFlowGraph.TypeFlowEdge> getConnectedEdges(T node) {
+        var result = new HashSet<TypeFlowGraph.TypeFlowEdge>();
         var nodeIdx = nodes.indexOf(node);
         if (nodeIdx != -1) {
             if (nodeIdx > 0) {
