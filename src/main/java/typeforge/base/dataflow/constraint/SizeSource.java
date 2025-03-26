@@ -5,7 +5,7 @@ import typeforge.base.node.CallSite;
 import typeforge.utils.Logging;
 
 /**
- * Tracks the source of size information for a TypeConstraint.
+ * Tracks the source of size information for a Skeleton.
  */
 public class SizeSource {
 

@@ -1,7 +1,7 @@
 package typeforge.base.passes;
 
 import typeforge.base.dataflow.AccessPoints;
-import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Global;
 import ghidra.program.model.data.DataType;
@@ -42,7 +42,7 @@ public class Window {
         for (var element: windowElements.values()) {
             long fieldSize;
             long fieldAlignSize = 1;
-            if (element instanceof Skeleton) {
+            if (element instanceof TypeConstraint) {
                 fieldSize = Global.currentProgram.getDefaultPointerSize();
                 fieldAlignSize = fieldSize;
             }
@@ -106,7 +106,7 @@ public class Window {
             int fieldSize;
             int fieldAlignSize = 1;
 
-            if (element instanceof Skeleton) {
+            if (element instanceof TypeConstraint) {
                 fieldSize = Global.currentProgram.getDefaultPointerSize();
                 fieldAlignSize = fieldSize;
             } else {
@@ -135,9 +135,9 @@ public class Window {
         }
 
         var firstElement = windowElements.get(0);
-        if (firstElement instanceof Skeleton skt) {
+        if (firstElement instanceof TypeConstraint skt) {
             for (var element: windowElements.values()) {
-                if (!(element instanceof Skeleton) || !element.equals(skt)) {
+                if (!(element instanceof TypeConstraint) || !element.equals(skt)) {
                     return false;
                 }
             }
@@ -165,7 +165,7 @@ public class Window {
             int offset = entry.getKey();
             Object element = entry.getValue();
             sb.append(String.format("0x%x", offset)).append(": ");
-            if (element instanceof Skeleton skt) {
+            if (element instanceof TypeConstraint skt) {
                 sb.append(skt.toString());
             } else if (element instanceof AccessPoints.APSet apSet) {
                 sb.append(apSet.mostAccessedDT.getName());
@@ -193,7 +193,7 @@ public class Window {
             Object e1 = entry.getValue();
             Object e2 = otherWindow.windowElements.get(offset);
 
-            if (e1 instanceof Skeleton && e2 instanceof Skeleton) {
+            if (e1 instanceof TypeConstraint && e2 instanceof TypeConstraint) {
                 if (!e1.equals(e2)) {
                     return false;
                 }

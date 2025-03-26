@@ -4,7 +4,7 @@ import ghidra.program.model.data.Structure;
 import typeforge.base.dataflow.Range;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.constraint.TypeHintCollector;
 import typeforge.base.passes.SlidingWindowProcessor;
 import typeforge.utils.DataTypeHelper;
@@ -34,25 +34,25 @@ import java.util.*;
 public class Generator {
     public TypeHintCollector typeHintCollector;
     public NMAEManager exprManager;
-    private final Set<Skeleton> finalSkeletons;
+    private final Set<TypeConstraint> finalTypeConstraints;
 
 
     public Generator(TypeHintCollector typeHintCollector, NMAEManager exprManager) {
         this.typeHintCollector = typeHintCollector;
         this.exprManager = exprManager;
-        this.finalSkeletons = new HashSet<>();
+        this.finalTypeConstraints = new HashSet<>();
     }
 
-    public Set<Skeleton> getFinalSkeletons() {
-        return new HashSet<>(finalSkeletons);
+    public Set<TypeConstraint> getFinalSkeletons() {
+        return new HashSet<>(finalTypeConstraints);
     }
 
-    public Map<NMAE, Skeleton> getExprToSkeletonMap() {
-        var exprToSkeletonMap = new HashMap<NMAE, Skeleton>();
+    public Map<NMAE, TypeConstraint> getExprToSkeletonMap() {
+        var exprToSkeletonMap = new HashMap<NMAE, TypeConstraint>();
         for (var entry: typeHintCollector.exprToSkeletonMap.entrySet()) {
             var expr = entry.getKey();
             var skt = entry.getValue();
-            if (finalSkeletons.contains(skt)) {
+            if (finalTypeConstraints.contains(skt)) {
                 exprToSkeletonMap.put(expr, skt);
             }
         }
@@ -67,7 +67,7 @@ public class Generator {
         generation();
 
         /* Post Processing: remove redundant type declaration in morph range */
-        for (var skt: finalSkeletons) {
+        for (var skt: finalTypeConstraints) {
             if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
             }
@@ -111,7 +111,7 @@ public class Generator {
                 handleMayPrimitiveArray(skt);
                 continue;
             }
-            if (!skt.hasNestedSkeleton()) {
+            if (!skt.hasNestedConstraint()) {
                 /* If No Nested Skeleton Found */
                 Logging.debug("Generator", "No Nested Skeleton: " + skt);
                 handleNoNestedSkeleton(skt);
@@ -134,34 +134,34 @@ public class Generator {
             /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
             if (skt.noMorphingTypes() && skt.finalType == null) {
                 handleNormalSkeleton(skt);
-                finalSkeletons.add(skt);
+                finalTypeConstraints.add(skt);
             } else {
-                finalSkeletons.add(skt);
+                finalTypeConstraints.add(skt);
             }
         }
     }
 
-    private void handleNestedSkeleton(Skeleton skt) {
+    private void handleNestedSkeleton(TypeConstraint skt) {
         handleInconsistencyField(skt);
         handleComplexFlatten(skt);
         handlePrimitiveFlatten(skt);
     }
 
-    private void handleNoNestedSkeleton(Skeleton skt) {
+    private void handleNoNestedSkeleton(TypeConstraint skt) {
         handleInconsistencyField(skt);
         handleComplexFlatten(skt);
         handlePrimitiveFlatten(skt);
     }
 
-    private void handleNormalSkeleton(Skeleton skt) {
+    private void handleNormalSkeleton(TypeConstraint skt) {
         var componentMap = getComponentMapByMostAccessed(skt);
         var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
         skt.setFinalType(structDT);
     }
 
-    private void handleMayPrimitiveArray(Skeleton skt) {
+    private void handleMayPrimitiveArray(TypeConstraint skt) {
         skt.mayPrimitiveArray = true;
-        var aps = skt.finalConstraint.fieldAccess.get(0L);
+        var aps = skt.finalSkeleton.fieldAccess.get(0L);
         var elementType = aps.mostAccessedDT;
 
         var componentMap = getComponentMapByMostAccessed(skt);
@@ -170,12 +170,12 @@ public class Generator {
         skt.updateGlobalMorphingDataType(structDT);
     }
 
-    private void handleInconsistencyField(Skeleton skt) {
-        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+    private void handleInconsistencyField(TypeConstraint skt) {
+        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
 
-            if (skt.hasNestedSkeleton() && skt.isInNestedRange(offset)) {
+            if (skt.hasNestedConstraint() && skt.isInNestedRange(offset)) {
                 continue;
             }
 
@@ -204,8 +204,8 @@ public class Generator {
         }
     }
 
-    private void handlePrimitiveFlatten(Skeleton skt) {
-        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+    private void handlePrimitiveFlatten(TypeConstraint skt) {
+        List<Long> offsets = new ArrayList<>(skt.finalSkeleton.fieldAccess.keySet());
         SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 1);
 
         for (int i = 0; i < offsets.size() - 1; i++) {
@@ -236,8 +236,8 @@ public class Generator {
         }
     }
 
-    private void handleComplexFlatten(Skeleton skt) {
-        List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+    private void handleComplexFlatten(TypeConstraint skt) {
+        List<Long> offsets = new ArrayList<>(skt.finalSkeleton.fieldAccess.keySet());
         SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 2);
 
         /* same window should not appear twice in the same range */
@@ -290,9 +290,9 @@ public class Generator {
      * @param skt the skeleton
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMapByMostAccessed(Skeleton skt) {
+    private Map<Integer, DataType> getComponentMapByMostAccessed(TypeConstraint skt) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
             var mostAccessedDT = aps.mostAccessedDT;
@@ -307,9 +307,9 @@ public class Generator {
         return componentMap;
     }
 
-    private Map<Integer, DataType> getComponentMapBySpecifyDT(Skeleton skt, long specOffset, DataType specDT) {
+    private Map<Integer, DataType> getComponentMapBySpecifyDT(TypeConstraint skt, long specOffset, DataType specDT) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
 
@@ -334,9 +334,9 @@ public class Generator {
      * @param offset the offset to create union
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMapByUnionFields(Skeleton skt, long offset) {
+    private Map<Integer, DataType> getComponentMapByUnionFields(TypeConstraint skt, long offset) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey().intValue();
 
             if (skt.finalPtrReference.containsKey((long) fieldOffset)) {
@@ -365,12 +365,12 @@ public class Generator {
      * @param flattenCnt the count of the flatten fields
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMapByRecoverFlattenToArray(Skeleton skt, long flattenStartOffset,
+    private Map<Integer, DataType> getComponentMapByRecoverFlattenToArray(TypeConstraint skt, long flattenStartOffset,
                                                                           DataType winDT, int flattenCnt) {
         var componentMap = new TreeMap<Integer, DataType>();
         long flattenEndOffset = flattenStartOffset + (long) winDT.getLength() * flattenCnt;
 
-        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey();
             if (fieldOffset < flattenStartOffset || fieldOffset >= flattenEndOffset) {
                 DataType dt;
@@ -400,12 +400,12 @@ public class Generator {
      * @param flattenCnt the count of the flatten fields
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMapByRecoverFlattenToNest(Skeleton skt, long flattenStartOffset,
-                                                                        DataType winDT, int flattenCnt) {
+    private Map<Integer, DataType> getComponentMapByRecoverFlattenToNest(TypeConstraint skt, long flattenStartOffset,
+                                                                         DataType winDT, int flattenCnt) {
         var componentMap = new TreeMap<Integer, DataType>();
         long flattenEndOffset = flattenStartOffset + (long) winDT.getLength() * flattenCnt;
 
-        for (var entry: skt.finalConstraint.fieldAccess.entrySet()) {
+        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey();
             if (fieldOffset < flattenStartOffset || fieldOffset >= flattenEndOffset) {
                 DataType dt;
@@ -428,7 +428,7 @@ public class Generator {
     }
 
 
-    private void createPtrRefMember(Skeleton skt, Map<Integer, DataType> componentMap, Long offset) {
+    private void createPtrRefMember(TypeConstraint skt, Map<Integer, DataType> componentMap, Long offset) {
         var ptrEE = skt.finalPtrReference.get(offset);
         DataType dt;
         if (ptrEE.isPointerToPrimitive) {

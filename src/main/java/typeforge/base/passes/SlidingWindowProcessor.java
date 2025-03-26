@@ -1,19 +1,19 @@
 package typeforge.base.passes;
 
-import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
 
 import java.util.*;
 
 public class SlidingWindowProcessor {
-    public final Skeleton curSkt;
+    public final TypeConstraint curSkt;
     public final List<Long> offsetList;
 
     private int windowCapacity;
     private int flattenCnt;
 
-    public SlidingWindowProcessor(Skeleton curSkt, List<Long> offsetList, int initialWindowCapacity) {
+    public SlidingWindowProcessor(TypeConstraint curSkt, List<Long> offsetList, int initialWindowCapacity) {
         this.curSkt = curSkt;
         this.offsetList = offsetList;
         this.windowCapacity = initialWindowCapacity;
@@ -85,7 +85,7 @@ public class SlidingWindowProcessor {
 
         /* We don't consider windows with only one element if the element is a pointer */
         if (windowCapacity == 1 &&
-                (curSkt.finalConstraint.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
+                (curSkt.finalSkeleton.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
             return Optional.empty();
         }
 
@@ -98,7 +98,7 @@ public class SlidingWindowProcessor {
             if (curSkt.isInconsistentOffset(currentOffset)) {
                 return Optional.empty();
             }
-            if (curSkt.hasNestedSkeleton() && curSkt.isInNestedRange(currentOffset)) {
+            if (curSkt.hasNestedConstraint() && curSkt.isInNestedRange(currentOffset)) {
                 return Optional.empty();
             }
 
@@ -106,12 +106,12 @@ public class SlidingWindowProcessor {
             if (curSkt.finalPtrReference.containsKey(currentOffset)) {
                 element = curSkt.finalPtrReference.get(currentOffset);
             } else {
-                element = curSkt.finalConstraint.fieldAccess.get(currentOffset);
+                element = curSkt.finalSkeleton.fieldAccess.get(currentOffset);
             }
 
             var relativeOffset = currentOffset.intValue() - startOffset.intValue();
             window.addElement(relativeOffset, element);
-            if (element instanceof Skeleton) {
+            if (element instanceof TypeConstraint) {
                 window.addPtrLevel(relativeOffset, curSkt.ptrLevel.get(currentOffset) != null ? curSkt.ptrLevel.get(currentOffset) : 1);
             }
 

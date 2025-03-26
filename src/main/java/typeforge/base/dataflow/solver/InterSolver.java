@@ -5,7 +5,7 @@ import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.constraint.TypeHintCollector;
-import typeforge.base.dataflow.constraint.TypeConstraint;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.CallSite;
@@ -54,6 +54,7 @@ public class InterSolver {
         this.exprManager = new NMAEManager(this.graphManager);
         this.typeHintCollector = new TypeHintCollector(exprManager);
 
+        // These CallSite is useful for Constant Propagation
         this.mallocCS = new HashSet<>();
         this.callocCs = new HashSet<>();
     }
@@ -215,16 +216,7 @@ public class InterSolver {
 //        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
 
-    /**
-     * This Simple Constant Propagation is used to propagate the constant arguments and check if they can propagate to the sensitive function's arguments.
-     * If so, we need update related TypeConstraints.
-     * For example, if
-     *  1. const_callsite_arg_1 -> wrapper_func_param1 -> malloc's size
-     *  2. const_callsize_arg_2 -> wrapper_func_param1 -> malloc's size
-     *  And there's also a path from malloc's return value to corresponding callsite's reciver
-     *  Then this receiver's TypeConstraint's size should be set.
-     *  And the wrapper function should also be identified and marked.
-     */
+
     private void simpleConstantPropagation() {
         for (var cs: callocCs) {
             if (cs.caller.getName().equals("ck_calloc")) {
@@ -241,8 +233,8 @@ public class InterSolver {
 
 
     private void buildSkeletons(TypeHintCollector collector) {
-        Logging.debug("InterContext", "========================= Start to merge type constraints =========================");
-        Logging.debug("InterContext", "Total Graph Number: " + graphManager.getGraphs().size());
+        Logging.debug("InterSolver", "========================= Start to merge skeletons =========================");
+        Logging.debug("InterSolver", "Total Graph Number: " + graphManager.getGraphs().size());
         graphManager.buildAllPathManagers();
 
         Set<Function> evilFunctions = new HashSet<>();
@@ -250,7 +242,7 @@ public class InterSolver {
         // Remove some redundant edges in the graph
         for (var graph: graphManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
-                Logging.debug("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
+                Logging.debug("InterSolver", String.format("*********************** Handle Graph %s ***********************", graph));
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
                 graph.pathManager.tryMergeOnPath(exprManager);
                 graph.pathManager.tryMergePathsFromSameSource(exprManager);
@@ -299,21 +291,21 @@ public class InterSolver {
     }
 
     /**
-     * Parse the Field Access SymbolExpr and build the constraints for it.
+     * Parse the Field Access SymbolExpr and build the skeletons for it.
      * For example: if there is a statement: *(a + 0x8) = b, the FieldAccess Expression is *(a + 0x8)
      * @param expr the Expression to parse
-     * @param parentTypeConstraint if the expr is a recursive dereference, the parentTypeConstraint is the constraint of the parent expr
+     * @param parentSkeleton if the expr is a recursive dereference, the parentSkeleton is the constraint of the parent expr
      * @param derefDepth the dereference depth of the expr
      */
-    private void buildConstraintByFieldAccessExpr(NMAE expr, TypeConstraint parentTypeConstraint, long derefDepth) {
+    private void buildSkeletonByFieldAccessExpr(NMAE expr, Skeleton parentSkeleton, long derefDepth) {
         if (expr == null) return;
 
-        Logging.debug("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: %s, derefDepth: %d",
-                expr, parentTypeConstraint != null ? parentTypeConstraint : "null", derefDepth));
+        Logging.debug("InterSolver", String.format("Parsing FieldAccess Expression %s, parentSkeleton: %s, derefDepth: %d",
+                expr, parentSkeleton != null ? parentSkeleton : "null", derefDepth));
 
         ParsedExpr parsed;
         if (!expr.isDereference()) {
-            Logging.error("InterContext", String.format("Current Expression %s is not a field access expression", expr));
+            Logging.error("InterSolver", String.format("Current Expression %s is not a field access expression", expr));
             return;
         } else {
             var parsedExpr = ParsedExpr.parseFieldAccessExpr(expr);
@@ -321,22 +313,22 @@ public class InterSolver {
             parsed = parsedExpr.get();
         }
 
-        var baseConstraint = exprManager.getOrCreateConstraint(parsed.base);
-        updateFieldAccessConstraint(baseConstraint, parsed.offsetValue, expr);
+        var baseSkeleton = exprManager.getOrCreateSkeleton(parsed.base);
+        updateFieldAccessSkeleton(baseSkeleton, parsed.offsetValue, expr);
         exprManager.addFieldRelation(parsed.base, parsed.offsetValue, expr);
-        if (parentTypeConstraint != null) {
-            baseConstraint.addFieldAttr(parsed.offsetValue, TypeConstraint.Attribute.POINTER);
+        if (parentSkeleton != null) {
+            baseSkeleton.addFieldAttr(parsed.offsetValue, Skeleton.Attribute.POINTER);
         }
 
         if (parsed.index != null && parsed.scale != null) {
             if (parsed.scale.isNoZeroConst()) {
-                baseConstraint.setElementSize(parsed.scale.getConstant());
+                baseSkeleton.setElementSize(parsed.scale.getConstant());
             }
         }
 
         // If base is still dereference expr, means base is a field with pointer type which points to a composite data type.
         if (parsed.base.isDereference()) {
-            buildConstraintByFieldAccessExpr(parsed.base, baseConstraint, derefDepth + 1);
+            buildSkeletonByFieldAccessExpr(parsed.base, baseSkeleton, derefDepth + 1);
         }
     }
 
@@ -366,11 +358,11 @@ public class InterSolver {
     }
 
 
-    private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, NMAE fieldExpr) {
+    private void updateFieldAccessSkeleton(Skeleton baseSkeleton, long offsetValue, NMAE fieldExpr) {
         var fieldAPs = APs.getFieldAccessPoints(fieldExpr);
-        baseConstraint.addFieldExpr(offsetValue, fieldExpr);
+        baseSkeleton.addFieldExpr(offsetValue, fieldExpr);
         for (var ap: fieldAPs) {
-            baseConstraint.addFieldAccess(offsetValue, ap);
+            baseSkeleton.addFieldAccess(offsetValue, ap);
         }
     }
 }

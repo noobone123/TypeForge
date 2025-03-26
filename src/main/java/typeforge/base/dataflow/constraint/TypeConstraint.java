@@ -1,242 +1,400 @@
 package typeforge.base.dataflow.constraint;
 
-import ghidra.program.model.data.DataType;
-import typeforge.base.dataflow.AccessPoints;
+import typeforge.base.dataflow.Range;
 import typeforge.base.dataflow.expression.NMAE;
-import typeforge.base.node.CallSite;
+import typeforge.utils.DataTypeHelper;
+import typeforge.utils.Global;
 import typeforge.utils.Logging;
+import ghidra.program.model.data.DataType;
 
 import java.util.*;
-
-import typeforge.utils.TCHelper;
+import java.util.stream.Stream;
 
 public class TypeConstraint {
+    public final java.util.UUID uuid = java.util.UUID.randomUUID();
+    public final String shortUUID = java.util.UUID.randomUUID().toString().substring(0, 8);
 
-    public enum Attribute {
-        SAME_ACCESS_ON_MULTI_OFFSETS,
-        MAY_NESTED,
-        POINTER,
-        MAY_ARRAY_PTR,
-        CODE_PTR,
-    }
+    public Set<Skeleton> skeletons = new HashSet<>();
+    public Skeleton finalSkeleton;
+    public Set<NMAE> exprs = new HashSet<>();
+    public Set<NMAE> variables = new HashSet<>();
+    public boolean hasMultiSkeleton = false;
 
-    public final UUID uuid;
-    public final String shortUUID;
-    /**
-     * For a complexType, the fieldMap is a map from the offset of the field to the field's type.
-     * Be careful that there maybe multiple dataTypes at the same offset in the fieldMap because of the union or array.
-     * <code>
-     * TypeConstraints {
-     *     offset_1 : {type_1 : access_time, type_2 : access_time, ...},
-     *     offset_2 : {type_1 : access_time, type_2 : access_time, ...},
-     *     ...
-     * }
-     * </code>
-     */
-    public final TreeMap<Long, AccessPoints.APSet> fieldAccess;
-    public final TreeMap<Long, HashSet<Attribute>> fieldAttrs;
-    public final TreeMap<Long, HashSet<NMAE>> fieldExprMap;
+    public Map<Long, Set<TypeConstraint>> ptrReference = new HashMap<>();
+    public Map<Long, TypeConstraint> finalPtrReference = new HashMap<>();
+    public Map<Long, Integer> ptrLevel = new HashMap<>();
+    public Map<Long, Set<TypeConstraint>> mayNestedConstraint = new HashMap<>();
+    public Map<Long, TypeConstraint> finalNestedConstraint = new HashMap<>();
 
-    public final HashSet<Attribute> globalAttrs;
-    /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
-    public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
+    public Set<Long> inConsistentOffsets = new HashSet<>();
 
-    public final Set<DataType> polymorphicTypes;
-
-    public Set<Long> elementSize;
-
-    /** If the TypeConstraint indicates a composite type */
-    private boolean isComposite = false;
-
-    /** Recording where this size information comes from */
-    private final Set<SizeSource> sizeSources;
-
-    public TypeConstraint() {
-        uuid = UUID.randomUUID();
-        shortUUID = uuid.toString().substring(0, 8);
-
-        fieldAccess = new TreeMap<>();
-        fieldExprMap = new TreeMap<>();
-
-        fieldAttrs = new TreeMap<>();
-        globalAttrs = new HashSet<>();
-        accessOffsets = new HashMap<>();
-        polymorphicTypes = new HashSet<>();
-        elementSize = new HashSet<>();
-        sizeSources = new HashSet<>();
-    }
-
-    public TypeConstraint(TypeConstraint other) {
-        this.uuid = UUID.randomUUID();
-        this.shortUUID = uuid.toString().substring(0, 8);
-
-        this.fieldAccess = new TreeMap<>();
-        for (Map.Entry<Long, AccessPoints.APSet> entry : other.fieldAccess.entrySet()) {
-            this.fieldAccess.put(entry.getKey(), new AccessPoints.APSet(entry.getValue()));
-        }
-
-        this.fieldExprMap = new TreeMap<>();
-        for (Map.Entry<Long, HashSet<NMAE>> entry : other.fieldExprMap.entrySet()) {
-            this.fieldExprMap.put(entry.getKey(), new HashSet<>(entry.getValue()));
-        }
-
-        this.fieldAttrs = new TreeMap<>();
-        for (Map.Entry<Long, HashSet<Attribute>> entry : other.fieldAttrs.entrySet()) {
-            this.fieldAttrs.put(entry.getKey(), new HashSet<>(entry.getValue()));
-        }
-
-        this.globalAttrs = new HashSet<>(other.globalAttrs);
-
-        this.accessOffsets = new HashMap<>();
-        for (Map.Entry<AccessPoints.AP, HashSet<Long>> entry : other.accessOffsets.entrySet()) {
-            this.accessOffsets.put(entry.getKey(), new HashSet<>(entry.getValue()));
-        }
-
-        this.polymorphicTypes = new HashSet<>(other.polymorphicTypes);
-
-        this.sizeSources = new HashSet<>(other.sizeSources);
-        this.isComposite = other.isComposite;
-
-        this.elementSize = new HashSet<>(other.elementSize);
-    }
-
-    /** If the TypeConstraint is considered as a composite type
-     * It's corresponding expr may be a pointer to a struct or union or array (including `char*`) */
-    public void setComposite(boolean isComposite) {
-        this.isComposite = isComposite;
-    }
-
-    public void addFieldAccess(long offset, AccessPoints.AP ap) {
-        // update fieldAccess
-        accessOffsets.putIfAbsent(ap, new HashSet<>());
-        accessOffsets.get(ap).add(offset);
-        fieldAccess.putIfAbsent(offset, new AccessPoints.APSet());
-        if (fieldAccess.get(offset).addAP(ap)) {
-            Logging.debug("TypeConstraint", String.format("Constraint_%s adding field access: 0x%x -> %s", shortUUID, offset, ap.dataType));
-        }
-    }
-
-    public void addFieldExpr(long offset, NMAE fieldAccessExpr) {
-        fieldExprMap.putIfAbsent(offset, new HashSet<>());
-        fieldExprMap.get(offset).add(fieldAccessExpr);
-    }
-
-    public void addFieldAttr(long offset, Attribute tag) {
-        fieldAttrs.putIfAbsent(offset, new HashSet<>());
-        fieldAttrs.get(offset).add(tag);
-        Logging.debug("TypeConstraint", String.format("Constraint_%s adding fieldTag: 0x%x -> %s", shortUUID, offset, tag));
-    }
-
-    public void addGlobalAttr(Attribute tag) {
-        globalAttrs.add(tag);
-        Logging.debug("TypeConstraint", String.format("Constraint_%s adding globalTag: %s", shortUUID, tag));
-    }
-
-    public void removeFieldTag(long offset, Attribute tag) {
-        if (fieldAttrs.containsKey(offset)) {
-            fieldAttrs.get(offset).remove(tag);
-        }
-    }
-
-    public void setSizeFromCallSite(long size, CallSite callSite) {
-        var source = new SizeSource(size, callSite);
-        sizeSources.add(source);
-    }
-
-    public void setSizeFromExpr(long size, NMAE expr) {
-        var source = new SizeSource(size, expr);
-        sizeSources.add(source);
-    }
-
-    public Set<SizeSource> getSizeSources() {
-        return sizeSources;
-    }
-
-    public void setElementSize(long size) {
-        this.elementSize.add(size);
-        Logging.debug("TypeConstraint", String.format("Constraint_%s setting element size: %d", shortUUID, size));
-    }
-
-    public List<Long> collectFieldOffsets() {
-        Set<Long> offsets = new HashSet<>(fieldAccess.keySet());
-        offsets.addAll(fieldAttrs.keySet());
-        List<Long> sortedOffset = new ArrayList<>(offsets);
-        Collections.sort(sortedOffset);
-        return sortedOffset;
-    }
-
-    public int getFieldMaxSize(long offset) {
-        int maxSize = 0;
-        for (AccessPoints.AP ap : fieldAccess.get(offset).getApSet()) {
-            maxSize = Math.max(maxSize, ap.dataType.getLength());
-        }
-        return maxSize;
-    }
+    public boolean isPointerToPrimitive = false;
+    public boolean isMultiLevelMidPtr = false;
+    public boolean mayPrimitiveArray = false;
+    public boolean singleDerivedType = false;
 
     /**
-     * Merge two TypeConstraints into a new TypeConstraint.
-     * This merging will not change the original TypeConstraints' structure and relations
-     * @param other the other TypeConstraint to merge
-     * @return false if there is a conflict, true otherwise
+     *  If there are multiple fields in the Constraint need to generate and assessment (We call it MorphingPoint)
+     *  In order to reduce time complexity, we try to assess each morphRange and choose the best one in each morphRange.
+     *  And finally, we will synthesize the final result based on every best choice in each morphRange.
      */
-    public boolean tryMerge(TypeConstraint other) {
-        if (TCHelper.checkFieldOverlap(this, other)) {
-            return false;
+    public Set<DataType> globalMorphingTypes = new HashSet<>();
+    public Map<Range, Set<DataType>> rangeMorphingTypes = new HashMap<>();
+    public Set<Range> nestedRange = new HashSet<>();
+    public Set<DataType> decompilerInferredTypes;
+    public DataType finalType = null;
+
+    public int size = -1;
+
+    public TypeConstraint() { }
+
+    public TypeConstraint(Skeleton skeletons, Set<NMAE> exprs) {
+        this.skeletons.add(skeletons);
+        this.exprs.addAll(exprs);
+    }
+
+    public TypeConstraint(Set<Skeleton> skeletons, NMAE expr) {
+        this.skeletons.addAll(skeletons);
+        this.exprs.add(expr);
+    }
+
+    public TypeConstraint(Set<Skeleton> skeletons, Set<NMAE> exprs) {
+        this.skeletons.addAll(skeletons);
+        this.exprs.addAll(exprs);
+    }
+
+    public TypeConstraint(DataType dt) {
+        this.finalType = dt;
+    }
+
+    public void addExpr(NMAE expr) {
+        exprs.add(expr);
+    }
+
+    public void mergeConstraintFrom(TypeConstraint other) {
+        this.skeletons.addAll(other.skeletons);
+        this.exprs.addAll(other.exprs);
+        this.hasMultiSkeleton = this.hasMultiSkeleton || other.hasMultiSkeleton;
+    }
+
+    public int getSkeletonsHash() {
+        return skeletons.hashCode();
+    }
+
+    public void addPtrReference(long ptr, TypeConstraint skt) {
+        ptrReference.computeIfAbsent(ptr, k -> new HashSet<>()).add(skt);
+    }
+
+    public boolean isMultiLevelMidPtr() {
+        if (skeletons.size() > 1) { return false; }
+        var constraint = skeletons.iterator().next();
+        if (constraint.fieldAccess.size() != 1) { return false; }
+        if (constraint.fieldAccess.get(0L) == null) { return false; }
+        for (var element: constraint.fieldAccess.get(0L).getApSet()) {
+            var dataType = element.dataType;
+            var size = dataType.getLength();
+            if (size != Global.currentProgram.getDefaultPointerSize()) { return false; }
         }
-        mergeOther(other);
+        if (finalPtrReference.get(0L) == null) { return false; }
         return true;
     }
 
+    public Set<NMAE> getVariables() {
+        for (var expr: exprs) {
+            if (expr.isVariable()) {
+                variables.add(expr);
+            }
+        }
+        return variables;
+    }
 
     /**
-     * Merge other TypeConstraint's info into the current TypeConstraint
-     * @param other The other TypeConstraint to merge
+     * Get the size of current skeleton, we consider the
+     * max of (finalConstraint.fieldAccess.size(), finalConstraint.fieldAccess.size() + nestedSkeleton.size())
+     * @return the size of current skeleton
      */
-    public void mergeOther(TypeConstraint other) {
-        // merging fieldAccess
-        other.fieldAccess.forEach((offset, aps) -> {
-            this.fieldAccess.putIfAbsent(offset, new AccessPoints.APSet());
-            this.fieldAccess.get(offset).addAll(aps.getApSet());
-        });
+    public int getSize() {
+        /* Get the last element of fieldAccess */
+        var maxSize = 0L;
+        for (var entry: finalSkeleton.fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var maxSizeAtOffset = entry.getValue().maxDTSize;
+            if (offset + maxSizeAtOffset > maxSize) {
+                maxSize = offset + maxSizeAtOffset;
+            }
+        }
 
-        // merging fieldAttrs
-        other.fieldAttrs.forEach((offset, tags) -> {
-            this.fieldAttrs.putIfAbsent(offset, new HashSet<>());
-            this.fieldAttrs.get(offset).addAll(tags);
-        });
-
-        // Merging fieldExpr
-        other.fieldExprMap.forEach((offset, exprs) -> {
-            this.fieldExprMap.putIfAbsent(offset, new HashSet<>());
-            this.fieldExprMap.get(offset).addAll(exprs);
-        });
-
-        // Merging global attributes
-        this.globalAttrs.addAll(other.globalAttrs);
-
-        // Merging accessOffsets
-        other.accessOffsets.forEach((ap, offsets) -> {
-            this.accessOffsets.putIfAbsent(ap, new HashSet<>());
-            this.accessOffsets.get(ap).addAll(offsets);
-        });
-
-        // TODO: checking sizeKnown / size
-        // Merging size
-        this.sizeSources.addAll(other.sizeSources);
-        this.elementSize.addAll(other.elementSize);
-
-        // Merging polymorphicTypes
-        this.polymorphicTypes.addAll(other.polymorphicTypes);
+        size = (int) maxSize;
+        return size;
     }
 
-    public String getName() {
-        return shortUUID;
+    /**
+     * If current skeleton has no pointer reference or nested skeletons, it is independent
+     * @return true if independent
+     */
+    public boolean isIndependent() {
+        return ptrReference.isEmpty() && mayNestedConstraint.isEmpty();
     }
 
-    @Override
-    public String toString() {
-        return "Constraint_" + getName();
+    /**
+     * If current skeleton has a pointer reference to multiple skeletons, it has multi pointer reference
+     */
+    public boolean hasMultiPtrReferenceTo() {
+        for (var entry: ptrReference.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                return true;
+            }
+        }
+        return false;
     }
+
+    public boolean hasMultiNestedConstraint() {
+        for (var entry: mayNestedConstraint.entrySet()) {
+            if (entry.getValue().size() > 1) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean hasNestedConstraint() {
+        return !mayNestedConstraint.isEmpty();
+    }
+
+    public boolean hasPtrReference() {
+        return !finalPtrReference.isEmpty();
+    }
+
+    public boolean mayPrimitiveArray() {
+        var fieldAccess = finalSkeleton.fieldAccess;
+        var windowSize = 0;
+        var hitCount = 0;
+
+        for (var entry: fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var apSet = entry.getValue();
+            if (!apSet.isSameSizeType) {
+                return false;
+            }
+            if (windowSize == 0) {
+                /* we expect that windowSize starts from offset 0x0 */
+                if (offset > 0) {
+                    return false;
+                }
+                windowSize = apSet.getApSet().iterator().next().dataType.getLength();
+                // TODO: this is a assumption, maybe need to remove in abandoned study.
+                if (windowSize >= Global.currentProgram.getDefaultPointerSize()) {
+                    return false;
+                }
+            }
+            if (windowSize != apSet.getApSet().iterator().next().dataType.getLength()) {
+                return false;
+            } else {
+                hitCount++;
+            }
+        }
+
+        return hitCount >= 2;
+    }
+
+    public boolean hasOneField() {
+        return finalSkeleton.fieldAccess.size() == 1;
+    }
+
+    public boolean decompilerInferredTypesHasComposite() {
+        if (decompilerInferredTypes == null) {
+            return false;
+        }
+        for (var dt: decompilerInferredTypes) {
+            if (DataTypeHelper.isPointerToCompositeDataType(dt) || DataTypeHelper.isCompositeOrArray(dt)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void setPrimitiveType(DataType dt) {
+        isPointerToPrimitive = true;
+        finalType = dt;
+        singleDerivedType = true;
+    }
+
+    public void setFinalType(DataType dt) {
+        finalType = dt;
+        singleDerivedType = true;
+    }
+
+    public void updateGlobalMorphingDataType(DataType dt) {
+        globalMorphingTypes.add(dt);
+    }
+
+    public boolean noMorphingTypes() {
+        return globalMorphingTypes.isEmpty() && rangeMorphingTypes.isEmpty();
+    }
+
+    /**
+     * Updates the range morphing types map by adding or merging the given DataTypes within the specified range.
+     * This method handles the following scenarios:
+     * 1. If the specified range (startOffset to endOffset) does not overlap with any existing range,
+     *    it will be added directly to the rangeMorpingTypes map.
+     * 2. If the specified range overlaps or is interlaced with any existing range, it will be merged with those ranges.
+     * 3. If the specified range is completely contained within an existing range, the DataTypes will be added to that range.
+     * 4. If the specified range completely contains one or more smaller ranges, those ranges will be merged into the new range.
+     *
+     * @param startOffset The start offset of the field range to be updated.
+     * @param endOffset The end offset of the field range to be updated. It's important to note that the endOffset indicates the end of current field.
+     * @param DTs The set of DataTypes to be associated with the specified range.
+     */
+    public void updateRangeMorphingDataType(long startOffset, long endOffset, Set<DataType> DTs) {
+        Set<Range> rangesToMerge = new HashSet<>();
+        Range containingRange = null;
+        boolean isContained = false;
+
+        for (var existingRange: rangeMorphingTypes.keySet()) {
+            /* If new Range is completely contained within an existing range */
+            if (existingRange.getStart() <= startOffset && existingRange.getEnd() >= endOffset) {
+                containingRange = existingRange;
+                isContained = true;
+                break;
+            }
+            /* If new Range fully contains an existing range */
+            else if (startOffset < existingRange.getStart() && endOffset > existingRange.getEnd()) {
+                rangesToMerge.add(existingRange);
+            }
+            /* If intersection exists */
+            else if ((startOffset < existingRange.getEnd() && startOffset > existingRange.getStart()) ||
+                    (endOffset > existingRange.getStart() && endOffset < existingRange.getEnd())) {
+                rangesToMerge.add(existingRange);
+            }
+        }
+
+        if (isContained) {
+            rangeMorphingTypes.get(containingRange).addAll(DTs);
+        } else if (!rangesToMerge.isEmpty()) {
+            long newStart = startOffset;
+            long newEnd = endOffset;
+            Set<DataType> mergedTypes = new HashSet<>(DTs);
+
+            for (var range: rangesToMerge) {
+                newStart = Math.min(newStart, range.getStart());
+                newEnd = Math.max(newEnd, range.getEnd());
+                mergedTypes.addAll(rangeMorphingTypes.get(range));
+                rangeMorphingTypes.remove(range);
+            }
+
+            Range newRange = new Range(newStart, newEnd);
+            rangeMorphingTypes.put(newRange, mergedTypes);
+        } else {
+            Range newRange = new Range(startOffset, endOffset);
+            rangeMorphingTypes.put(newRange, DTs);
+        }
+    }
+
+    /**
+     * Similar to function `updateRangeMorphingDataType`
+     * @param startOffset nest relationship's start offset
+     * @param endOffset nest relationship's end offset
+     */
+    public void updateNestedRange(Long startOffset, Long endOffset) {
+        Set<Range> rangesToMerge = new HashSet<>();
+        boolean isContained = false;
+
+        for (var existingRange: nestedRange) {
+            /* If new Range is completely contained within an existing range */
+            if (existingRange.getStart() <= startOffset && existingRange.getEnd() >= endOffset) {
+                isContained = true;
+                break;
+            }
+            /* If new Range fully contains an existing range */
+            else if (startOffset < existingRange.getStart() && endOffset > existingRange.getEnd()) {
+                rangesToMerge.add(existingRange);
+            }
+            /* If intersection exists */
+            else if ((startOffset < existingRange.getEnd() && startOffset > existingRange.getStart()) ||
+                    (endOffset > existingRange.getStart() && endOffset < existingRange.getEnd())) {
+                rangesToMerge.add(existingRange);
+            }
+        }
+
+        if (isContained) {
+            return;
+        } else if (!rangesToMerge.isEmpty()) {
+            long newStart = startOffset;
+            long newEnd = endOffset;
+
+            for (var range: rangesToMerge) {
+                newStart = Math.min(newStart, range.getStart());
+                newEnd = Math.max(newEnd, range.getEnd());
+                nestedRange.remove(range);
+            }
+            Range newRange = new Range(newStart, newEnd);
+            nestedRange.add(newRange);
+        } else {
+            Range newRange = new Range(startOffset, endOffset);
+            nestedRange.add(newRange);
+        }
+    }
+
+
+    public void updateDecompilerInferredTypes(DataType dt) {
+        if (decompilerInferredTypes == null) {
+            decompilerInferredTypes = new HashSet<>();
+        }
+        decompilerInferredTypes.add(dt);
+    }
+
+    public boolean mustPrimitiveTypeAtOffset(long offset) {
+        var aps = finalSkeleton.fieldAccess.get(offset);
+        if (ptrReference.containsKey(offset) || mayNestedConstraint.containsKey(offset) ||
+                !aps.isSameSizeType ||
+                (aps.mostAccessedDT.getLength() >= Global.currentProgram.getDefaultPointerSize()) ) {
+            return false;
+        } else {
+            return true;
+        }
+    }
+
+    public void markInconsistentOffset(long offset) {
+        inConsistentOffsets.add(offset);
+    }
+
+    public boolean isInconsistentOffset(long offset) {
+        return inConsistentOffsets.contains(offset);
+    }
+
+    public boolean isInMorphingRange(long offset) {
+        for (var range: rangeMorphingTypes.keySet()) {
+            var start = range.getStart();
+            var end = range.getEnd();
+            if (offset >= start && offset < end) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isInNestedRange(long offset) {
+        for (var range: nestedRange) {
+            var start = range.getStart();
+            var end = range.getEnd();
+            if (offset >= start && offset < end) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Range getRangeNestedIn(long offset) {
+        for (var range: nestedRange) {
+            var start = range.getStart();
+            var end = range.getEnd();
+            if (offset >= start && offset < end) {
+                return range;
+            }
+        }
+        return null;
+    }
+
 
     @Override
     public int hashCode() {
@@ -251,41 +409,118 @@ public class TypeConstraint {
         return false;
     }
 
-    public boolean isEmpty() {
-        return fieldAccess.isEmpty() && fieldAttrs.isEmpty() &&
-                polymorphicTypes.isEmpty() && sizeSources.isEmpty()
-                && elementSize.isEmpty();
+    @Override
+    public String toString() {
+        return "TypeConstraint_" + shortUUID;
     }
 
-    public void addPolymorphicType(DataType dataType) {
-        polymorphicTypes.add(dataType);
-        Logging.debug("TypeConstraint", String.format("Constraint_%s adding polymorphicType: %s", shortUUID, dataType.getName()));
-    }
-
-    public int getAllFieldsAccessCount() {
-        int count = 0;
-        for (var aps: fieldAccess.values()) {
-            count += aps.getAPCount();
+    public void dumpInfo() {
+        Logging.debug("TypeConstraint", " ------------------------------- Start --------------------------------- ");
+        Logging.debug("TypeConstraint", this.toString());
+        if (hasMultiSkeleton) {
+            Logging.debug("TypeConstraint", String.format("C > 1, = %d", skeletons.size()));
+        } else {
+            Logging.debug("TypeConstraint", "C = 1");
         }
-        return count;
+        Logging.debug("TypeConstraint", "Associated Exprs Count: " + exprs.size());
+        Logging.debug("TypeConstraint", "All Exprs: " + exprs);
+        Logging.debug("TypeConstraint", "Associated Variables Count: " + getVariables().size());
+        Logging.debug("TypeConstraint", "All Variables: " + getVariables());
+
+        /* dump Layout */
+        List<Long> sortedOffsets = Stream.of(finalSkeleton.fieldAccess.keySet(), finalPtrReference.keySet(), finalNestedConstraint.keySet())
+                .flatMap(Collection::stream)
+                .distinct()
+                .sorted()
+                .toList();
+        StringBuilder layout = new StringBuilder();
+        for (var offset: sortedOffsets) {
+            layout.append(String.format("0x%x: ", offset));
+            if (finalSkeleton.fieldAccess.containsKey(offset)) {
+                layout.append("\t");
+                finalSkeleton.fieldAccess.get(offset).getTypeFreq().forEach((dt, cnt) -> {
+                    layout.append(String.format("%s(%d) ", dt.getName(), cnt));
+                });
+            }
+            if (finalPtrReference.containsKey(offset)) {
+                layout.append("\t");
+                layout.append(String.format("Ptr Ref -> %s (%d)", finalPtrReference.get(offset), ptrLevel.get(offset)));
+            }
+            if (finalNestedConstraint.containsKey(offset)) {
+                layout.append("\t");
+                layout.append(String.format("Nested -> %s", finalNestedConstraint.get(offset)));
+            }
+            layout.append("\t");
+            layout.append(finalSkeleton.fieldExprMap.get(offset));
+            layout.append("\n");
+        }
+        Logging.debug("TypeConstraint", "Layout:\n" + layout);
+        /* end */
+
+        Logging.debug("TypeConstraint", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
+        Logging.debug("TypeConstraint", "Final Type:\n" + finalType);
+        Logging.debug("TypeConstraint", String.format("Global Morphing Types (%d):\n%s", globalMorphingTypes.size(), globalMorphingTypes));
+        Logging.debug("TypeConstraint", "Range Morphing Types:");
+        for (var entry: rangeMorphingTypes.entrySet()) {
+            var range = entry.getKey();
+            var types = entry.getValue();
+            Logging.debug("TypeConstraint", String.format("Morphing Range (0x%x ~ 0x%x) (%d)",
+                    range.getStart(), range.getEnd(), types.size()));
+            for (var dt: types) {
+                Logging.debug("TypeConstraint", "\t" + dt);
+            }
+        }
+        Logging.debug("TypeConstraint", " ------------------------------- End --------------------------------- ");
     }
 
-    /** Dump current TypeConstraint's layout */
-    public String dumpLayout(int prefixTabCnt) {
-        StringBuilder sb = new StringBuilder();
-        String prefixTab = "\t".repeat(prefixTabCnt);
-        sb.append(prefixTab).append("Constraint_").append(shortUUID).append(":\n");
-        sb.append(prefixTab).append("PolyTypes: ").append(polymorphicTypes).append("\n");
-        fieldAccess.forEach((offset, aps) -> {
-            /* Group the aps into Map[dataType, accessCount] */
-            sb.append(prefixTab).append("\t");
-            sb.append(String.format("0x%x: ", offset));
-            sb.append("\t");
-            aps.getTypeFreq().forEach((dataType, count) -> {
-                sb.append(String.format("%s(%d) ", dataType.getName(), count));
-            });
-            sb.append("\n");
-        });
-        return sb.toString();
+    /**
+     * Merge two constraints into a new constraint
+     * @param tc1 merged constraint
+     * @param tc2 merged constraint
+     * @param isStrongMerge if true, merge all constraints in set into one constraint; otherwise just merge constraints set
+     * @return new merged constraint
+     */
+    public static Optional<TypeConstraint> mergeConstraints(TypeConstraint tc1, TypeConstraint tc2, boolean isStrongMerge) {
+        var newSkeletons = new HashSet<Skeleton>();
+        var newExprs = new HashSet<NMAE>();
+        newSkeletons.addAll(tc1.skeletons);
+        newSkeletons.addAll(tc2.skeletons);
+        newExprs.addAll(tc1.exprs);
+        newExprs.addAll(tc2.exprs);
+
+        if (isStrongMerge) {
+            Logging.debug("TypeConstraint", String.format("Strong merging TypeConstraint %s and %s", tc1, tc2));
+            var mergedSkeleton = new Skeleton();
+            var noConflict = true;
+            for (var c: newSkeletons) {
+                Logging.debug("TypeConstraint", String.format("Merging skeleton:\n %s", c.dumpLayout(0)));
+                noConflict = mergedSkeleton.tryMerge(c);
+                if (!noConflict) {
+                    break;
+                }
+            }
+
+            if (!noConflict) {
+                Logging.warn("TypeConstraint", String.format("Failed to merge TypeConstraints %s and %s", tc1, tc2));
+                return Optional.empty();
+            }
+
+
+            Logging.debug("TypeConstraint", String.format("Merged skeleton:\n %s", mergedSkeleton.dumpLayout(0)));
+            newSkeletons.clear();
+            newSkeletons.add(mergedSkeleton);
+            var newTypeConstraint = new TypeConstraint(newSkeletons, newExprs);
+            newTypeConstraint.hasMultiSkeleton = false;
+            return Optional.of(newTypeConstraint);
+        } else {
+            Logging.debug("TypeConstraint", String.format("Weak merging TypeConstraints %s and %s", tc1, tc2));
+            for (var c: newSkeletons) {
+                Logging.debug("TypeConstraint", c.dumpLayout(0));
+            }
+            var newTypeConstraint = new TypeConstraint(newSkeletons, newExprs);
+            newTypeConstraint.hasMultiSkeleton = true;
+            return Optional.of(newTypeConstraint);
+        }
     }
+
 }

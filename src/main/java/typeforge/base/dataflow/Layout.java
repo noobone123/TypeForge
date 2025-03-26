@@ -1,6 +1,6 @@
 package typeforge.base.dataflow;
 
-import typeforge.base.dataflow.constraint.TypeConstraint;
+import typeforge.base.dataflow.constraint.Skeleton;
 
 import java.util.*;
 
@@ -35,7 +35,7 @@ public class Layout {
 
     public List<Interval> intervals;
 
-    public Layout(TypeConstraint constraint) {
+    public Layout(Skeleton constraint) {
         intervals = new ArrayList<>();
         constraint.fieldAccess.forEach((offset, aps) -> {
             Set<Integer> sizes = new HashSet<>();

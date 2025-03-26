@@ -3,9 +3,9 @@ package typeforge.base.dataflow.TFG;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
-import typeforge.base.dataflow.constraint.Skeleton;
-import typeforge.base.dataflow.constraint.TypeHintCollector;
 import typeforge.base.dataflow.constraint.TypeConstraint;
+import typeforge.base.dataflow.constraint.TypeHintCollector;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.Layout;
 import typeforge.utils.Logging;
 import ghidra.program.model.listing.Function;
@@ -23,7 +23,7 @@ public class TypeRelationPathManager<T> {
     public final Map<T, Set<TypeRelationPath<T>>> nodeToPathsMap;
     public final Map<T, Set<TypeRelationPath<T>>> srcToPathsMap;
 
-    public final Map<T, Set<TypeConstraint>> nodeToConstraints;
+    public final Map<T, Set<Skeleton>> nodeToConstraints;
 
     /** fields for handle conflict paths and nodes */
     public final Set<TypeRelationPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
@@ -43,7 +43,7 @@ public class TypeRelationPathManager<T> {
      * If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
     public UnionFind<T> sourceGroups = new UnionFind<>();
     public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
-    public final Map<T, TypeConstraint> sourceToConstraints = new HashMap<>();
+    public final Map<T, Skeleton> sourceToConstraints = new HashMap<>();
 
     public TypeRelationPathManager(TypeFlowGraph<T> graph) {
         this.graph = graph;
@@ -110,7 +110,7 @@ public class TypeRelationPathManager<T> {
 
         while (!workList.isEmpty()) {
             var src = workList.poll();
-            var mergedCon = new TypeConstraint();
+            var mergedCon = new Skeleton();
             var pathsFromSrc = getAllValidPathsFromSource(src);
             if (pathsFromSrc.isEmpty()) {
                 Logging.warn("TypeRelationPathManager", String.format("No valid paths from source %s", src));
@@ -209,7 +209,7 @@ public class TypeRelationPathManager<T> {
                     Logging.debug("TypeRelationPathManager", String.format("Node has multiple Layouts: %s: %d", node, layoutToConstraints.size()));
 
                     var success = true;
-                    var mergedConstraints = new TypeConstraint();
+                    var mergedConstraints = new Skeleton();
                     for (var con: constraints) {
                         success = mergedConstraints.tryMerge(con);
                         if (!success) { break; }
@@ -304,7 +304,7 @@ public class TypeRelationPathManager<T> {
      */
     public void mergePathsFromSameSource() {
         for (var src: source) {
-            var mergedConstraints = new TypeConstraint();
+            var mergedConstraints = new Skeleton();
             var pathsFromSource = getAllValidPathsFromSource(src);
             var success = true;
             for (var path: pathsFromSource) {
@@ -392,7 +392,7 @@ public class TypeRelationPathManager<T> {
     }
 
     public void buildSkeleton(TypeHintCollector collector, Set<T> sources) {
-        var mergedConstraints = new TypeConstraint();
+        var mergedConstraints = new Skeleton();
         for (var src: sources) {
             mergedConstraints.mergeOther(sourceToConstraints.get(src));
         }
@@ -411,7 +411,7 @@ public class TypeRelationPathManager<T> {
             }
         }
 
-        var skeleton = new Skeleton(mergedConstraints, exprs);
+        var skeleton = new TypeConstraint(mergedConstraints, exprs);
         collector.addSkeleton(skeleton);
     }
 
@@ -635,8 +635,8 @@ public class TypeRelationPathManager<T> {
     }
 
 
-    public LinkedHashMap<Layout, Set<TypeConstraint>> buildLayoutToConstraints(Set<TypeConstraint> constraints) {
-        var layoutToConstraints = new LinkedHashMap<Layout, Set<TypeConstraint>>();
+    public LinkedHashMap<Layout, Set<Skeleton>> buildLayoutToConstraints(Set<Skeleton> constraints) {
+        var layoutToConstraints = new LinkedHashMap<Layout, Set<Skeleton>>();
         for (var con: constraints) {
             var layout = new Layout(con);
             layoutToConstraints.computeIfAbsent(layout, k -> new HashSet<>()).add(con);
@@ -663,7 +663,7 @@ public class TypeRelationPathManager<T> {
         return result;
     }
 
-    public void propagateConstraintOnPath(TypeConstraint constraint, TypeRelationPath<T> path) {
+    public void propagateConstraintOnPath(Skeleton constraint, TypeRelationPath<T> path) {
         for (var node: path.nodes) {
             nodeToConstraints.computeIfAbsent(node, k -> new HashSet<>()).add(constraint);
         }

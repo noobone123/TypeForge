@@ -13,11 +13,11 @@ import typeforge.utils.TCHelper;
 import java.util.*;
 
 public class TypeHintCollector {
-    private final Set<Skeleton> skeletons;
+    private final Set<TypeConstraint> typeConstraints;
     /* Map[SymbolExpr, Set[Skeleton]]: this is temp data structure before handling skeletons */
-    private final Map<NMAE, Set<Skeleton>> exprToSkeletons_T;
+    private final Map<NMAE, Set<TypeConstraint>> exprToSkeletons_T;
     /* Map[SymbolExpr, Skeleton]: this is final data structure, very important */
-    public final Map<NMAE, Skeleton> exprToSkeletonMap;
+    public final Map<NMAE, TypeConstraint> exprToSkeletonMap;
 
     /* SymbolExprs that have multiple skeletons */
     private final Set<NMAE> multiSkeletonExprs;
@@ -34,7 +34,7 @@ public class TypeHintCollector {
     public final Set<NMAE> injuredNode = new HashSet<>();
 
     public TypeHintCollector(NMAEManager exprManager) {
-        this.skeletons = new HashSet<>();
+        this.typeConstraints = new HashSet<>();
         this.exprToSkeletons_T = new HashMap<>();
         this.exprToSkeletonMap = new HashMap<>();
         this.multiSkeletonExprs = new HashSet<>();
@@ -48,7 +48,7 @@ public class TypeHintCollector {
      */
     public void mergeSkeletons() {
         // Generate expr To Skeletons
-        for (var skt: skeletons) {
+        for (var skt: typeConstraints) {
             for (var expr: skt.exprs) {
                 exprToSkeletons_T.computeIfAbsent(expr, k -> new HashSet<>()).add(skt);
             }
@@ -65,12 +65,12 @@ public class TypeHintCollector {
                 Logging.debug("SkeletonCollector", String.format("%s: S > 1", expr));
                 /* IF one SymbolExpr holds multi Skeletons, Create New Skeleton based on them */
                 multiSkeletonExprs.add(expr);
-                var constraints = new HashSet<TypeConstraint>();
+                var constraints = new HashSet<Skeleton>();
                 for (var skeleton: skeletons) {
-                    constraints.addAll(skeleton.constraints);
+                    constraints.addAll(skeleton.skeletons);
                 }
-                var newSkeleton = new Skeleton(constraints, expr);
-                newSkeleton.hasMultiConstraints = true;
+                var newSkeleton = new TypeConstraint(constraints, expr);
+                newSkeleton.hasMultiSkeleton = true;
                 exprToSkeletonMap.put(expr, newSkeleton);
                 skeletons.add(newSkeleton);
             }
@@ -79,7 +79,7 @@ public class TypeHintCollector {
         // Remove multiSkeletonExprs from old skeletons
         for (var expr: multiSkeletonExprs) {
             for (var skt: exprToSkeletonMap.values()) {
-                if (skt.hasMultiConstraints) continue;
+                if (skt.hasMultiSkeleton) continue;
                 var removed = skt.exprs.remove(expr);
                 if (removed) {
                     Logging.debug("SkeletonCollector", String.format("%s is removed from skeleton %s", expr, skt));
@@ -88,18 +88,18 @@ public class TypeHintCollector {
         }
 
         // Merge Skeletons with multiConstraints by constraints' hashID
-        var hashToSkeletons = new HashMap<Integer, Set<Skeleton>>();
+        var hashToSkeletons = new HashMap<Integer, Set<TypeConstraint>>();
         for (var expr: multiSkeletonExprs) {
             var skt = exprToSkeletonMap.get(expr);
-            var hash = skt.getConstraintsHash();
+            var hash = skt.getSkeletonsHash();
             hashToSkeletons.computeIfAbsent(hash, k -> new HashSet<>()).add(skt);
         }
         for (var entry: hashToSkeletons.entrySet()) {
             var skeletons = entry.getValue();
             if (skeletons.size() > 1) {
-                var newSkeleton = new Skeleton();
+                var newSkeleton = new TypeConstraint();
                 for (var skt: skeletons) {
-                    newSkeleton.mergeSkeletonFrom(skt);
+                    newSkeleton.mergeConstraintFrom(skt);
                 }
                 for (var expr: newSkeleton.exprs) {
                     exprToSkeletonMap.put(expr, newSkeleton);
@@ -107,7 +107,7 @@ public class TypeHintCollector {
             }
         }
 
-        var SkeletonsToRemove = new HashSet<Skeleton>();
+        var SkeletonsToRemove = new HashSet<TypeConstraint>();
         // Checking Consistency
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             for (var e: skt.exprs) {
@@ -117,21 +117,21 @@ public class TypeHintCollector {
                 }
             }
 
-            if (!skt.hasMultiConstraints) {
-                assert skt.constraints.size() == 1;
+            if (!skt.hasMultiSkeleton) {
+                assert skt.skeletons.size() == 1;
                 Logging.debug("SkeletonCollector", String.format("%s with single Constraint has Exprs: \n%s", skt.toString(), skt.exprs));
-                Logging.debug("SkeletonCollector", String.format("Constraint: \n%s", skt.constraints.iterator().next().dumpLayout(0)));
+                Logging.debug("SkeletonCollector", String.format("Constraint: \n%s", skt.skeletons.iterator().next().dumpLayout(0)));
             } else {
-                assert skt.constraints.size() > 1;
+                assert skt.skeletons.size() > 1;
                 Logging.debug("SkeletonCollector", String.format("%s with multiple Constraints has Exprs: \n%s", skt.toString(), skt.exprs));
-                for (var constraint: skt.constraints) {
+                for (var constraint: skt.skeletons) {
                     Logging.debug("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
                 }
             }
 
             /* Remove Redundant Constraints */
             boolean emptySkeleton = true;
-            for (var constraint: skt.constraints) {
+            for (var constraint: skt.skeletons) {
                 if (!constraint.isEmpty()) {
                     emptySkeleton = false;
                     break;
@@ -144,7 +144,7 @@ public class TypeHintCollector {
         }
 
         for (var skt: SkeletonsToRemove) {
-            skeletons.remove(skt);
+            typeConstraints.remove(skt);
             for (var expr: skt.exprs) {
                 exprToSkeletonMap.remove(expr);
             }
@@ -156,13 +156,13 @@ public class TypeHintCollector {
      */
     public void handleFinalConstraint() {
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (!skt.hasMultiConstraints) {
-                skt.finalConstraint = skt.constraints.iterator().next();
+            if (!skt.hasMultiSkeleton) {
+                skt.finalSkeleton = skt.skeletons.iterator().next();
             };
 
             int maxVisit = 0;
-            TypeConstraint maxVisitConstraint = null;
-            for (var con: skt.constraints) {
+            Skeleton maxVisitConstraint = null;
+            for (var con: skt.skeletons) {
                 var curVisit = con.getAllFieldsAccessCount();
                 if (curVisit > maxVisit) {
                     maxVisit = curVisit;
@@ -172,8 +172,8 @@ public class TypeHintCollector {
 
             // TODO: should we merge Skeletons with same finalConstraint ?
             if (maxVisitConstraint != null) {
-                skt.hasMultiConstraints = false;
-                skt.finalConstraint = maxVisitConstraint;
+                skt.hasMultiSkeleton = false;
+                skt.finalSkeleton = maxVisitConstraint;
                 Logging.debug("SkeletonCollector", String.format("%s:\n%s", skt, skt.exprs));
                 Logging.debug("SkeletonCollector", String.format("Choose the most visited constraint:\n%s", maxVisitConstraint.dumpLayout(0)));
             }
@@ -228,9 +228,9 @@ public class TypeHintCollector {
                     /* For debug */
                     Logging.debug("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
                     Logging.debug("SkeletonCollector", skt.exprs.toString());
-                    Logging.debug("SkeletonCollector", skt.finalConstraint.dumpLayout(0));
+                    Logging.debug("SkeletonCollector", skt.finalSkeleton.dumpLayout(0));
                     Logging.debug("SkeletonCollector", ptrEESkt.exprs.toString());
-                    Logging.debug("SkeletonCollector", ptrEESkt.finalConstraint.dumpLayout(0));
+                    Logging.debug("SkeletonCollector", ptrEESkt.finalSkeleton.dumpLayout(0));
                 } else {
                     Logging.debug("SkeletonCollector", "Ptr Level = 1");
                 }
@@ -258,12 +258,12 @@ public class TypeHintCollector {
     public void handleMemberConflict() {
         var ptrSize = Global.currentProgram.getDefaultPointerSize();
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            List<Long> offsets = new ArrayList<>(skt.finalConstraint.fieldAccess.keySet());
+            List<Long> offsets = new ArrayList<>(skt.finalSkeleton.fieldAccess.keySet());
             Collections.sort(offsets);
             List<Long> removeCandidate = new ArrayList<>();
             for (int i = 0; i < offsets.size(); i++) {
                 var offset = offsets.get(i);
-                var aps = skt.finalConstraint.fieldAccess.get(offset);
+                var aps = skt.finalSkeleton.fieldAccess.get(offset);
 
                 long nextOffset = -1;
                 if (i < offsets.size() - 1) {
@@ -287,7 +287,7 @@ public class TypeHintCollector {
             }
 
             for (var offset: removeCandidate) {
-                skt.finalConstraint.fieldAccess.remove(offset);
+                skt.finalSkeleton.fieldAccess.remove(offset);
             }
         }
     }
@@ -325,7 +325,7 @@ public class TypeHintCollector {
                 var offset = expr.getOffset().getConstant();
                 if (exprToSkeletonMap.containsKey(base)) {
                     var baseSkt = exprToSkeletonMap.get(base);
-                    baseSkt.mayNestedSkeleton.computeIfAbsent(offset, k -> new HashSet<>())
+                    baseSkt.mayNestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
                             .add(exprToSkeletonMap.get(expr));
                 }
             }
@@ -333,23 +333,23 @@ public class TypeHintCollector {
 
         /* Remove skeletons that should not be nested */
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.hasNestedSkeleton()) {
-                var iterator = skt.mayNestedSkeleton.keySet().iterator();
+            if (skt.hasNestedConstraint()) {
+                var iterator = skt.mayNestedConstraint.keySet().iterator();
                 while (iterator.hasNext()) {
                     var offset = iterator.next();
                     if (offset > skt.getSize()) {
                         iterator.remove();
                         Logging.debug("SkeletonCollector", "Offset larger than the size of the nester!");
                     } else {
-                        var removeCandidates = new HashSet<Skeleton>();
-                        for (var s: skt.mayNestedSkeleton.get(offset)) {
+                        var removeCandidates = new HashSet<TypeConstraint>();
+                        for (var s: skt.mayNestedConstraint.get(offset)) {
                             if (s.isMultiLevelMidPtr || s.isPointerToPrimitive || skt == s) {
                                 removeCandidates.add(s);
                             }
                         }
                         if (!removeCandidates.isEmpty()) {
-                            skt.mayNestedSkeleton.get(offset).removeAll(removeCandidates);
-                            if (skt.mayNestedSkeleton.get(offset).isEmpty()) {
+                            skt.mayNestedConstraint.get(offset).removeAll(removeCandidates);
+                            if (skt.mayNestedConstraint.get(offset).isEmpty()) {
                                 iterator.remove();
                             }
                             Logging.debug("SkeletonCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
@@ -361,10 +361,10 @@ public class TypeHintCollector {
 
         /* Handling mayNested Skeleton and build the finalNestedSkeleton */
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            for (var entry: skt.mayNestedSkeleton.entrySet()) {
+            for (var entry: skt.mayNestedConstraint.entrySet()) {
                 var offset = entry.getKey();
                 var nestedSkts = entry.getValue();
-                Skeleton finalNestedCandidate = null;
+                TypeConstraint finalNestedCandidate = null;
                 for (var nestedSkt: nestedSkts) {
                     tryPopulateNester(skt, offset, nestedSkt);
                     if (finalNestedCandidate == null) {
@@ -375,7 +375,7 @@ public class TypeHintCollector {
                         }
                     }
                 }
-                skt.finalNestedSkeleton.put(offset, finalNestedCandidate);
+                skt.finalNestedConstraint.put(offset, finalNestedCandidate);
                 skt.updateNestedRange(offset, offset + (long) finalNestedCandidate.getSize());
             }
         }
@@ -390,7 +390,7 @@ public class TypeHintCollector {
                     var ptrEEs = skt.ptrReference.get(offset);
                     if (ptrEEs.size() > 1) {
                         Logging.warn("SkeletonCollector", String.format("At 0x%s: %s", Long.toHexString(offset), ptrEEs));
-                        Skeleton chosenSkt = null;
+                        TypeConstraint chosenSkt = null;
                         for (var ptrEE: ptrEEs) {
                             if (chosenSkt == null) {
                                 chosenSkt = ptrEE;
@@ -439,10 +439,10 @@ public class TypeHintCollector {
                 skt.isMultiLevelMidPtr = true;
             } else if (skt.isIndependent() && skt.hasOneField() &&
                     !skt.decompilerInferredTypesHasComposite() &&
-                    (skt.finalConstraint.fieldAccess.get(0L) != null)) {
+                    (skt.finalSkeleton.fieldAccess.get(0L) != null)) {
                 /* These types are considered as pointers to primitive types and no need to assess and ranking */
                 Logging.debug("SkeletonCollector", "Pointer to Primitive Detected: " + skt);
-                var aps = skt.finalConstraint.fieldAccess.get(0L);
+                var aps = skt.finalSkeleton.fieldAccess.get(0L);
                 skt.setPrimitiveType(aps.mostAccessedDT);
             }
         }
@@ -451,22 +451,22 @@ public class TypeHintCollector {
 
     public void handleAPSets() {
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            for (var offset: skt.finalConstraint.fieldAccess.keySet()) {
-                var APSet = skt.finalConstraint.fieldAccess.get(offset);
+            for (var offset: skt.finalSkeleton.fieldAccess.keySet()) {
+                var APSet = skt.finalSkeleton.fieldAccess.get(offset);
                 APSet.postHandle();
             }
         }
     }
 
 
-    private void tryPopulateNester(Skeleton nester, Long nestStartOffset, Skeleton nestee) {
-        for (var offset: nestee.finalConstraint.fieldAccess.keySet()) {
+    private void tryPopulateNester(TypeConstraint nester, Long nestStartOffset, TypeConstraint nestee) {
+        for (var offset: nestee.finalSkeleton.fieldAccess.keySet()) {
             var nesterOffset = nestStartOffset + offset;
-            var nesterAPS = nester.finalConstraint.fieldAccess.get(nesterOffset);
-            var nesteeAPS = nestee.finalConstraint.fieldAccess.get(offset);
+            var nesterAPS = nester.finalSkeleton.fieldAccess.get(nesterOffset);
+            var nesteeAPS = nestee.finalSkeleton.fieldAccess.get(offset);
 
             if (nesterAPS == null) {
-                nester.finalConstraint.fieldAccess.put(nesterOffset, nesteeAPS);
+                nester.finalSkeleton.fieldAccess.put(nesterOffset, nesteeAPS);
             } else if (nesterAPS.maxDTSize >= nesteeAPS.maxDTSize) {
                 nesterAPS.update(nesteeAPS);
             }
@@ -517,27 +517,27 @@ public class TypeHintCollector {
 
                         Logging.debug("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
                         aliasMap.union(e, expr);
-                        Optional<Skeleton> mergedRes;
-                        Skeleton newSkeleton = null;
+                        Optional<TypeConstraint> mergedRes;
+                        TypeConstraint newTypeConstraint = null;
 
-                        if (skt1.hasMultiConstraints && skt2.hasMultiConstraints) {
+                        if (skt1.hasMultiSkeleton && skt2.hasMultiSkeleton) {
                             Logging.warn("SkeletonCollector", "all have multi constraints");
-                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, false);
-                        } else if (skt1.hasMultiConstraints || skt2.hasMultiConstraints) {
+                            mergedRes = TypeConstraint.mergeConstraints(skt1, skt2, false);
+                        } else if (skt1.hasMultiSkeleton || skt2.hasMultiSkeleton) {
                             Logging.warn("SkeletonCollector", "one has multi constraints");
-                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, false);
+                            mergedRes = TypeConstraint.mergeConstraints(skt1, skt2, false);
                         } else {
                             Logging.warn("SkeletonCollector", "none has multi constraints");
-                            mergedRes = Skeleton.mergeSkeletons(skt1, skt2, true);
+                            mergedRes = TypeConstraint.mergeConstraints(skt1, skt2, true);
                         }
 
                         if (mergedRes.isPresent()) {
-                            newSkeleton = mergedRes.get();
-                            Logging.debug("SkeletonCollector", String.format("New Merged %s from type Alias.", newSkeleton));
-                            Logging.debug("SkeletonCollector", newSkeleton.exprs.toString());
+                            newTypeConstraint = mergedRes.get();
+                            Logging.debug("SkeletonCollector", String.format("New Merged %s from type Alias.", newTypeConstraint));
+                            Logging.debug("SkeletonCollector", newTypeConstraint.exprs.toString());
                             /* update exprToSkeletonMap */
-                            for (var e1: newSkeleton.exprs) {
-                                exprToSkeletonMap.put(e1, newSkeleton);
+                            for (var e1: newTypeConstraint.exprs) {
+                                exprToSkeletonMap.put(e1, newTypeConstraint);
                             }
                         } else {
                             Logging.warn("SkeletonCollector", String.format("Failed to merge skeletons of %s and %s", e, expr));
@@ -548,17 +548,17 @@ public class TypeHintCollector {
         }
     }
 
-    private boolean twoSkeletonsConflict(Skeleton skt1, Skeleton skt2) {
+    private boolean twoSkeletonsConflict(TypeConstraint skt1, TypeConstraint skt2) {
         // Only check if both skeletons have single constraint
-        if (!skt1.hasMultiConstraints && !skt2.hasMultiConstraints) {
-            return TCHelper.checkFieldOverlap(skt1.constraints.iterator().next(), skt2.constraints.iterator().next());
+        if (!skt1.hasMultiSkeleton && !skt2.hasMultiSkeleton) {
+            return TCHelper.checkFieldOverlap(skt1.skeletons.iterator().next(), skt2.skeletons.iterator().next());
         } else {
             return false;
         }
     }
 
-    public void addSkeleton(Skeleton skt) {
-        skeletons.add(skt);
+    public void addSkeleton(TypeConstraint skt) {
+        typeConstraints.add(skt);
     }
 
     public void updateEvilPaths(Set<TypeRelationPath<NMAE>> evilPaths) {

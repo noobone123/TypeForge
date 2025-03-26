@@ -29,7 +29,7 @@ public class ExternalHandler {
             for (var expr: ptrExprs) {
                 Logging.debug("ExternalHandler.Malloc",
                         String.format("Set composite of constraint: %s to true", expr));
-                var constraint = exprManager.getOrCreateConstraint(expr);
+                var constraint = exprManager.getOrCreateSkeleton(expr);
                 constraint.setComposite(true);
 
                 var mallocSize = callSite.arguments.get(0);
@@ -49,7 +49,7 @@ public class ExternalHandler {
             for (var expr: ptrExprs) {
                 Logging.debug("ExternalHandler.Calloc",
                         String.format("Set composite of constraint: %s to true", expr));
-                var constraint = exprManager.getOrCreateConstraint(expr);
+                var constraint = exprManager.getOrCreateSkeleton(expr);
                 constraint.setComposite(true);
 
                 var nmemblock = callSite.arguments.get(0);
@@ -78,7 +78,7 @@ public class ExternalHandler {
             for (var expr: ptrExprs) {
                 Logging.debug("ExternalHandler.Memset",
                         String.format("Set composite of constraint: %s to true", expr));
-                var constraint = exprManager.getOrCreateConstraint(expr);
+                var constraint = exprManager.getOrCreateSkeleton(expr);
                 constraint.setComposite(true);
 
                 if (lengthArg.isConstant()) {
@@ -109,8 +109,8 @@ public class ExternalHandler {
             var srcExprs = intraSolver.getDataFlowFacts(srcVn);
             for (var dstExpr : dstExprs) {
                 for (var srcExpr : srcExprs) {
-                    var dstConstraint = exprManager.getOrCreateConstraint(dstExpr);
-                    var srcConstraint = exprManager.getOrCreateConstraint(srcExpr);
+                    var dstConstraint = exprManager.getOrCreateSkeleton(dstExpr);
+                    var srcConstraint = exprManager.getOrCreateSkeleton(srcExpr);
 
                     if (lengthVn.isConstant()) {
                         dstConstraint.setComposite(true);

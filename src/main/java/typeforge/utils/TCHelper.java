@@ -1,6 +1,6 @@
 package typeforge.utils;
 
-import typeforge.base.dataflow.constraint.TypeConstraint;
+import typeforge.base.dataflow.constraint.Skeleton;
 
 import java.util.*;
 
@@ -37,7 +37,7 @@ public class TCHelper {
      * If two fields have same start, but one field's end is larger than other field's start, then return true
      * @return if overlap occurs
      */
-    public static boolean checkFieldOverlap(TypeConstraint a, TypeConstraint b) {
+    public static boolean checkFieldOverlap(Skeleton a, Skeleton b) {
         var aIntervals = buildIntervals(a);
         var bIntervals = buildIntervals(b);
         for (var aI: aIntervals) {
@@ -102,7 +102,7 @@ public class TCHelper {
 //        return false;
 //    }
 
-    public static ArrayList<Interval> buildIntervals(TypeConstraint a) {
+    public static ArrayList<Interval> buildIntervals(Skeleton a) {
         ArrayList<Interval> intervals = new ArrayList<>();
         for (var offset : a.fieldAccess.keySet()) {
             for (var endOffset : calcFieldEndOffset(a, offset)) {
@@ -122,7 +122,7 @@ public class TCHelper {
     }
 
 
-    public static Set<Long> calcFieldEndOffset(TypeConstraint a, Long offset) {
+    public static Set<Long> calcFieldEndOffset(Skeleton a, Long offset) {
         Set<Long> ends = new TreeSet<>();
         var fields = a.fieldAccess.get(offset);
         if (fields == null) {

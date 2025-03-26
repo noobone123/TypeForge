@@ -1,6 +1,6 @@
 package typeforge.base.dataflow.expression;
 
-import typeforge.base.dataflow.constraint.TypeConstraint;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.node.CallSite;
@@ -17,11 +17,11 @@ public class NMAEManager {
     Set<NMAE> fieldExprSet = new HashSet<>();
 
     /**
-     * Before Path-Aware Type Hint Propagation. Each `NMAE` has a corresponding `TypeConstraint`
-     * `TypeConstraint` is the constraint of the composite type pointed by the NMAE.
+     * Before Path-Aware Type Hint Propagation. Each `NMAE` has a corresponding `Skeleton`
+     * `Skeleton` is the partial constraint of the composite type pointed by the NMAE.
      * If there exist a stack-allocated variable, then its pointer should be represented as `&stack_variable`.
      */
-    Map<NMAE, TypeConstraint> exprToConstraintBeforeMerge;
+    Map<NMAE, Skeleton> exprToSkeletonBeforeMerge;
     Map<NMAE, TreeMap<Long, Set<NMAE>>> baseToFieldsMap;
     Map<NMAE, NMAE> fieldToBaseMap;
     Map<NMAE.Attribute, Set<NMAE>> attributeToExpr;
@@ -31,11 +31,8 @@ public class NMAEManager {
     // mem alias related fields
     public Map<NMAE, Set<NMAE>> fastMayMemAliasCache;
 
-    public Set<NMAE> mallocSensitiveArg = new HashSet<>();
-    public Set<NMAE> callocSensitiveArg = new HashSet<>();
-
     public NMAEManager(TFGManager graphManager) {
-        exprToConstraintBeforeMerge = new HashMap<>();
+        exprToSkeletonBeforeMerge = new HashMap<>();
 
         baseToFieldsMap = new HashMap<>();
         fieldToBaseMap = new HashMap<>();
@@ -94,41 +91,41 @@ public class NMAEManager {
     }
 
     /**
-     * Create a TypeConstraint for the given expression
-     * @param expr the expression to create constraint for
+     * Create a Skeleton for the given expression
+     * @param expr the expression to create Skeleton for
      */
-    public TypeConstraint createConstraint(NMAE expr) {
-        TypeConstraint constraint = new TypeConstraint();
-        exprToConstraintBeforeMerge.put(expr, constraint);
-        Logging.trace("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
-        return constraint;
+    public Skeleton createSkeleton(NMAE expr) {
+        Skeleton skt = new Skeleton();
+        exprToSkeletonBeforeMerge.put(expr, skt);
+        Logging.trace("NMAEManager", String.format("Create Skeleton : %s -> %s", expr.getRepresentation(), skt));
+        return skt;
     }
 
     /**
-     * Get the TypeConstraint for the given expression
-     * @param expr the expression to get constraint for
-     * @return the TypeConstraint for the given expression
+     * Get the Skeleton for the given expression
+     * @param expr the expression to get Skeleton for
+     * @return the Skeleton for the given expression
      */
-    public TypeConstraint getConstraint(NMAE expr) {
-        if (exprToConstraintBeforeMerge.containsKey(expr)) {
-            Logging.trace("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr, exprToConstraintBeforeMerge.get(expr)));
-            return exprToConstraintBeforeMerge.get(expr);
+    public Skeleton getSkeleton(NMAE expr) {
+        if (exprToSkeletonBeforeMerge.containsKey(expr)) {
+            Logging.trace("NMAEManager", String.format("Get Skeleton : %s -> %s", expr, exprToSkeletonBeforeMerge.get(expr)));
+            return exprToSkeletonBeforeMerge.get(expr);
         } else {
-            Logging.trace("SymbolExprManager", String.format("No TypeConstraint found for %s", expr));
+            Logging.trace("NMAEManager", String.format("No Skeleton found for %s", expr));
             return null;
         }
     }
 
     /**
-     * Get or create a TypeConstraint for the given expression.
-     * The created TypeConstraint will be auto associated with
-     *  the expression in the `exprToConstraintBeforeMerge` map.
-     * @return the TypeConstraint for the given expression
+     * Get or create a Skeleton for the given expression.
+     * The created Skeleton will be auto associated with
+     *  the expression in the `exprToSkeletonBeforeMerge` map.
+     * @return the Skeleton for the given expression
      */
-    public TypeConstraint getOrCreateConstraint(NMAE expr) {
-        var result = getConstraint(expr);
+    public Skeleton getOrCreateSkeleton(NMAE expr) {
+        var result = getSkeleton(expr);
         if (result == null) {
-            return createConstraint(expr);
+            return createSkeleton(expr);
         }
         return result;
     }
@@ -141,7 +138,7 @@ public class NMAEManager {
     public Set<NMAE> fastGetMayMemAliases(NMAE expr) {
         // get from cache first
         if (fastMayMemAliasCache.containsKey(expr)) {
-            Logging.trace("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
+            Logging.trace("NMAEManager", String.format("Get MayMemAliases from cache: %s", expr));
             return fastMayMemAliasCache.get(expr);
         }
 
@@ -162,14 +159,14 @@ public class NMAEManager {
 
         var paths = taG.pathManager.getAllPathContainsNode(baseExpr);
         if (paths == null) {
-            Logging.warn("SymbolExprManager", String.format("No paths found for baseExpr %s in %s", baseExpr, taG));
+            Logging.warn("NMAEManager", String.format("No paths found for baseExpr %s in %s", baseExpr, taG));
             return mayAliasExpr;
         }
         if (paths.isEmpty()) {
             return mayAliasExpr;
         }
 
-        Logging.debug("SymbolExprManager",
+        Logging.debug("NMAEManager",
                 String.format("Found %d base expr %s 's paths for finding mayMemAlias for %s", paths.size(), baseExpr, expr));
 
         for (var path: paths) {
@@ -186,7 +183,7 @@ public class NMAEManager {
             fastMayMemAliasCache.put(alias, mayAliasExpr);
         }
 
-        Logging.debug("SymbolExprManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
+        Logging.debug("NMAEManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
         return mayAliasExpr;
     }
 
@@ -197,7 +194,7 @@ public class NMAEManager {
      */
     public NMAE add(NMAE a, NMAE b) {
         if (a.hasIndexScale() && b.hasIndexScale()) {
-            Logging.error("SymbolExprManager", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.error("NMAEManager", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
             return null;
         }
 
@@ -248,7 +245,7 @@ public class NMAEManager {
             }
         }
         else {
-            Logging.error("SymbolExpr", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.error("NMAEManager", String.format("Unsupported add operation: %s + %s", a.getRepresentation(), b.getRepresentation()));
             return null;
         }
         return builder.build();
@@ -260,7 +257,7 @@ public class NMAEManager {
      */
     public NMAE multiply(NMAE a, NMAE b) {
         if (!a.isNormalConst() && !b.isNormalConst()) {
-            Logging.warn("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.warn("NMAEManager", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
             return null;
         }
 
@@ -283,7 +280,7 @@ public class NMAEManager {
             builder.index(a).scale(b);
         }
         else {
-            Logging.warn("SymbolExpr", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
+            Logging.warn("NMAEManager", String.format("Unsupported multiply operation: %s * %s", a.getRepresentation(), b.getRepresentation()));
             return null;
         }
 

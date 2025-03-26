@@ -1,7 +1,7 @@
 package typeforge.base.dataflow.TFG;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.constraint.TypeConstraint;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.utils.Logging;
 import org.jgrapht.GraphPath;
 
@@ -12,9 +12,9 @@ public class TypeRelationPath<T> {
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
     public List<TypeFlowGraph.TypeFlowEdge> edges;
-    public List<TypeConstraint> forwardMergedConstraints;
-    public List<TypeConstraint> backwardMergedConstraints;
-    public TypeConstraint finalConstraint = null;
+    public List<Skeleton> forwardMergedConstraints;
+    public List<Skeleton> backwardMergedConstraints;
+    public Skeleton finalConstraint = null;
     public boolean evil = false;
     public boolean noComposite = false;
     public T start;
@@ -54,16 +54,16 @@ public class TypeRelationPath<T> {
     public boolean tryMergeOnPath(NMAEManager exprManager) {
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get(i);
-            TypeConstraint curMergedCon;
+            Skeleton curMergedCon;
             NMAE curExpr = (NMAE) node;
-            TypeConstraint curExprCon = exprManager.getConstraint(curExpr);
+            Skeleton curExprCon = exprManager.getSkeleton(curExpr);
 
             if (curExprCon == null) {
                 Logging.warn("TypeAliasPath", String.format("Cannot find constraint for %s in path", node));
-                curMergedCon = new TypeConstraint();
+                curMergedCon = new Skeleton();
                 Logging.debug("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
             } else {
-                curMergedCon = new TypeConstraint(curExprCon);
+                curMergedCon = new Skeleton(curExprCon);
                 Logging.debug("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
 
                 // If Current Expr is fieldAccessExpr, try to merge its memAliasExpr's TypeConstraint
@@ -74,7 +74,7 @@ public class TypeRelationPath<T> {
                         if (alias == curExpr) {
                             continue;
                         }
-                        var aliasCon = exprManager.getConstraint(alias);
+                        var aliasCon = exprManager.getSkeleton(alias);
                         if (aliasCon == null) {
                             continue;
                         }
@@ -126,14 +126,14 @@ public class TypeRelationPath<T> {
     public Optional<Integer> tryMergeBackward(NMAEManager exprManager) {
         for (int i = nodes.size() - 1; i >= 0; i--) {
             T node = nodes.get(i);
-            TypeConstraint curMergedCon;
+            Skeleton curMergedCon;
             NMAE curExpr = (NMAE) node;
-            TypeConstraint curExprCon = exprManager.getConstraint(curExpr);
+            Skeleton curExprCon = exprManager.getSkeleton(curExpr);
 
             if (curExprCon == null) {
-                curMergedCon = new TypeConstraint();
+                curMergedCon = new Skeleton();
             } else {
-                curMergedCon = new TypeConstraint(curExprCon);
+                curMergedCon = new Skeleton(curExprCon);
                 if (curExpr.isDereference()) {
                     Logging.debug("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
                     var mayMemAliases = exprManager.fastGetMayMemAliases(curExpr);
@@ -141,7 +141,7 @@ public class TypeRelationPath<T> {
                         if (alias == curExpr) {
                             continue;
                         }
-                        var aliasCon = exprManager.getConstraint(alias);
+                        var aliasCon = exprManager.getSkeleton(alias);
                         if (aliasCon == null) {
                             continue;
                         }

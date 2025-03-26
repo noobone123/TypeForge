@@ -14,7 +14,7 @@ import ghidra.program.model.symbol.SourceType;
 import ghidra.util.task.TaskMonitor;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAE;
-import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.DecompilerHelper;
 import typeforge.utils.Global;
@@ -29,12 +29,12 @@ import java.util.*;
 */
 public class ReTyper {
 
-    Set<Skeleton> sktSet;
-    Map<NMAE, Skeleton> exprSkeletonMap;
+    Set<TypeConstraint> sktSet;
+    Map<NMAE, TypeConstraint> exprSkeletonMap;
     ObjectMapper mapper = new ObjectMapper();
 
-    public ReTyper(Set<Skeleton> skeletons, Map<NMAE, Skeleton> exprToSkeletonMap) {
-        sktSet = skeletons;
+    public ReTyper(Set<TypeConstraint> typeConstraints, Map<NMAE, TypeConstraint> exprToSkeletonMap) {
+        sktSet = typeConstraints;
         exprSkeletonMap = exprToSkeletonMap;
     }
 
@@ -76,7 +76,7 @@ public class ReTyper {
     }
 
 
-    public ObjectNode generateSkeletonJson(Skeleton skt, boolean isMorph, boolean isDecompilerInferred) {
+    public ObjectNode generateSkeletonJson(TypeConstraint skt, boolean isMorph, boolean isDecompilerInferred) {
         var jsonRoot = mapper.createObjectNode();
         /* If the skeleton is not morphing, write the final type information */
         if (isDecompilerInferred) {
@@ -274,7 +274,7 @@ public class ReTyper {
     }
 
 
-    private ObjectNode processStructure(Skeleton skt, Structure struct) {
+    private ObjectNode processStructure(TypeConstraint skt, Structure struct) {
         var typeRoot = mapper.createObjectNode();
         typeRoot.put("desc", "Structure");
 
@@ -303,8 +303,8 @@ public class ReTyper {
                 refEntry.put("ptrLevel", ptrLevel);
                 ptrRef.set("0x" + Long.toHexString(offset), refEntry);
             }
-            if (skt.finalNestedSkeleton.containsKey((long)offset)) {
-                nest.put("0x" + Long.toHexString(offset), skt.finalNestedSkeleton.get((long)offset).toString());
+            if (skt.finalNestedConstraint.containsKey((long)offset)) {
+                nest.put("0x" + Long.toHexString(offset), skt.finalNestedConstraint.get((long)offset).toString());
             }
             if (fieldType instanceof Structure && fieldType.getName().contains("Anon")) {
                 nest.put("0x" + Long.toHexString(offset), fieldType.getName());
@@ -351,7 +351,7 @@ public class ReTyper {
         return layout;
     }
 
-    private ObjectNode writeDecompilerInferred(Skeleton skt) {
+    private ObjectNode writeDecompilerInferred(TypeConstraint skt) {
         var inferred = mapper.createObjectNode();
         var array = mapper.createArrayNode();
         var composite = mapper.createArrayNode();
@@ -405,7 +405,7 @@ public class ReTyper {
      * We utilize start/end to limit which variables to retype,
      * because member's out of the range is certain and no need to retype and assess.
      */
-    private void populateRetypedCandidates(Skeleton skt, long start, long end,
+    private void populateRetypedCandidates(TypeConstraint skt, long start, long end,
                                            HashSet<NMAE> retypeCandidates,
                                            HashMap<HighSymbol, DataType> reservedDT) {
         boolean globalMorph;
@@ -414,9 +414,9 @@ public class ReTyper {
 
         /* If range morphing */
         if (!globalMorph) {
-            for (var offset : skt.finalConstraint.fieldExprMap.keySet()) {
+            for (var offset : skt.finalSkeleton.fieldExprMap.keySet()) {
                 if (offset >= start && offset < end) {
-                    memberAccessExprs.addAll(skt.finalConstraint.fieldExprMap.get(offset));
+                    memberAccessExprs.addAll(skt.finalSkeleton.fieldExprMap.get(offset));
                 }
             }
             Logging.debug("GhidraScript",
@@ -424,8 +424,8 @@ public class ReTyper {
         }
         /* If global morphing */
         else {
-            for (var offset: skt.finalConstraint.fieldExprMap.keySet()) {
-                memberAccessExprs.addAll(skt.finalConstraint.fieldExprMap.get(offset));
+            for (var offset: skt.finalSkeleton.fieldExprMap.keySet()) {
+                memberAccessExprs.addAll(skt.finalSkeleton.fieldExprMap.get(offset));
             }
         }
 

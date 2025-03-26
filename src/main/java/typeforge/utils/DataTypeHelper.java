@@ -1,7 +1,7 @@
 package typeforge.utils;
 
 import typeforge.base.dataflow.AccessPoints;
-import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.passes.Window;
 import ghidra.program.model.data.*;
 
@@ -115,7 +115,7 @@ public class DataTypeHelper {
             DataType dt;
             String name;
             String comment = null;
-            if (element instanceof Skeleton skt) {
+            if (element instanceof TypeConstraint skt) {
                 dt = getPointerDT(DataTypeHelper.getDataTypeByName("void"), ptrLevel.get(offset));
                 name = String.format("ref_0x%s_%s", Long.toHexString(offset), skt.toString());
             } else {
@@ -131,7 +131,7 @@ public class DataTypeHelper {
      * Create a new structure
      * @return the new Structure
      */
-    public static Structure createUniqueStructure(Skeleton skt, Map<Integer, DataType> componentMap) {
+    public static Structure createUniqueStructure(TypeConstraint skt, Map<Integer, DataType> componentMap) {
         Logging.debug("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(skt.getSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_STRUCT_BASENAME);
         var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, skt.getSize(), dtM);
@@ -140,13 +140,13 @@ public class DataTypeHelper {
     }
 
 
-    public static Union createAnonUnion(Skeleton skt, Long offset) {
+    public static Union createAnonUnion(TypeConstraint skt, Long offset) {
         Logging.debug("Generator", "Creating Union Type");
         String unionName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_UNION_BASENAME);
         var unionDT = new UnionDataType(new CategoryPath(DEFAULT_CATEGORY), unionName, dtM);
         int index = 0;
 
-        for (var dt: skt.finalConstraint.fieldAccess.get(offset).allDTs) {
+        for (var dt: skt.finalSkeleton.fieldAccess.get(offset).allDTs) {
             var name = String.format("union_member_%d", index);
             unionDT.add(dt, dt.getLength(), name, null);
             index++;
@@ -167,7 +167,7 @@ public class DataTypeHelper {
         return new ArrayDataType(elementDT, length, elementDT.getLength(), dtM);
     }
 
-    public static void populateStructure(Structure structDT, Map<Integer, DataType> componentMap, Skeleton skt) {
+    public static void populateStructure(Structure structDT, Map<Integer, DataType> componentMap, TypeConstraint skt) {
         for (var entry: componentMap.entrySet()) {
             var offset = entry.getKey();
             var dt = entry.getValue();

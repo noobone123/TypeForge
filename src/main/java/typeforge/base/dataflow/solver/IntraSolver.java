@@ -6,7 +6,7 @@ import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.KSet;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.constraint.TypeConstraint;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.node.CallSite;
@@ -131,10 +131,10 @@ public class IntraSolver {
             Logging.trace("IntraSolver", "Candidate HighSymbol: " + symbol.getName());
 
             NMAE expr;
-            TypeConstraint constraint;
+            Skeleton skeleton;
             DataType decompilerDT;
 
-            // Create the SymbolExpr and Constraint for the HighSymbol
+            // Create the NMAE and Skeleton for the HighSymbol
             if (symbol.isGlobal()) {
                 expr = new NMAEManager.Builder().global(HighSymbolHelper.getGlobalHighSymbolAddr(symbol), symbol).build();
                 exprManager.addExprAttribute(expr, NMAE.Attribute.GLOBAL);
@@ -157,30 +157,30 @@ public class IntraSolver {
                 if (decompilerDT instanceof Array array) {
                     expr = getExprForStackAllocated(expr);
                     exprManager.addExprAttribute(expr, NMAE.Attribute.ARRAY);
-                    constraint = exprManager.getOrCreateConstraint(expr);
-                    constraint.setComposite(true);
-                    constraint.setSizeFromExpr(array.getLength(), expr);
-                    constraint.addPolymorphicType(array);
+                    skeleton = exprManager.getOrCreateSkeleton(expr);
+                    skeleton.setComposite(true);
+                    skeleton.setSizeFromExpr(array.getLength(), expr);
+                    skeleton.addPolymorphicType(array);
 
                     Logging.debug("IntraSolver", String.format("Found Array: %s -> %s", expr, decompilerDT.getName()));
                 }
                 else if (decompilerDT instanceof Structure structure) {
                     expr = getExprForStackAllocated(expr);
                     exprManager.addExprAttribute(expr, NMAE.Attribute.STRUCT);
-                    constraint = exprManager.getOrCreateConstraint(expr);
-                    constraint.setComposite(true);
-                    constraint.setSizeFromExpr(structure.getLength(), expr);
-                    constraint.addPolymorphicType(structure);
+                    skeleton = exprManager.getOrCreateSkeleton(expr);
+                    skeleton.setComposite(true);
+                    skeleton.setSizeFromExpr(structure.getLength(), expr);
+                    skeleton.addPolymorphicType(structure);
 
                     Logging.debug("IntraSolver", String.format("Found Structure: %s -> %s", expr, decompilerDT.getName()));
                 }
                 else if (decompilerDT instanceof Union union) {
                     expr = getExprForStackAllocated(expr);
                     exprManager.addExprAttribute(expr, NMAE.Attribute.UNION);
-                    constraint = exprManager.getOrCreateConstraint(expr);
-                    constraint.setComposite(true);
-                    constraint.setSizeFromExpr(union.getLength(), expr);
-                    constraint.addPolymorphicType(union);
+                    skeleton = exprManager.getOrCreateSkeleton(expr);
+                    skeleton.setComposite(true);
+                    skeleton.setSizeFromExpr(union.getLength(), expr);
+                    skeleton.addPolymorphicType(union);
 
                     Logging.debug("IntraSolver", String.format("Found Union: %s -> %s", expr, decompilerDT.getName()));
                 }
@@ -190,19 +190,19 @@ public class IntraSolver {
                     var pointTo = DataTypeHelper.getTypeDefBaseDataType(ptrDT.getDataType());
                     if (pointTo instanceof Structure structure) {
                         exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_STRUCT);
-                        constraint = exprManager.getOrCreateConstraint(expr);
-                        constraint.setComposite(true);
-                        constraint.setSizeFromExpr(structure.getLength(), expr);
-                        constraint.addPolymorphicType(structure);
+                        skeleton = exprManager.getOrCreateSkeleton(expr);
+                        skeleton.setComposite(true);
+                        skeleton.setSizeFromExpr(structure.getLength(), expr);
+                        skeleton.addPolymorphicType(structure);
 
                         Logging.debug("IntraSolver", String.format("Found Pointer to Struct: %s -> %s", expr, decompilerDT.getName()));
                     }
                     else if (pointTo instanceof Union union) {
                         exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_UNION);
-                        constraint = exprManager.getOrCreateConstraint(expr);
-                        constraint.setComposite(true);
-                        constraint.setSizeFromExpr(union.getLength(), expr);
-                        constraint.addPolymorphicType(union);
+                        skeleton = exprManager.getOrCreateSkeleton(expr);
+                        skeleton.setComposite(true);
+                        skeleton.setSizeFromExpr(union.getLength(), expr);
+                        skeleton.addPolymorphicType(union);
 
                         Logging.debug("IntraSolver", String.format("Found Pointer to Union: %s -> %s", expr, decompilerDT.getName()));
                     }
@@ -312,8 +312,8 @@ public class IntraSolver {
     }
 
     /**
-     * NMAE -> TypeConstraint is a mapping indicating that the NMAE is pointed to
-     * a Composite Type described by the TypeConstraint.
+     * NMAE -> Skeleton is a mapping indicating that the NMAE is pointed to
+     * a Composite Type described by the Skeleton.
      * So, for stack-allocated variables, we need to create its reference.
      *
      * For example, `local_10` -> `&local_10[Composite]`
