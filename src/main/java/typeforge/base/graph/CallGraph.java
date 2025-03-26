@@ -87,7 +87,7 @@ public class CallGraph extends GraphBase<Function> {
                     Logging.error("CallGraph", "Decompile failed for function " + func.getName());
                     continue;
                 } else {
-                    Logging.info("CallGraph", "Decompile function " + func.getName());
+                    Logging.debug("CallGraph", "Decompile function " + func.getName());
                 }
             }
 
@@ -172,7 +172,7 @@ public class CallGraph extends GraphBase<Function> {
                             }
                         }
                     } else {
-                        Logging.debug("CallGraph", "Indirect call at " + inst.getAddress());
+                        Logging.trace("CallGraph", "Indirect call at " + inst.getAddress());
                     }
                 }
             }

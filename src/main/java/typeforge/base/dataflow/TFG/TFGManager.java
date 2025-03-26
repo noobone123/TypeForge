@@ -1,7 +1,6 @@
 package typeforge.base.dataflow.TFG;
 
 import typeforge.base.dataflow.expression.NMAE;
-import typeforge.base.node.FunctionNode;
 import typeforge.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -67,7 +66,7 @@ public class TFGManager {
     public void buildAllPathManagers() {
         for (var graph: graphs) {
             if (graph.getNumNodes() > 1) {
-                Logging.info("InterContext", String.format("Handing type alias graph %s", graph));
+                Logging.debug("InterContext", String.format("Handing type alias graph %s", graph));
                 graph.pathManager.build();
             }
         }
@@ -89,7 +88,7 @@ public class TFGManager {
                 }
             }
             if (!hasInterestedNode) {
-                Logging.debug("TypeRelationManager", String.format("Remove redundant graph %s", graph));
+                Logging.trace("TypeRelationManager", String.format("Remove redundant graph %s", graph));
                 toRemove.add(graph);
             }
         }
@@ -101,6 +100,18 @@ public class TFGManager {
             }
         }
     }
+
+    /**
+     * Statistics Node and Edge information for TFGs
+     */
+    public void TFGStatistics() {
+        var totalNodes = 0;
+        var totalEdges = 0;
+        var TFGnum = 0;
+
+        Logging.info("TFGManager", "TFG Statistics:");
+    }
+
 
     public void dumpTRG(File outputDir) throws IOException {
         File metadataFile = new File(outputDir, "TypeRelationManager.json");

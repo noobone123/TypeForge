@@ -2,11 +2,11 @@
 <Configuration status="WARN">
     <Appenders>
         <Console name="Console" target="SYSTEM_OUT">
-            <PatternLayout disableAnsi="false" pattern="%highlight{[%-5level] - %msg%n%throwable}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=white, TRACE=blue}"/>
+            <PatternLayout disableAnsi="false" pattern="%highlight{[%-5level] - %msg%n%throwable}{FATAL=red, ERROR=red, WARN=yellow, INFO=green, DEBUG=blue, TRACE=white}"/>
         </Console>
     </Appenders>
     <Loggers>
-        <Logger name="TypeForge" level="info" additivity="false">>
+        <Logger name="TypeForge" level="debug" additivity="false">>
             <AppenderRef ref="Console"/>
         </Logger>
         <Root level="warn">

@@ -61,14 +61,14 @@ public class TypeRelationPath<T> {
             if (curExprCon == null) {
                 Logging.warn("TypeAliasPath", String.format("Cannot find constraint for %s in path", node));
                 curMergedCon = new TypeConstraint();
-                Logging.info("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
+                Logging.debug("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
             } else {
                 curMergedCon = new TypeConstraint(curExprCon);
-                Logging.info("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
+                Logging.debug("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
 
                 // If Current Expr is fieldAccessExpr, try to merge its memAliasExpr's TypeConstraint
                 if (curExpr.isDereference()) {
-                    Logging.info("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
+                    Logging.debug("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
                     var mayMemAliases = exprManager.fastGetMayMemAliases(curExpr);
                     for (var alias: mayMemAliases) {
                         if (alias == curExpr) {
@@ -135,7 +135,7 @@ public class TypeRelationPath<T> {
             } else {
                 curMergedCon = new TypeConstraint(curExprCon);
                 if (curExpr.isDereference()) {
-                    Logging.info("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
+                    Logging.debug("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
                     var mayMemAliases = exprManager.fastGetMayMemAliases(curExpr);
                     for (var alias: mayMemAliases) {
                         if (alias == curExpr) {
@@ -185,12 +185,12 @@ public class TypeRelationPath<T> {
             evilEdges.add(edges.get(rightBoundIndex - 1));
         }
         else if (leftBoundIndex == rightBoundIndex) {
-            Logging.info("TypeAliasPath", "LB == RB");
+            Logging.debug("TypeAliasPath", "LB == RB");
             evilEdges.add(edges.get(rightBoundIndex));
             evilEdges.add(edges.get(rightBoundIndex - 1));
         }
         else if (leftBoundIndex > rightBoundIndex) {
-            Logging.info("TypeAliasPath", "LB > RB");
+            Logging.debug("TypeAliasPath", "LB > RB");
             evilEdges.add(edges.get(leftBoundIndex));
             evilEdges.add(edges.get(rightBoundIndex - 1));
             for (int i = rightBoundIndex; i < leftBoundIndex; i++) {
@@ -199,14 +199,14 @@ public class TypeRelationPath<T> {
         }
         /* leftBoundIndex < rightBoundIndex, this is what we expect */
         else {
-            Logging.info("TypeAliasPath", "LB < RB");
+            Logging.debug("TypeAliasPath", "LB < RB");
             for (int i = leftBoundIndex; i < rightBoundIndex; i++) {
                 evilEdges.add(edges.get(i));
             }
         }
 
         for (var edge: evilEdges) {
-            Logging.info("TypeAliasPath", String.format("Found Evil Edge: %s", edge));
+            Logging.debug("TypeAliasPath", String.format("Found Evil Edge: %s", edge));
         }
     }
 

@@ -25,14 +25,14 @@ public class TypeForge extends GhidraScript {
             return;
         }
 
-        List<Function> functions = Global.currentProgram.getListing().getGlobalFunctions("main");
+        List<Function> mainFunc = Global.currentProgram.getListing().getGlobalFunctions("main");
         DataTypeHelper.prepare();
 
-        if (functions.isEmpty()) {
-            Logging.error("TypeForge","No main function found");
+        if (mainFunc.isEmpty()) {
+            Logging.warn("TypeForge","No main function found");
             return;
         }
-        Logging.info("TypeForge","Number of main functions: " + functions.size());
+        Logging.info("TypeForge","Number of main functions: " + mainFunc.size());
 
         long startAnalysisTime = System.currentTimeMillis();
 
@@ -54,10 +54,10 @@ public class TypeForge extends GhidraScript {
         Global.retypingEndTime = System.currentTimeMillis();
 
 
-        Logging.warn("TypeForge","Type Analysis time: " + (Global.typeAnalysisEndTime - Global.typeAnalysisBeginTime) / 1000.00 + "s");
-        Logging.warn("TypeForge","ReTyping time: " + (Global.retypingEndTime - Global.retypingBeginTime) / 1000.00 + "s");
-        Logging.warn("TypeForge","Total time: " + (Global.retypingEndTime  - Global.typeAnalysisBeginTime) / 1000.00 + "s");
-        Logging.warn("TypeForge", "Prepare Analysis time: " + (Global.prepareAnalysisEndTime - Global.prepareAnalysisBeginTime) / 1000.00 + "s");
+        Logging.info("TypeForge","Type Analysis time: " + (Global.typeAnalysisEndTime - Global.typeAnalysisBeginTime) / 1000.00 + "s");
+        Logging.info("TypeForge","ReTyping time: " + (Global.retypingEndTime - Global.retypingBeginTime) / 1000.00 + "s");
+        Logging.info("TypeForge","Total time: " + (Global.retypingEndTime  - Global.typeAnalysisBeginTime) / 1000.00 + "s");
+        Logging.info("TypeForge", "Prepare Analysis time: " + (Global.prepareAnalysisEndTime - Global.prepareAnalysisBeginTime) / 1000.00 + "s");
     }
 
     protected boolean prepare() {
@@ -70,10 +70,10 @@ public class TypeForge extends GhidraScript {
 
         Language language = this.currentProgram.getLanguage();
         if (language == null) {
-            Logging.error("GhidraScript","Language not found");
+            Logging.error("TypeForge","Language not found");
             return false;
         } else {
-            Logging.info("GhidraScript","Language: " + language.getLanguageID());
+            Logging.info("TypeForge","Language: " + language.getLanguageID());
             return true;
         }
     }
@@ -81,11 +81,11 @@ public class TypeForge extends GhidraScript {
     protected void parseArgs() {
         String[] args = getScriptArgs();
         for (String arg : args) {
-            Logging.info("GhidraScript", "Arg: " + arg);
+            Logging.info("TypeForge", "Arg: " + arg);
             // split the arguments string by "="
             String[] argParts = arg.split("=");
             if (argParts.length != 2) {
-                Logging.error("GhidraScript", "Invalid argument: " + arg);
+                Logging.error("TypeForge", "Invalid argument: " + arg);
                 System.exit(1);
             }
 
@@ -97,7 +97,7 @@ public class TypeForge extends GhidraScript {
             } else if (key.equals("start_addr")) {
                 Global.startAddress = Long.decode(value);
             } else {
-                Logging.error("GhidraScript", "Invalid argument: " + arg);
+                Logging.error("TypeForge", "Invalid argument: " + arg);
                 System.exit(1);
             }
         }
@@ -105,7 +105,7 @@ public class TypeForge extends GhidraScript {
 
     protected void prepareOutputDirectory() {
         if (Global.outputDirectory == null) {
-            Logging.error("GhidraScript","Output directory not specified");
+            Logging.error("TypeForge","Output directory not specified");
             System.exit(1);
         }
 
@@ -113,7 +113,7 @@ public class TypeForge extends GhidraScript {
         // If the output directory does not exist, create it
         if (!outputDir.exists()) {
             if (!outputDir.mkdirs()) {
-                Logging.error("GhidraScript", "Failed to create output directory");
+                Logging.error("TypeForge", "Failed to create output directory");
                 System.exit(1);
             }
         } else {

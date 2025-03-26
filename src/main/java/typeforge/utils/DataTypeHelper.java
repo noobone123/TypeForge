@@ -104,7 +104,7 @@ public class DataTypeHelper {
     }
 
     public static Structure createAnonStructureFromWindow(Window window) {
-        Logging.info("Generator", "Creating Anon Structure Type with Length: 0x" + Integer.toHexString(window.getAlignedWindowSize()));
+        Logging.debug("Generator", "Creating Anon Structure Type with Length: 0x" + Integer.toHexString(window.getAlignedWindowSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_STRUCT_BASENAME);
         var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, window.getAlignedWindowSize(), dtM);
         var winElements = window.getWindowElements();
@@ -132,7 +132,7 @@ public class DataTypeHelper {
      * @return the new Structure
      */
     public static Structure createUniqueStructure(Skeleton skt, Map<Integer, DataType> componentMap) {
-        Logging.info("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(skt.getSize()));
+        Logging.debug("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(skt.getSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_STRUCT_BASENAME);
         var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, skt.getSize(), dtM);
         populateStructure(structDT, componentMap, skt);
@@ -141,7 +141,7 @@ public class DataTypeHelper {
 
 
     public static Union createAnonUnion(Skeleton skt, Long offset) {
-        Logging.info("Generator", "Creating Union Type");
+        Logging.debug("Generator", "Creating Union Type");
         String unionName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_UNION_BASENAME);
         var unionDT = new UnionDataType(new CategoryPath(DEFAULT_CATEGORY), unionName, dtM);
         int index = 0;
@@ -163,7 +163,7 @@ public class DataTypeHelper {
     }
 
     public static Array createArray(DataType elementDT, int length) {
-        Logging.info("Generator", String.format("Creating Array Type of %s with Length: %d", elementDT.getName(), length));
+        Logging.debug("Generator", String.format("Creating Array Type of %s with Length: %d", elementDT.getName(), length));
         return new ArrayDataType(elementDT, length, elementDT.getLength(), dtM);
     }
 
@@ -264,7 +264,7 @@ public class DataTypeHelper {
         var dtm = Global.currentProgram.getDataTypeManager();
         var rootCategory = dtm.getRootCategory();
         for (var category : rootCategory.getCategories()) {
-            Logging.info("DataTypeHelper", "Category: " + category.getName());
+            Logging.debug("DataTypeHelper", "Category: " + category.getName());
             if (!category.getName().equals("DWARF")) {
                 traverseTypeCategory(result, category);
             }
@@ -321,7 +321,7 @@ public class DataTypeHelper {
             if (dt instanceof Composite) {
                 result.add(dt);
             } else if (dt instanceof FunctionDefinition) {
-                Logging.debug("DataTypeHelper", "FunctionDefinition detected: " + dt.getName());
+                Logging.trace("DataTypeHelper", "FunctionDefinition detected: " + dt.getName());
             } else if (dt instanceof TypeDef typedef) {
                 var baseDT = typedef.getBaseDataType();
                 if (baseDT instanceof Composite) {

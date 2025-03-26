@@ -71,4 +71,12 @@ public class Logging {
     public static void debug(String prefix, String msg) {
         defaultLogger.debug("[{}] - {}", prefix, msg);
     }
+
+    /**
+     * Generate a trace log
+     * @param msg the trace log.
+     */
+    public static void trace(String prefix, String msg) {
+        defaultLogger.trace("[{}] - {}", prefix, msg);
+    }
 }

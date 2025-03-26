@@ -99,7 +99,7 @@ public class NMAEManager {
     public TypeConstraint createConstraint(NMAE expr) {
         TypeConstraint constraint = new TypeConstraint();
         exprToConstraintBeforeMerge.put(expr, constraint);
-        Logging.debug("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
+        Logging.trace("SymbolExprManager", String.format("Create TypeConstraint : %s -> %s", expr.getRepresentation(), constraint));
         return constraint;
     }
 
@@ -110,10 +110,10 @@ public class NMAEManager {
      */
     public TypeConstraint getConstraint(NMAE expr) {
         if (exprToConstraintBeforeMerge.containsKey(expr)) {
-            Logging.debug("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr, exprToConstraintBeforeMerge.get(expr)));
+            Logging.trace("SymbolExprManager", String.format("Get TypeConstraint : %s -> %s", expr, exprToConstraintBeforeMerge.get(expr)));
             return exprToConstraintBeforeMerge.get(expr);
         } else {
-            Logging.debug("SymbolExprManager", String.format("No TypeConstraint found for %s", expr));
+            Logging.trace("SymbolExprManager", String.format("No TypeConstraint found for %s", expr));
             return null;
         }
     }
@@ -140,7 +140,7 @@ public class NMAEManager {
     public Set<NMAE> fastGetMayMemAliases(NMAE expr) {
         // get from cache first
         if (fastMayMemAliasCache.containsKey(expr)) {
-            Logging.debug("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
+            Logging.trace("SymbolExprManager", String.format("Get MayMemAliases from cache: %s", expr));
             return fastMayMemAliasCache.get(expr);
         }
 
@@ -168,7 +168,7 @@ public class NMAEManager {
             return mayAliasExpr;
         }
 
-        Logging.info("SymbolExprManager",
+        Logging.debug("SymbolExprManager",
                 String.format("Found %d base expr %s 's paths for finding mayMemAlias for %s", paths.size(), baseExpr, expr));
 
         for (var path: paths) {
@@ -185,7 +185,7 @@ public class NMAEManager {
             fastMayMemAliasCache.put(alias, mayAliasExpr);
         }
 
-        Logging.info("SymbolExprManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
+        Logging.debug("SymbolExprManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
         return mayAliasExpr;
     }
 

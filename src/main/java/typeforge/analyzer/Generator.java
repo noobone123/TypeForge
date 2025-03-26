@@ -72,9 +72,9 @@ public class Generator {
                 continue;
             }
             if (skt.noMorphingTypes() && skt.finalType != null) {
-                Logging.info("Generator", "Found Stable Skeleton with Final Type");
+                Logging.debug("Generator", "Found Stable Skeleton with Final Type");
             } else {
-                Logging.info("Generator", "Found Unstable Skeleton with Morphing Types");
+                Logging.debug("Generator", "Found Unstable Skeleton with Morphing Types");
                 for (var entry: new HashMap<>(skt.rangeMorphingTypes).entrySet()) {
                     var range = entry.getKey();
                     var morphingTypes = entry.getValue();
@@ -82,7 +82,7 @@ public class Generator {
                     for (var morphingType: morphingTypes) {
                         var layoutHash = DataTypeHelper.calculateLayoutHash((Structure) morphingType);
                         if (layoutHashToDT.containsKey(layoutHash)) {
-                            Logging.info("Generator", "Found Same Type Declaration with Different Name");
+                            Logging.debug("Generator", "Found Same Type Declaration with Different Name");
                         } else {
                             layoutHashToDT.put(layoutHash, morphingType);
                         }
@@ -98,26 +98,26 @@ public class Generator {
 
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isPointerToPrimitive) {
-                Logging.info("Generator", "Pointer to Primitive Found");
+                Logging.debug("Generator", "Pointer to Primitive Found");
                 continue;
             }
             if (skt.isMultiLevelMidPtr) {
-                Logging.info("Generator", "Multi-Level Mid Pointer Found");
+                Logging.debug("Generator", "Multi-Level Mid Pointer Found");
                 continue;
             }
 
             if (!skt.hasPtrReference() && skt.mayPrimitiveArray()) {
-                Logging.info("Generator", "May Primitive Array Found");
+                Logging.debug("Generator", "May Primitive Array Found");
                 handleMayPrimitiveArray(skt);
                 continue;
             }
             if (!skt.hasNestedSkeleton()) {
                 /* If No Nested Skeleton Found */
-                Logging.info("Generator", "No Nested Skeleton: " + skt);
+                Logging.debug("Generator", "No Nested Skeleton: " + skt);
                 handleNoNestedSkeleton(skt);
             } else {
                 /* If Nested Skeleton Found */
-                Logging.info("Generator", "Has Nested Skeleton: " + skt);
+                Logging.debug("Generator", "Has Nested Skeleton: " + skt);
                 handleNestedSkeleton(skt);
             }
             // TODO: populate empty (not padding) intervals with char[]
@@ -181,7 +181,7 @@ public class Generator {
 
             /* If Contains Ptr Reference, this field should be a ptrReference */
             if (!aps.isSameSizeType && !skt.finalPtrReference.containsKey(offset)) {
-                Logging.info("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
+                Logging.debug("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
                 skt.markInconsistentOffset(offset);
 
                 // Create Union or Find the most accessed data type
@@ -227,9 +227,9 @@ public class Generator {
             var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
             skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2)));
 
-            Logging.info("Generator",
+            Logging.debug("Generator",
                     String.format("Found a match of primitive flatten from offset 0x%x with %d count", curOffset, flattenCnt));
-            Logging.info("Generator",
+            Logging.debug("Generator",
                     String.format("Window's DataType:\n%s", winDT));
 
             windowProcessor.resetFlattenCnt();
@@ -260,7 +260,7 @@ public class Generator {
                 } else {
                     var existRanges = winDTHashToRanges.get(winDTHash);
                     if (Range.ifRangeInRanges(range, existRanges)) {
-                        Logging.info("Generator", "Found a duplicate window in the same range");
+                        Logging.debug("Generator", "Found a duplicate window in the same range");
                         continue;
                     } else {
                         existRanges.add(range);
@@ -277,9 +277,9 @@ public class Generator {
 
                 skt.updateRangeMorphingDataType(nestStartOffset, nestEndOffset, new HashSet<>(Set.of(structDT_1, structDT_3)));
 
-                Logging.info("Generator",
+                Logging.debug("Generator",
                         String.format("Found a match of complex flatten (%d) from offset 0x%x with %d count", capacity, offsets.get(i), flattenCnt));
-                Logging.info("Generator",
+                Logging.debug("Generator",
                         String.format("Window's DataType:\n%s", winDT));
             }
         }
@@ -447,21 +447,21 @@ public class Generator {
             if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
             }
-            Logging.info("Generator", String.format("Exploring Skeleton: %s", skt));
+            Logging.debug("Generator", String.format("Exploring Skeleton: %s", skt));
             skt.dumpInfo();
         }
 
-        Logging.info("Generator", String.format("Evil Sources (%d):", typeHintCollector.evilSource.size()));
+        Logging.debug("Generator", String.format("Evil Sources (%d):", typeHintCollector.evilSource.size()));
         for (var source: typeHintCollector.evilSource) {
-            Logging.info("Generator", source.toString());
+            Logging.debug("Generator", source.toString());
         }
-        Logging.info("Generator", String.format("Evil Nodes (%d):", typeHintCollector.evilNodes.size()));
+        Logging.debug("Generator", String.format("Evil Nodes (%d):", typeHintCollector.evilNodes.size()));
         for (var node: typeHintCollector.evilNodes) {
-            Logging.info("Generator", node.toString());
+            Logging.debug("Generator", node.toString());
         }
-        Logging.info("Generator", String.format("Evil Paths (%d):", typeHintCollector.evilPaths.size()));
+        Logging.debug("Generator", String.format("Evil Paths (%d):", typeHintCollector.evilPaths.size()));
         for (var path: typeHintCollector.evilPaths) {
-            Logging.info("Generator", path.toString());
+            Logging.debug("Generator", path.toString());
         }
     }
 }

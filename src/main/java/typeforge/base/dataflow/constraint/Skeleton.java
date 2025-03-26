@@ -415,17 +415,17 @@ public class Skeleton {
     }
 
     public void dumpInfo() {
-        Logging.info("Skeleton", " ------------------------------- Start --------------------------------- ");
-        Logging.info("Skeleton", this.toString());
+        Logging.debug("Skeleton", " ------------------------------- Start --------------------------------- ");
+        Logging.debug("Skeleton", this.toString());
         if (hasMultiConstraints) {
-            Logging.info("Skeleton", String.format("C > 1, = %d", constraints.size()));
+            Logging.debug("Skeleton", String.format("C > 1, = %d", constraints.size()));
         } else {
-            Logging.info("Skeleton", "C = 1");
+            Logging.debug("Skeleton", "C = 1");
         }
-        Logging.info("Skeleton", "Associated Exprs Count: " + exprs.size());
-        Logging.info("Skeleton", "All Exprs: " + exprs);
-        Logging.info("Skeleton", "Associated Variables Count: " + getVariables().size());
-        Logging.info("Skeleton", "All Variables: " + getVariables());
+        Logging.debug("Skeleton", "Associated Exprs Count: " + exprs.size());
+        Logging.debug("Skeleton", "All Exprs: " + exprs);
+        Logging.debug("Skeleton", "Associated Variables Count: " + getVariables().size());
+        Logging.debug("Skeleton", "All Variables: " + getVariables());
 
         /* dump Layout */
         List<Long> sortedOffsets = Stream.of(finalConstraint.fieldAccess.keySet(), finalPtrReference.keySet(), finalNestedSkeleton.keySet())
@@ -454,23 +454,23 @@ public class Skeleton {
             layout.append(finalConstraint.fieldExprMap.get(offset));
             layout.append("\n");
         }
-        Logging.info("Skeleton", "Layout:\n" + layout);
+        Logging.debug("Skeleton", "Layout:\n" + layout);
         /* end */
 
-        Logging.info("Skeleton", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
-        Logging.info("Skeleton", "Final Type:\n" + finalType);
-        Logging.info("Skeleton", String.format("Global Morphing Types (%d):\n%s", globalMorphingTypes.size(), globalMorphingTypes));
-        Logging.info("Skeleton", "Range Morphing Types:");
+        Logging.debug("Skeleton", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
+        Logging.debug("Skeleton", "Final Type:\n" + finalType);
+        Logging.debug("Skeleton", String.format("Global Morphing Types (%d):\n%s", globalMorphingTypes.size(), globalMorphingTypes));
+        Logging.debug("Skeleton", "Range Morphing Types:");
         for (var entry: rangeMorphingTypes.entrySet()) {
             var range = entry.getKey();
             var types = entry.getValue();
-            Logging.info("Skeleton", String.format("Morphing Range (0x%x ~ 0x%x) (%d)",
+            Logging.debug("Skeleton", String.format("Morphing Range (0x%x ~ 0x%x) (%d)",
                     range.getStart(), range.getEnd(), types.size()));
             for (var dt: types) {
-                Logging.info("Skeleton", "\t" + dt);
+                Logging.debug("Skeleton", "\t" + dt);
             }
         }
-        Logging.info("Skeleton", " ------------------------------- End --------------------------------- ");
+        Logging.debug("Skeleton", " ------------------------------- End --------------------------------- ");
     }
 
     /**
@@ -489,11 +489,11 @@ public class Skeleton {
         newExprs.addAll(skt2.exprs);
 
         if (isStrongMerge) {
-            Logging.info("Skeleton", String.format("Strong merging skeletons %s and %s", skt1, skt2));
+            Logging.debug("Skeleton", String.format("Strong merging skeletons %s and %s", skt1, skt2));
             var mergedConstraint = new TypeConstraint();
             var noConflict = true;
             for (var c: newConstraints) {
-                Logging.info("Skeleton", String.format("Merging constraint:\n %s", c.dumpLayout(0)));
+                Logging.debug("Skeleton", String.format("Merging constraint:\n %s", c.dumpLayout(0)));
                 noConflict = mergedConstraint.tryMerge(c);
                 if (!noConflict) {
                     break;
@@ -506,16 +506,16 @@ public class Skeleton {
             }
 
 
-            Logging.info("Skeleton", String.format("Merged constraints:\n %s", mergedConstraint.dumpLayout(0)));
+            Logging.debug("Skeleton", String.format("Merged constraints:\n %s", mergedConstraint.dumpLayout(0)));
             newConstraints.clear();
             newConstraints.add(mergedConstraint);
             var newSkeleton = new Skeleton(newConstraints, newExprs);
             newSkeleton.hasMultiConstraints = false;
             return Optional.of(newSkeleton);
         } else {
-            Logging.info("Skeleton", String.format("Weak merging skeletons %s and %s", skt1, skt2));
+            Logging.debug("Skeleton", String.format("Weak merging skeletons %s and %s", skt1, skt2));
             for (var c: newConstraints) {
-                Logging.info("Skeleton", c.dumpLayout(0));
+                Logging.debug("Skeleton", c.dumpLayout(0));
             }
             var newSkeleton = new Skeleton(newConstraints, newExprs);
             newSkeleton.hasMultiConstraints = true;

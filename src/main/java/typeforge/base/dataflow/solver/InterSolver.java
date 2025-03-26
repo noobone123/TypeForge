@@ -71,7 +71,7 @@ public class InterSolver {
         while (!workList.isEmpty()) {
             var funcNode = workList.poll();
             if (!funcNode.isMeaningful) {
-                Logging.info("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
+                Logging.debug("InterSolver", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
             stitchTFG(funcNode);
@@ -82,7 +82,7 @@ public class InterSolver {
             Logging.info("InterSolver", String.format("Stitching succeeded: %d/%d functions are stitched",
                     stitchedFunc.size(), visitedFunc.size()));
         } else {
-            Logging.warn("InterSolver", String.format("Stitching failed: %d/%d functions are stitched",
+            Logging.warn("InterSolver", String.format("Stitching has something wrong: %d/%d functions are stitched",
                     stitchedFunc.size(), visitedFunc.size()));
         }
     }
@@ -92,7 +92,7 @@ public class InterSolver {
      * @param funcNode the stitching function
      */
     private void stitchTFG(FunctionNode funcNode) {
-        Logging.info("InterSolver", String.format("Stitching function %s", funcNode.value.getName()));
+        Logging.debug("InterSolver", String.format("Stitching function %s", funcNode.value.getName()));
 
         var intraSolver = intraSolverMap.get(funcNode);
         var bridgeInfo = intraSolver.bridgeInfo;
@@ -105,17 +105,17 @@ public class InterSolver {
             }
 
             if (calleeNode.isExternal) {
-                Logging.debug("InterSolver", "Callee node is external: " + callSite.calleeAddr);
+                Logging.trace("InterSolver", "Callee node is external: " + callSite.calleeAddr);
                 handleExternalCall(callSite, calleeNode, intraSolver);
             }
             // We should keep the callee function is already stitched when we are stitching the caller function
             else {
-                Logging.debug("InterSolver", "Callee node is normal");
+                Logging.trace("InterSolver", "Callee node is normal");
 
                 // Handling arguments and parameters
                 var considerParamNum = 0;
                 if (calleeNode.isVarArg) {
-                    Logging.info("InterSolver", "Callee node is vararg: " + callSite.calleeAddr);
+                    Logging.debug("InterSolver", "Callee node is vararg: " + callSite.calleeAddr);
                     considerParamNum = calleeNode.fixedParamNum;
                 } else {
                     considerParamNum = calleeNode.parameters.size();
@@ -145,9 +145,10 @@ public class InterSolver {
                 var recevierVn = callSite.receiver;
                 var recevierFacts = bridgeInfo.get(callSite).get(recevierVn);
                 var retExprs = intraSolverMap.get(calleeNode).getReturnExpr();
+                // It's common because some functions has primitive return type which we don't trace
                 if (retExprs.isEmpty()) {
                     Logging.warn("InterSolver",
-                            String.format("Callsite %s has receiver but callee %s has no traced return expression",
+                            String.format("CallSite %s has receiver but callee %s has no traced return expression",
                                     callSite, calleeNode.value.getName()));
                     continue;
                 }
@@ -171,7 +172,7 @@ public class InterSolver {
      */
     private void handleExternalCall(CallSite callSite, FunctionNode calleeNode, IntraSolver intraSolver) {
         var externalFuncName = calleeNode.value.getName();
-        Logging.debug("InterSolver", "Handling external function: " + externalFuncName);
+        Logging.trace("InterSolver", "Handling external function: " + externalFuncName);
         if (externalFuncName.equals("malloc")) {
             mallocCS.add(callSite);
         } else if (externalFuncName.equals("calloc")) {
@@ -185,32 +186,34 @@ public class InterSolver {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void typeHintPropagation() {
-        // Parsing all fieldAccess Expressions first to build the constraint's skeleton
-        for (var symExpr : exprManager.getFieldExprSet()) {
-            buildConstraintByFieldAccessExpr(symExpr, null, 0);
-        }
+        graphManager.TFGStatistics();
 
-        buildSkeletons(typeHintCollector);
-
-
-        /* Following handler's order is important */
-        typeHintCollector.mergeSkeletons();
-        /* Important: handle Type Alias first, then handle Final Constraint. Due to Type Alias may have a negative impact on soundness */
-        typeHintCollector.handleTypeAlias();
-        typeHintCollector.handleFinalConstraint();
-        typeHintCollector.handleAPSets();
-        typeHintCollector.handleUnreasonableSkeleton();
-        typeHintCollector.handlePtrReference();
-        // typeHintCollector.handleDecompilerInferredTypes();
-        typeHintCollector.handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
-        typeHintCollector.handleMemberConflict();
-        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
+//        // Parsing all fieldAccess Expressions first to build the constraint's skeleton
+//        for (var symExpr : exprManager.getFieldExprSet()) {
+//            buildConstraintByFieldAccessExpr(symExpr, null, 0);
+//        }
+//
+//        buildSkeletons(typeHintCollector);
+//
+//
+//        /* Following handler's order is important */
+//        typeHintCollector.mergeSkeletons();
+//        /* Important: handle Type Alias first, then handle Final Constraint. Due to Type Alias may have a negative impact on soundness */
+//        typeHintCollector.handleTypeAlias();
+//        typeHintCollector.handleFinalConstraint();
+//        typeHintCollector.handleAPSets();
+//        typeHintCollector.handleUnreasonableSkeleton();
+//        typeHintCollector.handlePtrReference();
+//        // typeHintCollector.handleDecompilerInferredTypes();
+//        typeHintCollector.handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
+//        typeHintCollector.handleMemberConflict();
+//        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
 
 
     private void buildSkeletons(TypeHintCollector collector) {
-        Logging.info("InterContext", "========================= Start to merge type constraints =========================");
-        Logging.info("InterContext", "Total Graph Number: " + graphManager.getGraphs().size());
+        Logging.debug("InterContext", "========================= Start to merge type constraints =========================");
+        Logging.debug("InterContext", "Total Graph Number: " + graphManager.getGraphs().size());
         graphManager.buildAllPathManagers();
 
         Set<Function> evilFunctions = new HashSet<>();
@@ -218,7 +221,7 @@ public class InterSolver {
         // Remove some redundant edges in the graph
         for (var graph: graphManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
-                Logging.info("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
+                Logging.debug("InterContext", String.format("*********************** Handle Graph %s ***********************", graph));
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
                 graph.pathManager.tryMergeOnPath(exprManager);
                 graph.pathManager.tryMergePathsFromSameSource(exprManager);
@@ -244,7 +247,7 @@ public class InterSolver {
                         continue;
                     }
                     else {
-                        Logging.info("InterContext", String.format("Found injured node in function %s: %s", node.function, node));
+                        Logging.debug("InterContext", String.format("Found injured node in function %s: %s", node.function, node));
                         collector.injuredNode.add(node);
                         for (var edge: graph.getGraph().edgesOf(node)) {
                             graph.getGraph().removeEdge(edge);
@@ -276,7 +279,7 @@ public class InterSolver {
     private void buildConstraintByFieldAccessExpr(NMAE expr, TypeConstraint parentTypeConstraint, long derefDepth) {
         if (expr == null) return;
 
-        Logging.info("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: %s, derefDepth: %d",
+        Logging.debug("InterContext", String.format("Parsing FieldAccess Expression %s, parentTypeConstraint: %s, derefDepth: %d",
                 expr, parentTypeConstraint != null ? parentTypeConstraint : "null", derefDepth));
 
         ParsedExpr parsed;
@@ -324,7 +327,7 @@ public class InterSolver {
         }
 
         if (FunctionNode.isMergedVariableExpr(fromNode, from) || FunctionNode.isMergedVariableExpr(toNode, to)) {
-            Logging.info("InterSolver",
+            Logging.debug("InterSolver",
                     String.format("Skip adding TFG Edges between merged variables: %s:%s and %s:%s",
                             fromNode.value.getName(), from, toNode.value.getName(), to));
             return;

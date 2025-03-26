@@ -44,10 +44,10 @@ public class SlidingWindowProcessor {
                     prevWindowStartOffset = offsetList.get(i);
                     prevWindow = candidateWindow;
                 } else {
-                    Logging.info("SlidingWindowProcessor", "Window equal but not contiguous of Skeleton " + curSkt);
-                    Logging.info("SlidingWindowProcessor",
+                    Logging.debug("SlidingWindowProcessor", "Window equal but not contiguous of Skeleton " + curSkt);
+                    Logging.debug("SlidingWindowProcessor",
                             String.format("Previous Window:\nStart: 0x%x\n%s", prevWindowStartOffset, prevWindow));
-                    Logging.info("SlidingWindowProcessor",
+                    Logging.debug("SlidingWindowProcessor",
                             String.format("Current Window:\nStart: 0x%x\n%s", offsetList.get(i), candidateWindow));
                     break;
                 }

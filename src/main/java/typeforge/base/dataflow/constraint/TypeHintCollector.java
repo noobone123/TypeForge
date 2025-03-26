@@ -59,10 +59,10 @@ public class TypeHintCollector {
             var skeletons = entry.getValue();
             if (skeletons.size() == 1) {
                 exprToSkeletonMap.put(expr, skeletons.iterator().next());
-                Logging.info("SkeletonCollector", String.format("%s: S = 1", expr));
+                Logging.debug("SkeletonCollector", String.format("%s: S = 1", expr));
             }
             else if (skeletons.size() > 1) {
-                Logging.info("SkeletonCollector", String.format("%s: S > 1", expr));
+                Logging.debug("SkeletonCollector", String.format("%s: S > 1", expr));
                 /* IF one SymbolExpr holds multi Skeletons, Create New Skeleton based on them */
                 multiSkeletonExprs.add(expr);
                 var constraints = new HashSet<TypeConstraint>();
@@ -82,7 +82,7 @@ public class TypeHintCollector {
                 if (skt.hasMultiConstraints) continue;
                 var removed = skt.exprs.remove(expr);
                 if (removed) {
-                    Logging.info("SkeletonCollector", String.format("%s is removed from skeleton %s", expr, skt));
+                    Logging.debug("SkeletonCollector", String.format("%s is removed from skeleton %s", expr, skt));
                 }
             }
         }
@@ -119,13 +119,13 @@ public class TypeHintCollector {
 
             if (!skt.hasMultiConstraints) {
                 assert skt.constraints.size() == 1;
-                Logging.info("SkeletonCollector", String.format("%s with single Constraint has Exprs: \n%s", skt.toString(), skt.exprs));
-                Logging.info("SkeletonCollector", String.format("Constraint: \n%s", skt.constraints.iterator().next().dumpLayout(0)));
+                Logging.debug("SkeletonCollector", String.format("%s with single Constraint has Exprs: \n%s", skt.toString(), skt.exprs));
+                Logging.debug("SkeletonCollector", String.format("Constraint: \n%s", skt.constraints.iterator().next().dumpLayout(0)));
             } else {
                 assert skt.constraints.size() > 1;
-                Logging.info("SkeletonCollector", String.format("%s with multiple Constraints has Exprs: \n%s", skt.toString(), skt.exprs));
+                Logging.debug("SkeletonCollector", String.format("%s with multiple Constraints has Exprs: \n%s", skt.toString(), skt.exprs));
                 for (var constraint: skt.constraints) {
-                    Logging.info("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
+                    Logging.debug("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
                 }
             }
 
@@ -138,7 +138,7 @@ public class TypeHintCollector {
                 }
             }
             if (emptySkeleton) {
-                Logging.info("SkeletonCollector", String.format("Empty Skeleton Detected: %s", skt));
+                Logging.debug("SkeletonCollector", String.format("Empty Skeleton Detected: %s", skt));
                 SkeletonsToRemove.add(skt);
             }
         }
@@ -174,8 +174,8 @@ public class TypeHintCollector {
             if (maxVisitConstraint != null) {
                 skt.hasMultiConstraints = false;
                 skt.finalConstraint = maxVisitConstraint;
-                Logging.info("SkeletonCollector", String.format("%s:\n%s", skt, skt.exprs));
-                Logging.info("SkeletonCollector", String.format("Choose the most visited constraint:\n%s", maxVisitConstraint.dumpLayout(0)));
+                Logging.debug("SkeletonCollector", String.format("%s:\n%s", skt, skt.exprs));
+                Logging.debug("SkeletonCollector", String.format("Choose the most visited constraint:\n%s", maxVisitConstraint.dumpLayout(0)));
             }
         }
     }
@@ -221,18 +221,18 @@ public class TypeHintCollector {
                 }
 
                 if (ptrLevel > 1) {
-                    Logging.info("SkeletonCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
+                    Logging.debug("SkeletonCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
                     skt.ptrLevel.put(offset, ptrLevel);
                     skt.finalPtrReference.put(offset, ptrEESkt);
 
                     /* For debug */
-                    Logging.info("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
-                    Logging.info("SkeletonCollector", skt.exprs.toString());
-                    Logging.info("SkeletonCollector", skt.finalConstraint.dumpLayout(0));
-                    Logging.info("SkeletonCollector", ptrEESkt.exprs.toString());
-                    Logging.info("SkeletonCollector", ptrEESkt.finalConstraint.dumpLayout(0));
+                    Logging.debug("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
+                    Logging.debug("SkeletonCollector", skt.exprs.toString());
+                    Logging.debug("SkeletonCollector", skt.finalConstraint.dumpLayout(0));
+                    Logging.debug("SkeletonCollector", ptrEESkt.exprs.toString());
+                    Logging.debug("SkeletonCollector", ptrEESkt.finalConstraint.dumpLayout(0));
                 } else {
-                    Logging.info("SkeletonCollector", "Ptr Level = 1");
+                    Logging.debug("SkeletonCollector", "Ptr Level = 1");
                 }
             }
         }
@@ -245,7 +245,7 @@ public class TypeHintCollector {
                     if (ptrEE.isMultiLevelMidPtr) {
                         skt.finalPtrReference.remove(offset);
                         skt.ptrLevel.remove(offset);
-                        Logging.info("SkeletonCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
+                        Logging.debug("SkeletonCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
                     }
                 }
             }
@@ -273,15 +273,15 @@ public class TypeHintCollector {
                 if (skt.finalPtrReference.containsKey(offset)) {
                     if (nextOffset != -1 && (nextOffset - offset) < ptrSize) {
                         skt.finalPtrReference.remove(offset);
-                        Logging.info("SkeletonCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
+                        Logging.debug("SkeletonCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
                     }
                 } else {
                     var size = aps.mostAccessedDT.getLength();
                     if (nextOffset != -1 && (nextOffset - offset) < size) {
                         removeCandidate.add(offset);
-                        Logging.info("SkeletonCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
-                        Logging.info("SkeletonCollector", String.format("MostAccessedDTSize = %d", size));
-                        Logging.info("SkeletonCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
+                        Logging.debug("SkeletonCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
+                        Logging.debug("SkeletonCollector", String.format("MostAccessedDTSize = %d", size));
+                        Logging.debug("SkeletonCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
                     }
                 }
             }
@@ -339,7 +339,7 @@ public class TypeHintCollector {
                     var offset = iterator.next();
                     if (offset > skt.getSize()) {
                         iterator.remove();
-                        Logging.info("SkeletonCollector", "Offset larger than the size of the nester!");
+                        Logging.debug("SkeletonCollector", "Offset larger than the size of the nester!");
                     } else {
                         var removeCandidates = new HashSet<Skeleton>();
                         for (var s: skt.mayNestedSkeleton.get(offset)) {
@@ -352,7 +352,7 @@ public class TypeHintCollector {
                             if (skt.mayNestedSkeleton.get(offset).isEmpty()) {
                                 iterator.remove();
                             }
-                            Logging.info("SkeletonCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
+                            Logging.debug("SkeletonCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
                         }
                     }
                 }
@@ -435,13 +435,13 @@ public class TypeHintCollector {
     public void handleUnreasonableSkeleton() {
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isMultiLevelMidPtr()) {
-                Logging.info("SkeletonCollector", "Multi Level Mid Ptr Skeleton: " + skt);
+                Logging.debug("SkeletonCollector", "Multi Level Mid Ptr Skeleton: " + skt);
                 skt.isMultiLevelMidPtr = true;
             } else if (skt.isIndependent() && skt.hasOneField() &&
                     !skt.decompilerInferredTypesHasComposite() &&
                     (skt.finalConstraint.fieldAccess.get(0L) != null)) {
                 /* These types are considered as pointers to primitive types and no need to assess and ranking */
-                Logging.info("SkeletonCollector", "Pointer to Primitive Detected: " + skt);
+                Logging.debug("SkeletonCollector", "Pointer to Primitive Detected: " + skt);
                 var aps = skt.finalConstraint.fieldAccess.get(0L);
                 skt.setPrimitiveType(aps.mostAccessedDT);
             }
@@ -515,7 +515,7 @@ public class TypeHintCollector {
                             continue;
                         }
 
-                        Logging.info("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
+                        Logging.debug("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
                         aliasMap.union(e, expr);
                         Optional<Skeleton> mergedRes;
                         Skeleton newSkeleton = null;
@@ -533,8 +533,8 @@ public class TypeHintCollector {
 
                         if (mergedRes.isPresent()) {
                             newSkeleton = mergedRes.get();
-                            Logging.info("SkeletonCollector", String.format("New Merged %s from type Alias.", newSkeleton));
-                            Logging.info("SkeletonCollector", newSkeleton.exprs.toString());
+                            Logging.debug("SkeletonCollector", String.format("New Merged %s from type Alias.", newSkeleton));
+                            Logging.debug("SkeletonCollector", newSkeleton.exprs.toString());
                             /* update exprToSkeletonMap */
                             for (var e1: newSkeleton.exprs) {
                                 exprToSkeletonMap.put(e1, newSkeleton);

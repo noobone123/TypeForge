@@ -168,7 +168,7 @@ public class AccessPoints {
     public void addFieldAccessPoint(NMAE symExpr, PcodeOp op, DataType type, AccessType accessType, Function func) {
         fieldExprToAccessMap.putIfAbsent(symExpr, new HashSet<>());
         fieldExprToAccessMap.get(symExpr).add(new AP(op, type, accessType, func));
-        Logging.debug("AccessPoints", String.format("Add Field Access %s for [%s] with type [%s]", accessType, symExpr, type.getName()));
+        Logging.trace("AccessPoints", String.format("Add Field Access %s for [%s] with type [%s]", accessType, symExpr, type.getName()));
     }
 
     public Set<AP> getFieldAccessPoints(NMAE symExpr) {

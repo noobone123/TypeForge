@@ -9,7 +9,6 @@ import typeforge.utils.Logging;
 import ghidra.app.cmd.function.ApplyFunctionSignatureCmd;
 import ghidra.app.decompiler.DecompInterface;
 import ghidra.app.decompiler.DecompileResults;
-import ghidra.program.model.address.Address;
 import ghidra.program.model.data.DataType;
 import ghidra.program.model.data.FunctionDefinitionDataType;
 import ghidra.program.model.data.ParameterDefinition;
@@ -126,7 +125,7 @@ public class FunctionNode extends NodeBase<Function> {
             var param = funcProto.getParam(i);
             if (param.getStorage().getRegister() != null) {
                 if (param.getStorage().getRegister().getName().contains("XMM")) {
-                    Logging.debug("FunctionNode", "Remove XMM register parameter: " + param.getName());
+                    Logging.trace("FunctionNode", "Remove XMM register parameter: " + param.getName());
                 } else {
                     newParams.add(param);
                 }
@@ -158,7 +157,7 @@ public class FunctionNode extends NodeBase<Function> {
 
         ApplyFunctionSignatureCmd cmd = new ApplyFunctionSignatureCmd(this.value.getEntryPoint(), funcDef, SourceType.USER_DEFINED);
         Global.ghidraScript.runCommand(cmd);
-        Logging.info("FunctionNode", "Fixed function prototype: " + this.value.getName());
+        Logging.debug("FunctionNode", "Fixed function prototype: " + this.value.getName());
     }
 
     /**
@@ -175,7 +174,7 @@ public class FunctionNode extends NodeBase<Function> {
             decompilerInferredDT.put(sym.getStorage(), dt);
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
                 result.add(sym);
-                Logging.info("FunctionNode", String.format("Found local variable pointed to composite datatype: %s -> %s", sym.getName(), dt.getName()));
+                Logging.debug("FunctionNode", String.format("Found local variable pointed to composite datatype: %s -> %s", sym.getName(), dt.getName()));
             }
         }
         return result.isEmpty() ? Optional.empty() : Optional.of(result);
@@ -229,7 +228,7 @@ public class FunctionNode extends NodeBase<Function> {
 
             var mergedGroups = getMergedGroup(sym);
             if (mergedGroups.size() > 1) {
-                Logging.debug("FunctionNode", String.format("Found merged local variable: %s: %s", hFunc.getFunction().getName(), sym.getName()));
+                Logging.trace("FunctionNode", String.format("Found merged local variable: %s: %s", hFunc.getFunction().getName(), sym.getName()));
                 mergedVariables.add(sym);
             }
             else {
@@ -274,7 +273,7 @@ public class FunctionNode extends NodeBase<Function> {
                 highPCodeInst.append("," + " ").append(DecompilerHelper.getVarnodeString((VarnodeAST) pcode.getInput(i)));
             }
 
-            Logging.info("FunctionNode", highPCodeInst.toString());
+            Logging.debug("FunctionNode", highPCodeInst.toString());
         }
     }
 
@@ -349,7 +348,7 @@ public class FunctionNode extends NodeBase<Function> {
             try {
                 HighVariable newVar = hFunc.splitOutMergeGroup(variable, vn);
                 HighSymbol newSymbol = newVar.getSymbol();
-                Logging.debug("FunctionNode", "Split merged variable: " + newSymbol.getName());
+                Logging.trace("FunctionNode", "Split merged variable: " + newSymbol.getName());
             }
             catch (PcodeException e) {
                 Logging.warn("FunctionNode", "Failed to split merged variable: " + variable.getName());
@@ -391,7 +390,7 @@ public class FunctionNode extends NodeBase<Function> {
                 Logging.error("FunctionNode", "Function decompile failed" + value.getName());
                 return false;
             } else {
-                Logging.debug("FunctionNode", "Decompiled function " + value.getName());
+                Logging.trace("FunctionNode", "Decompiled function " + value.getName());
                 updateDecompileResult(decompileRes);
                 return true;
             }

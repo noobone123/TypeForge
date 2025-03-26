@@ -112,7 +112,7 @@ public class TypeConstraint {
         accessOffsets.get(ap).add(offset);
         fieldAccess.putIfAbsent(offset, new AccessPoints.APSet());
         if (fieldAccess.get(offset).addAP(ap)) {
-            Logging.info("TypeConstraint", String.format("Constraint_%s adding field access: 0x%x -> %s", shortUUID, offset, ap.dataType));
+            Logging.debug("TypeConstraint", String.format("Constraint_%s adding field access: 0x%x -> %s", shortUUID, offset, ap.dataType));
         }
     }
 
@@ -124,12 +124,12 @@ public class TypeConstraint {
     public void addFieldAttr(long offset, Attribute tag) {
         fieldAttrs.putIfAbsent(offset, new HashSet<>());
         fieldAttrs.get(offset).add(tag);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding fieldTag: 0x%x -> %s", shortUUID, offset, tag));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s adding fieldTag: 0x%x -> %s", shortUUID, offset, tag));
     }
 
     public void addGlobalAttr(Attribute tag) {
         globalAttrs.add(tag);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding globalTag: %s", shortUUID, tag));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s adding globalTag: %s", shortUUID, tag));
     }
 
     public void removeFieldTag(long offset, Attribute tag) {
@@ -154,7 +154,7 @@ public class TypeConstraint {
 
     public void setElementSize(long size) {
         this.elementSize.add(size);
-        Logging.info("TypeConstraint", String.format("Constraint_%s setting element size: %d", shortUUID, size));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s setting element size: %d", shortUUID, size));
     }
 
     public List<Long> collectFieldOffsets() {
@@ -259,7 +259,7 @@ public class TypeConstraint {
 
     public void addPolymorphicType(DataType dataType) {
         polymorphicTypes.add(dataType);
-        Logging.info("TypeConstraint", String.format("Constraint_%s adding polymorphicType: %s", shortUUID, dataType.getName()));
+        Logging.debug("TypeConstraint", String.format("Constraint_%s adding polymorphicType: %s", shortUUID, dataType.getName()));
     }
 
     public int getAllFieldsAccessCount() {

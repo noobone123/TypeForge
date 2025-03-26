@@ -68,7 +68,7 @@ public class TypeFlowGraph<T> {
 
         pathManager = new TypeRelationPathManager<T>(this);
 
-        Logging.debug("TypeRelationGraph", String.format("Create TypeRelationGraph_%s", shortUUID));
+        Logging.trace("TypeRelationGraph", String.format("Create TypeRelationGraph_%s", shortUUID));
     }
 
     public String getShortUUID() {
@@ -79,17 +79,17 @@ public class TypeFlowGraph<T> {
         graph.addVertex(src);
         graph.addVertex(dst);
         graph.addEdge(src, dst, new TypeRelationEdge(edgeType));
-        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
+        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Add edge: %s ---%s---> %s", shortUUID, src, edgeType, dst));
     }
 
     public void removeEdge(T src, T dst) {
         graph.removeEdge(src, dst);
-        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
+        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
     }
 
     public void removeNode(T node) {
         graph.removeVertex(node);
-        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove node: %s", shortUUID, node));
+        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Remove node: %s", shortUUID, node));
     }
 
     public int getNumNodes() {
@@ -125,7 +125,7 @@ public class TypeFlowGraph<T> {
             }
         }
 
-        Logging.debug("TypeRelationGraph", String.format("TypeRelationGraph_%s Merge with %s", shortUUID, other));
+        Logging.trace("TypeRelationGraph", String.format("TypeRelationGraph_%s Merge with %s", shortUUID, other));
     }
 
 
@@ -159,7 +159,7 @@ public class TypeFlowGraph<T> {
     }
 
     public TypeFlowGraph<T> createCopy() {
-        Logging.debug("TypeRelationGraph", "Create copy of " + this);
+        Logging.trace("TypeRelationGraph", "Create copy of " + this);
         TypeFlowGraph<T> copy = new TypeFlowGraph<>();
         Graphs.addGraph(copy.graph, this.graph);
         return copy;

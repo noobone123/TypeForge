@@ -26,7 +26,7 @@ public class TypeAnalyzer {
 
         /* Start the analysis from a specific function */
         if (Global.startAddress != 0) {
-            Logging.info("TypeAnalyzer", "Start the analysis from a specific function");
+            Logging.debug("TypeAnalyzer", "Start the analysis from a specific function");
             prepareAnalyze(cg.getNodebyAddr(FunctionHelper.getAddress(Global.startAddress)));
             return;
         }
@@ -38,8 +38,8 @@ public class TypeAnalyzer {
         // TODO: just for testing
         // setTypeAgnosticFunctions();
 
-        Logging.info("TypeAnalyzer", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
-        Logging.info("TypeAnalyzer", String.format("Function count in workList: %d", interSolver.workList.size()));
+        Logging.debug("TypeAnalyzer", String.format("Total meaningful function count in current binary: %d", FunctionHelper.getMeaningfulFunctions().size()));
+        Logging.debug("TypeAnalyzer", String.format("Function count in workList: %d", interSolver.workList.size()));
     }
 
     /**
@@ -77,7 +77,7 @@ public class TypeAnalyzer {
 
         for (var funcNode: sortedFuncs) {
             if (!FunctionHelper.isMeaningfulFunction(funcNode.value)) {
-                Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
+                Logging.debug("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
             decompileSet.add(funcNode.value);
@@ -86,7 +86,7 @@ public class TypeAnalyzer {
                     funcNode
             );
             interSolver.workList.add(funcNode);
-            Logging.info("TypeAnalyzer", "Added function to workList: " + funcNode.value.getName());
+            Logging.debug("TypeAnalyzer", "Added function to workList: " + funcNode.value.getName());
         }
 
         // Decompile the functions in parallel
@@ -101,7 +101,7 @@ public class TypeAnalyzer {
         try {
             ParallelDecompiler.decompileFunctions(callback, decompileSet, TaskMonitor.DUMMY);
         } catch (Exception e) {
-            Logging.error("GhidraScript", "Could not decompile functions with ParallelDecompiler");
+            Logging.error("TypeAnalyzer", "Could not decompile functions with ParallelDecompiler");
         } finally {
             callback.dispose();
         }
@@ -117,7 +117,7 @@ public class TypeAnalyzer {
                 if (!success) {
                     Logging.error("TypeAnalyzer", "Failed to fix function prototype: " + funcNode.value.getName());
                 } else {
-                    Logging.info("TypeAnalyzer", "Fixed function prototype: " + funcNode.value.getName());
+                    Logging.debug("TypeAnalyzer", "Fixed function prototype: " + funcNode.value.getName());
                 }
             }
         }
@@ -139,7 +139,7 @@ public class TypeAnalyzer {
         while (!workListCopy.isEmpty()) {
             FunctionNode funcNode = workListCopy.poll();
             if (!funcNode.isMeaningful) {
-                Logging.info("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
+                Logging.debug("TypeAnalyzer", "Skip non-meaningful function: " + funcNode.value.getName());
                 continue;
             }
 
@@ -150,8 +150,7 @@ public class TypeAnalyzer {
         }
 
         interSolver.buildWholeProgramTFG();
-
-        // interSolver.typeHintPropagation();
+        interSolver.typeHintPropagation();
 
         /* try {
             var outputFile = new File(Global.outputDirectory);
@@ -188,7 +187,7 @@ public class TypeAnalyzer {
             var funcNode = entry.getKey();
             var argNums = entry.getValue();
             if (argNums.size() > 1) {
-                Logging.debug("TypeAnalyzer", "Inconsistent argument number for function: " + funcNode.value.getName());
+                Logging.trace("TypeAnalyzer", "Inconsistent argument number for function: " + funcNode.value.getName());
                 var minArgNum = Collections.min(argNums);
                 funcNode.isVarArg = true;
                 funcNode.fixedParamNum = minArgNum;

@@ -84,7 +84,7 @@ public class GroundTruth extends GhidraScript {
                     Logging.error("GhidraScript", "Decompile failed for function " + func.getName());
                 } else {
                     highFuncMap.put(func, decompileRes.getHighFunction());
-                    Logging.info("GhidraScript", "Decompile function " + func.getName());
+                    Logging.debug("GhidraScript", "Decompile function " + func.getName());
                 }
             }
         } finally {
@@ -165,7 +165,7 @@ public class GroundTruth extends GhidraScript {
                 Logging.warn("sanityCheck", "May Library Composite type: " + libT);
             }
         } else {
-            Logging.info("sanityCheck", "All composite types are accounted for.");
+            Logging.debug("sanityCheck", "All composite types are accounted for.");
         }
 
         for (var libDT: libTypes) {
@@ -212,7 +212,7 @@ public class GroundTruth extends GhidraScript {
     private void saveJsonToFile(String fileName, ObjectNode jsonRoot) {
         try {
             objMapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), jsonRoot);
-            Logging.info("GhidraScript", "Successfully wrote JSON to file: " + fileName);
+            Logging.debug("GhidraScript", "Successfully wrote JSON to file: " + fileName);
         } catch (IOException e) {
             Logging.error("GhidraScript", "Error writing JSON to file: " + e.getMessage());
         }
@@ -269,7 +269,7 @@ public class GroundTruth extends GhidraScript {
 
 
     private void processStructure(Structure structure, ObjectNode structObj) {
-        Logging.info("GhidraScript","Structure: " + structure.getName());
+        Logging.debug("GhidraScript","Structure: " + structure.getName());
         var structNode = objMapper.createObjectNode();
         var finalComponentMap = new TreeMap<Integer, DataType>();
 
@@ -279,7 +279,7 @@ public class GroundTruth extends GhidraScript {
             var dataType = component.getDataType();
 
             if (dataType instanceof TypeDef typeDef) {
-                Logging.info("GhidraScript", String.format("TypeDef detected at offset 0x%x", offset));
+                Logging.debug("GhidraScript", String.format("TypeDef detected at offset 0x%x", offset));
                 ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
                 dataType = typeDef.getBaseDataType();
                 finalComponentMap.put(offset, dataType);
@@ -350,7 +350,7 @@ public class GroundTruth extends GhidraScript {
     }
 
     private void processUnion(Union union, ObjectNode unionObj) {
-        Logging.info("GhidraScript","Union: " + union.getName());
+        Logging.debug("GhidraScript","Union: " + union.getName());
         var unionNode = objMapper.createArrayNode();
 
         for (var component: union.getComponents()) {
@@ -358,7 +358,7 @@ public class GroundTruth extends GhidraScript {
             var dataType = component.getDataType();
 
             if (dataType instanceof TypeDef typeDef) {
-                Logging.info("GhidraScript", "TypeDef detected");
+                Logging.debug("GhidraScript", "TypeDef detected");
                 ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
                 dataType = typeDef.getBaseDataType();
             }
@@ -386,7 +386,7 @@ public class GroundTruth extends GhidraScript {
             Logging.error("GhidraScript","Language not found");
             return false;
         } else {
-            Logging.info("GhidraScript","Language: " + language.getLanguageID());
+            Logging.debug("GhidraScript","Language: " + language.getLanguageID());
             return true;
         }
     }
@@ -394,7 +394,7 @@ public class GroundTruth extends GhidraScript {
     protected void parseArgs() {
         String[] args = getScriptArgs();
         for (String arg : args) {
-            Logging.info("GhidraScript", "Arg: " + arg);
+            Logging.debug("GhidraScript", "Arg: " + arg);
             // split the arguments string by "="
             String[] argParts = arg.split("=");
             if (argParts.length != 2) {

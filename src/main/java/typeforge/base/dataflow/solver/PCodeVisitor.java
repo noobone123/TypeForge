@@ -65,55 +65,55 @@ public class PCodeVisitor {
 
             switch (opCode) {
                 case PcodeOp.INT_ADD, PcodeOp.INT_SUB -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleAddOrSub(pcode);
                 }
                 case PcodeOp.COPY, PcodeOp.CAST, PcodeOp.SUBPIECE -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleAssign(pcode);
                 }
                 case PcodeOp.PTRADD -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handlePtrAdd(pcode);
                 }
                 case PcodeOp.PTRSUB -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handlePtrSub(pcode);
                 }
                 case PcodeOp.MULTIEQUAL -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleMultiEqual(pcode);
                 }
                 case PcodeOp.INT_ZEXT -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleIntZext(pcode);
                 }
                 case PcodeOp.INT_SEXT -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleIntSext(pcode);
                 }
                 case PcodeOp.INT_MULT -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleIntMult(pcode);
                 }
                 case PcodeOp.LOAD -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleLoad(pcode);
                 }
                 case PcodeOp.STORE -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleStore(pcode);
                 }
                 case PcodeOp.CALL -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleCall(pcode);
                 }
                 case PcodeOp.RETURN -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleReturn(pcode);
                 }
                 case PcodeOp.CALLIND -> {
-                    Logging.debug("PCodeVisitor", getPCodeRepresentation(pcode));
+                    Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleINDCall(pcode);
                 }
             }
@@ -135,7 +135,7 @@ public class PCodeVisitor {
         Varnode output = pcodeOp.getOutput();
 
         if (!intraSolver.isTracedVn(inputs[0])) {
-            Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[0]));
+            Logging.trace("PCodeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
@@ -155,7 +155,7 @@ public class PCodeVisitor {
             }
         } else {
             if (!intraSolver.isTracedVn(inputs[1])) {
-                Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
+                Logging.trace("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
             var inputFact_1 = intraSolver.getDataFlowFacts(inputs[1]);
@@ -204,7 +204,7 @@ public class PCodeVisitor {
         Varnode[] inputs = pcodeOp.getInputs();
 
         if (!intraSolver.isTracedVn(inputs[0])) {
-            Logging.debug("PCOdeVisitor", String.format("%s is not traced", inputs[0]));
+            Logging.trace("PCOdeVisitor", String.format("%s is not traced", inputs[0]));
             return;
         }
 
@@ -225,12 +225,12 @@ public class PCodeVisitor {
         // inputs[1] is index and inputs[2] is element size
         else if (!inputs[1].isConstant() && inputs[2].isConstant()) {
             if (!intraSolver.isTracedVn(inputs[1])) {
-                Logging.debug("PCodeVisitor", String.format("%s is not traced", inputs[1]));
+                Logging.trace("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
             var scaleValue = getSigned(inputs[2]);
             if (!OffsetSanityCheck(scaleValue)) {
-                Logging.debug("PCodeVisitor", String.format("Scale value %d is not valid", scaleValue));
+                Logging.trace("PCodeVisitor", String.format("Scale value %d is not valid", scaleValue));
                 return;
             }
             var scaleExpr = new NMAEManager.Builder().constant(scaleValue).build();
@@ -350,7 +350,7 @@ public class PCodeVisitor {
         var output = pcodeOp.getOutput();
 
         if (!intraSolver.isTracedVn(input)) {
-            Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
+            Logging.trace("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
@@ -367,7 +367,7 @@ public class PCodeVisitor {
         var output = pcodeOp.getOutput();
 
         if (!intraSolver.isTracedVn(input)) {
-            Logging.debug("PCodeVisitor", String.format("%s is not traced", input));
+            Logging.trace("PCodeVisitor", String.format("%s is not traced", input));
             return;
         }
 
@@ -384,7 +384,7 @@ public class PCodeVisitor {
         var input1 = pcodeOp.getInput(1);
 
         if (!intraSolver.isTracedVn(input0) && !intraSolver.isTracedVn(input1)) {
-            Logging.debug("PCodeVisitor", String.format("both %s * %s is not traced", input0, input1));
+            Logging.trace("PCodeVisitor", String.format("both %s * %s is not traced", input0, input1));
             return;
         }
 
@@ -438,7 +438,7 @@ public class PCodeVisitor {
         var output = pcodeOp.getOutput();
 
         if (!intraSolver.isTracedVn(input)) {
-            Logging.debug("PCodeVisitor", "Load addr is not interested: " + input);
+            Logging.trace("PCodeVisitor", "Load addr is not interested: " + input);
             return;
         }
 
@@ -455,7 +455,7 @@ public class PCodeVisitor {
             // a = *(b), so set a and *(b) as type alias
             if (leftValueExprs != null) {
                 for (var leftValueExpr : leftValueExprs) {
-                    Logging.debug("PCodeVisitor", String.format("Loaded varnode has already held %s, set type alias of %s and %s", leftValueExpr, loadedValueExpr, leftValueExpr));
+                    Logging.trace("PCodeVisitor", String.format("Loaded varnode has already held %s, set type alias of %s and %s", leftValueExpr, loadedValueExpr, leftValueExpr));
                     intraSolver.addIntraTFGEdges(loadedValueExpr, leftValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
@@ -474,7 +474,7 @@ public class PCodeVisitor {
         var rightValueVn = pcodeOp.getInput(2);
 
         if (!intraSolver.isTracedVn(storedAddrVn)) {
-            Logging.debug("PCodeVisitor", "Store address is not interested: " + storedAddrVn);
+            Logging.trace("PCodeVisitor", "Store address is not interested: " + storedAddrVn);
             return;
         }
 
@@ -486,7 +486,7 @@ public class PCodeVisitor {
             intraSolver.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE, funcNode.value);
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
-                    Logging.debug("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));
+                    Logging.trace("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));
                     intraSolver.addIntraTFGEdges(rightValueExpr, storedValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
@@ -496,7 +496,7 @@ public class PCodeVisitor {
     private void handleINDCall(PcodeOp pcodeOp) {
         var indirectCallVn = pcodeOp.getInput(0);
         if (!intraSolver.isTracedVn(indirectCallVn)) {
-            Logging.debug("PCodeVisitor", "Indirect Call is not interested: " + indirectCallVn);
+            Logging.trace("PCodeVisitor", "Indirect Call is not interested: " + indirectCallVn);
             return;
         }
 
@@ -510,7 +510,7 @@ public class PCodeVisitor {
     private void handleReturn(PcodeOp pcodeOp) {
         for (var retVn : pcodeOp.getInputs()) {
             if (!intraSolver.isTracedVn(retVn)) {
-                Logging.debug("PCodeVisitor", "Return value is not interested: " + retVn);
+                Logging.trace("PCodeVisitor", "Return value is not interested: " + retVn);
                 continue;
             }
 
@@ -518,7 +518,7 @@ public class PCodeVisitor {
             for (var retExpr : retFacts) {
                 intraSolver.setReturnExpr(retExpr);
                 exprManager.addExprAttribute(retExpr, NMAE.Attribute.RETURN);
-                Logging.debug("PCodeVisitor", "Setting Return Value: " + retExpr);
+                Logging.trace("PCodeVisitor", "Setting Return Value: " + retExpr);
             }
         }
     }
@@ -530,7 +530,7 @@ public class PCodeVisitor {
         for (var arg: callSite.arguments) {
             // We consider constant callsite arguments because it's useful for following analysis.
             if (arg.isConstant()) {
-                Logging.debug("PCodeVisitor",
+                Logging.trace("PCodeVisitor",
                         String.format("Argument %s is a constant.", arg));
 
                 var constExpr = new NMAEManager.Builder().constant(getSigned(arg)).build();
@@ -539,7 +539,7 @@ public class PCodeVisitor {
 
             if (!intraSolver.isTracedVn(arg)) {
                 if (arg.isUnique()) {
-                    Logging.debug("PCodeVisitor",
+                    Logging.trace("PCodeVisitor",
                             String.format("Argument %s maybe an unique string.", arg));
                 }
 

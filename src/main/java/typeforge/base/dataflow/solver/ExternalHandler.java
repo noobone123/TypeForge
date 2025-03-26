@@ -27,7 +27,7 @@ public class ExternalHandler {
         public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
             var ptrExprs = intraSolver.getDataFlowFacts(callSite.receiver);
             for (var expr: ptrExprs) {
-                Logging.info("ExternalHandler.Malloc",
+                Logging.debug("ExternalHandler.Malloc",
                         String.format("Set composite of constraint: %s to true", expr));
                 var constraint = exprManager.getOrCreateConstraint(expr);
                 constraint.setComposite(true);
@@ -35,7 +35,7 @@ public class ExternalHandler {
                 var mallocSize = callSite.arguments.get(0);
                 if (mallocSize.isConstant()) {
                     constraint.setSizeFromCallSite(mallocSize.getOffset(), callSite);
-                    Logging.info("ExternalHandler.Malloc",
+                    Logging.debug("ExternalHandler.Malloc",
                             String.format("Set size of constraint: %s to %d", expr, callSite.arguments.get(0).getOffset()));
                 }
             }
@@ -47,7 +47,7 @@ public class ExternalHandler {
         public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
             var ptrExprs = intraSolver.getDataFlowFacts(callSite.receiver);
             for (var expr: ptrExprs) {
-                Logging.info("ExternalHandler.Calloc",
+                Logging.debug("ExternalHandler.Calloc",
                         String.format("Set composite of constraint: %s to true", expr));
                 var constraint = exprManager.getOrCreateConstraint(expr);
                 constraint.setComposite(true);
@@ -56,7 +56,7 @@ public class ExternalHandler {
                 var memsize = callSite.arguments.get(1);
                 if (nmemblock.isConstant() && memsize.isConstant()) {
                     constraint.setSizeFromCallSite(nmemblock.getOffset() * memsize.getOffset(), callSite);
-                    Logging.info("ExternalHandler.Calloc",
+                    Logging.debug("ExternalHandler.Calloc",
                             String.format("Set size of constraint: %s to %d", expr, nmemblock.getOffset() * memsize.getOffset()));
                 }
             }
@@ -76,14 +76,14 @@ public class ExternalHandler {
 
             var ptrExprs = intraSolver.getDataFlowFacts(callSite.arguments.get(0));
             for (var expr: ptrExprs) {
-                Logging.info("ExternalHandler.Memset",
+                Logging.debug("ExternalHandler.Memset",
                         String.format("Set composite of constraint: %s to true", expr));
                 var constraint = exprManager.getOrCreateConstraint(expr);
                 constraint.setComposite(true);
 
                 if (lengthArg.isConstant()) {
                     constraint.setSizeFromCallSite(lengthArg.getOffset(), callSite);
-                    Logging.info("ExternalHandler.Memset",
+                    Logging.debug("ExternalHandler.Memset",
                             String.format("Set size of constraint: %s to %d", expr, lengthArg.getOffset()));
                 }
             }
@@ -117,7 +117,7 @@ public class ExternalHandler {
                         dstConstraint.setSizeFromCallSite(lengthVn.getOffset(), callSite);
                         srcConstraint.setComposite(true);
                         srcConstraint.setSizeFromCallSite(lengthVn.getOffset(), callSite);
-                        Logging.info("ExternalHandler.Memcpy",
+                        Logging.debug("ExternalHandler.Memcpy",
                                 String.format("Set size and composite from %s -> %s with size %d", srcExpr, dstExpr, lengthVn.getOffset()));
                     }
                 }

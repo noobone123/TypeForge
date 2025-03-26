@@ -63,7 +63,7 @@ public class IntraSolver {
     }
 
     public void solve() {
-        Logging.info("IntraSolver", "Solving function: " + funcNode.value.getName());
+        Logging.debug("IntraSolver", "Solving function: " + funcNode.value.getName());
 
         if (!initialize()) {
             Logging.warn("IntraSolver", "Failed to initialize intraContext: " + funcNode.value.getName());
@@ -73,7 +73,7 @@ public class IntraSolver {
         visitor.prepare();
         visitor.run();
 
-        Logging.info("IntraSolver", "Solved function: " + funcNode.value.getName());
+        Logging.debug("IntraSolver", "Solved function: " + funcNode.value.getName());
     }
 
     public void setReturnExpr(NMAE expr) {
@@ -115,12 +115,12 @@ public class IntraSolver {
 
     public void addTracedSymbol(HighSymbol highSymbol) {
         tracedSymbols.add(highSymbol);
-        Logging.debug("IntraSolver", "Add traced symbol: " + highSymbol.getName());
+        Logging.trace("IntraSolver", "Add traced symbol: " + highSymbol.getName());
     }
 
     public void addTracedVarnode(Varnode vn) {
         tracedVarnodes.add(vn);
-        Logging.debug("IntraSolver", "Add traced varnode: " + vn.toString());
+        Logging.trace("IntraSolver", "Add traced varnode: " + vn.toString());
     }
 
     /**
@@ -128,7 +128,7 @@ public class IntraSolver {
      */
     public void initDataFlowFacts() {
         for (var symbol: tracedSymbols) {
-            Logging.debug("IntraSolver", "Candidate HighSymbol: " + symbol.getName());
+            Logging.trace("IntraSolver", "Candidate HighSymbol: " + symbol.getName());
 
             NMAE expr;
             TypeConstraint constraint;
@@ -162,7 +162,7 @@ public class IntraSolver {
                     constraint.setSizeFromExpr(array.getLength(), expr);
                     constraint.addPolymorphicType(array);
 
-                    Logging.info("IntraSolver", String.format("Found Array: %s -> %s", expr, decompilerDT.getName()));
+                    Logging.debug("IntraSolver", String.format("Found Array: %s -> %s", expr, decompilerDT.getName()));
                 }
                 else if (decompilerDT instanceof Structure structure) {
                     expr = getExprForStackAllocated(expr);
@@ -172,7 +172,7 @@ public class IntraSolver {
                     constraint.setSizeFromExpr(structure.getLength(), expr);
                     constraint.addPolymorphicType(structure);
 
-                    Logging.info("IntraSolver", String.format("Found Structure: %s -> %s", expr, decompilerDT.getName()));
+                    Logging.debug("IntraSolver", String.format("Found Structure: %s -> %s", expr, decompilerDT.getName()));
                 }
                 else if (decompilerDT instanceof Union union) {
                     expr = getExprForStackAllocated(expr);
@@ -182,7 +182,7 @@ public class IntraSolver {
                     constraint.setSizeFromExpr(union.getLength(), expr);
                     constraint.addPolymorphicType(union);
 
-                    Logging.info("IntraSolver", String.format("Found Union: %s -> %s", expr, decompilerDT.getName()));
+                    Logging.debug("IntraSolver", String.format("Found Union: %s -> %s", expr, decompilerDT.getName()));
                 }
             } else if (decompilerDT instanceof Pointer ptrDT) {
                 // Initialize Pointer to Composite DataType
@@ -195,7 +195,7 @@ public class IntraSolver {
                         constraint.setSizeFromExpr(structure.getLength(), expr);
                         constraint.addPolymorphicType(structure);
 
-                        Logging.info("IntraSolver", String.format("Found Pointer to Struct: %s -> %s", expr, decompilerDT.getName()));
+                        Logging.debug("IntraSolver", String.format("Found Pointer to Struct: %s -> %s", expr, decompilerDT.getName()));
                     }
                     else if (pointTo instanceof Union union) {
                         exprManager.addExprAttribute(expr, NMAE.Attribute.POINTER_TO_UNION);
@@ -204,11 +204,11 @@ public class IntraSolver {
                         constraint.setSizeFromExpr(union.getLength(), expr);
                         constraint.addPolymorphicType(union);
 
-                        Logging.info("IntraSolver", String.format("Found Pointer to Union: %s -> %s", expr, decompilerDT.getName()));
+                        Logging.debug("IntraSolver", String.format("Found Pointer to Union: %s -> %s", expr, decompilerDT.getName()));
                     }
                 }
             } else {
-                Logging.debug("IntraSolver", String.format("Found Primitive: %s -> %s", expr.toString(), decompilerDT.getName()));
+                Logging.trace("IntraSolver", String.format("Found Primitive: %s -> %s", expr.toString(), decompilerDT.getName()));
             }
 
             // In some time, a HighSymbol may not have corresponding HighVariable due to some reasons:
@@ -237,7 +237,7 @@ public class IntraSolver {
     public void updateDataFlowFacts(Varnode vn, NMAE symbolExpr) {
         var curDataFlowFact = dataFlowFacts.computeIfAbsent(vn, k -> new KSet<>(dataFlowFactKSize));
         if (curDataFlowFact.add(symbolExpr)) {
-            Logging.debug("IntraSolver", "New " + vn + " -> " + curDataFlowFact);
+            Logging.trace("IntraSolver", "New " + vn + " -> " + curDataFlowFact);
         }
         addTracedVarnode(vn);
     }
@@ -275,7 +275,7 @@ public class IntraSolver {
 
         outputFacts.merge(inputFacts);
         addTracedVarnode(output);
-        Logging.debug("IntraSolver", "Merge " + output + " -> " + outputFacts);
+        Logging.trace("IntraSolver", "Merge " + output + " -> " + outputFacts);
     }
 
     /**
@@ -303,7 +303,7 @@ public class IntraSolver {
         }
 
         if (FunctionNode.isMergedVariableExpr(funcNode, from) || FunctionNode.isMergedVariableExpr(funcNode, to)) {
-            Logging.info("IntraSolver",
+            Logging.debug("IntraSolver",
                     String.format("Skip adding TFG Edges between merged variables: %s and %s", from, to));
             return;
         }

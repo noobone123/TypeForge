@@ -86,19 +86,19 @@ public class TypeRelationPathManager<T> {
     public void tryMergeOnPath(NMAEManager exprManager) {
         for (var src: srcToPathsMap.keySet()) {
             for (var path: srcToPathsMap.get(src)) {
-                Logging.info("TypeRelationPathManager", "============================================== start ==============================================\n");
-                Logging.info("TypeRelationPathManager", String.format("Try merge by path: %s", path));
+                Logging.debug("TypeRelationPathManager", "============================================== start ==============================================\n");
+                Logging.debug("TypeRelationPathManager", String.format("Try merge by path: %s", path));
                 var success = path.tryMergeOnPath(exprManager);
                 if (!success) {
                     evilPaths.add(path);
                     path.evil = true;
-                    Logging.info("TypeRelationPathManager", String.format("Conflict found in path: \n%s", path));
+                    Logging.debug("TypeRelationPathManager", String.format("Conflict found in path: \n%s", path));
                 } else {
                     if (path.finalConstraint.isEmpty()) {
                         path.noComposite = true;
                     }
                 }
-                Logging.info("TypeRelationPathManager", "============================================== end ==============================================\n");
+                Logging.debug("TypeRelationPathManager", "============================================== end ==============================================\n");
             }
         }
     }
@@ -131,10 +131,10 @@ public class TypeRelationPathManager<T> {
                 /* Mark all exprs connect to this source in current function as evil */
                 evilSource.add(src);
                 evilFunction.add(((NMAE)src).function);
-                Logging.info("TypeRelationPathManager", String.format("Evil source nodes found: %s", src));
+                Logging.debug("TypeRelationPathManager", String.format("Evil source nodes found: %s", src));
                 Logging.warn("TypeRelationPathManager", String.format("Evil function found: %s", ((NMAE)src).function));
                 for (var path: pathsFromSrc) {
-                    Logging.info("TypeRelationPathManager", path.toString());
+                    Logging.debug("TypeRelationPathManager", path.toString());
                 }
 
                 var LCSs = getLongestCommonSubpath(pathsFromSrc);
@@ -144,7 +144,7 @@ public class TypeRelationPathManager<T> {
                         wrapperPath = lcs;
                     }
                 }
-                Logging.info("TypeRelationPathManager", String.format("Wrapper Path: %s", wrapperPath));
+                Logging.debug("TypeRelationPathManager", String.format("Wrapper Path: %s", wrapperPath));
                 var endEdges = getEndEdgesOfLCS(wrapperPath, pathsFromSrc);
                 var lcsEdges = getEdgesInLCS(wrapperPath, pathsFromSrc);
                 evilSourceEndEdges.put(src, endEdges);
@@ -180,7 +180,7 @@ public class TypeRelationPathManager<T> {
             // If there has no conflict when merging different paths from same source, we propagate the merged Constraints
             // to each node start from this source
             else {
-                Logging.info("TypeRelationPathManager", String.format("No Conflict when merging paths from same source: %s", src));
+                Logging.debug("TypeRelationPathManager", String.format("No Conflict when merging paths from same source: %s", src));
                 for (var path: pathsFromSrc) {
                     if (path.evil || path.noComposite) {
                         continue;
@@ -206,7 +206,7 @@ public class TypeRelationPathManager<T> {
                 var layoutToConstraints = buildLayoutToConstraints(constraints);
 
                 if (layoutToConstraints.size() > 1) {
-                    Logging.info("TypeRelationPathManager", String.format("Node has multiple Layouts: %s: %d", node, layoutToConstraints.size()));
+                    Logging.debug("TypeRelationPathManager", String.format("Node has multiple Layouts: %s: %d", node, layoutToConstraints.size()));
 
                     var success = true;
                     var mergedConstraints = new TypeConstraint();
@@ -222,14 +222,14 @@ public class TypeRelationPathManager<T> {
 
                         /* Start debugging */
                         for (var layout: layoutToConstraints.keySet()) {
-                            Logging.info("TypeRelationPathManager", String.format("Layout count: %d", layoutToConstraints.get(layout).size()));
-                            Logging.info("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
+                            Logging.debug("TypeRelationPathManager", String.format("Layout count: %d", layoutToConstraints.get(layout).size()));
+                            Logging.debug("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
                         }
                         for (var path: nodeToPathsMap.get(node)) {
                             if (path.evil || path.noComposite) {
                                 continue;
                             }
-                            Logging.info("TypeRelationPathManager", path.toString());
+                            Logging.debug("TypeRelationPathManager", path.toString());
                         }
                         /* End Debugging */
 
@@ -250,7 +250,7 @@ public class TypeRelationPathManager<T> {
                 }
             }
             else {
-                Logging.info("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
+                Logging.debug("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
             }
         }
     }
@@ -268,7 +268,7 @@ public class TypeRelationPathManager<T> {
         for (var edge: mayRemove) {
             if (!keepEdges.contains(edge)) {
                 removedEdges.add(edge);
-                Logging.info("TypeRelationPathManager", String.format("Mark Edge to remove: %s", edge));
+                Logging.debug("TypeRelationPathManager", String.format("Mark Edge to remove: %s", edge));
             }
         }
         return removedEdges;
@@ -285,13 +285,13 @@ public class TypeRelationPathManager<T> {
                 if (!success) {
                     evilPaths.add(path);
                     path.evil = true;
-                    Logging.info("TypeRelationPathManager", String.format("Evil in path: \n%s", path));
+                    Logging.debug("TypeRelationPathManager", String.format("Evil in path: \n%s", path));
                 } else {
                     if (path.finalConstraint.isEmpty()) {
                         path.noComposite = true;
                         continue;
                     }
-                    Logging.info("TypeRelationPathManager", String.format("Expected path: \n%s", path));
+                    Logging.debug("TypeRelationPathManager", String.format("Expected path: \n%s", path));
                 }
             }
         }
@@ -315,16 +315,16 @@ public class TypeRelationPathManager<T> {
             }
 
             if (success) {
-                Logging.info("TypeRelationPathManager", "Expected Source");
+                Logging.debug("TypeRelationPathManager", "Expected Source");
                 sourceToConstraints.put(src, mergedConstraints);
                 for (var path: pathsFromSource) {
                     sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).addAll(path.nodes);
                 }
             } else {
-                Logging.info("TypeRelationPathManager", "Unexpected Evil Source");
+                Logging.debug("TypeRelationPathManager", "Unexpected Evil Source");
                 for (var path: pathsFromSource) {
-                    Logging.info("TypeRelationPathManager", path.toString());
-                    Logging.info("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));
+                    Logging.debug("TypeRelationPathManager", path.toString());
+                    Logging.debug("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));
                 }
             }
         }
@@ -359,9 +359,9 @@ public class TypeRelationPathManager<T> {
         }
 
         var clusters = sourceGroups.getClusters();
-        Logging.info("TypeRelationPathManager", String.format("Found %d clusters in sourceGroups", clusters.size()));
+        Logging.debug("TypeRelationPathManager", String.format("Found %d clusters in sourceGroups", clusters.size()));
         for (var cluster: clusters) {
-            Logging.info("TypeRelationPathManager", String.format("Cluster size: %s", cluster.size()));
+            Logging.debug("TypeRelationPathManager", String.format("Cluster size: %s", cluster.size()));
             var layoutToSources = new HashMap<Layout, Set<T>>();
             /* group the cluster by node's layout */
             for (var src: cluster) {
@@ -375,7 +375,7 @@ public class TypeRelationPathManager<T> {
             }
 
             if (layoutToSources.size() > 1) {
-                Logging.info("TypeRelationPathManager", "L > 1");
+                Logging.debug("TypeRelationPathManager", "L > 1");
                 /* If layout count > 1, we merge children and TC by each layout */
                 for (var layout: layoutToSources.keySet()) {
                     var sources = layoutToSources.get(layout);
@@ -383,7 +383,7 @@ public class TypeRelationPathManager<T> {
                 }
             } else if (layoutToSources.size() == 1) {
                 /* If layout count = 1, which means all sources in this cluster have same layout, we merge them */
-                Logging.info("TypeRelationPathManager", "L = 1");
+                Logging.debug("TypeRelationPathManager", "L = 1");
                 buildSkeleton(collector, cluster);
             } else {
                 Logging.error("TypeRelationPathManager", "L = 0");
@@ -498,7 +498,7 @@ public class TypeRelationPathManager<T> {
             var subPathNodes = firstPath.subPathsOfLengthWithHash.get(maxLength).get(hash);
             if (subPathNodes != null) {
                 result.add(subPathNodes);
-                Logging.info("TypeRelationPathManager", String.format("Found common path: %s", subPathNodes));
+                Logging.debug("TypeRelationPathManager", String.format("Found common path: %s", subPathNodes));
             }
         }
 
@@ -537,7 +537,7 @@ public class TypeRelationPathManager<T> {
         }
 
         for (var edge: endEdges) {
-            Logging.info("TypeRelationPathManager", String.format("End Edge of LCS: %s", edge));
+            Logging.debug("TypeRelationPathManager", String.format("End Edge of LCS: %s", edge));
         }
 
         return endEdges;
@@ -570,7 +570,7 @@ public class TypeRelationPathManager<T> {
         }
 
         for (var edge: lcsEdges) {
-            Logging.info("TypeRelationPathManager", String.format("Edges in LCS: %s", edge));
+            Logging.debug("TypeRelationPathManager", String.format("Edges in LCS: %s", edge));
         }
 
         return lcsEdges;
@@ -621,7 +621,7 @@ public class TypeRelationPathManager<T> {
             if (path.finalConstraint.isEmpty()) {
                 path.noComposite = true;
             }
-            Logging.info("TypeRelationPathManager", String.format("New Path split by LCS:\n%s", path));
+            Logging.debug("TypeRelationPathManager", String.format("New Path split by LCS:\n%s", path));
         }
 
         return newPaths;

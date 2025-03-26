@@ -52,16 +52,16 @@ public class ReTyper {
             String filePath;
             ObjectNode jsonRoot;
             if (skt.decompilerInferredTypesHasComposite()) {
-                Logging.info("ReTyper", "Skeleton has composite types inferred by decompiler");
+                Logging.debug("ReTyper", "Skeleton has composite types inferred by decompiler");
                 filePath = Global.outputDirectory + "/" + skt.toString() + "_final_DI.json";
                 jsonRoot = generateSkeletonJson(skt, false, true);
             }
             else if (skt.noMorphingTypes() && skt.finalType != null) {
-                Logging.info("ReTyper", "Skeleton has final type information");
+                Logging.debug("ReTyper", "Skeleton has final type information");
                 filePath = Global.outputDirectory + "/" + skt.toString() + "_final.json";
                 jsonRoot = generateSkeletonJson(skt, false, false);
             } else {
-                Logging.info("ReTyper", "Skeleton has morphing types");
+                Logging.debug("ReTyper", "Skeleton has morphing types");
                 if (!skt.globalMorphingTypes.isEmpty()) {
                     filePath = Global.outputDirectory + "/" + skt.toString() + "_global_morph.json";
                 } else {
@@ -86,7 +86,7 @@ public class ReTyper {
         }
 
         if (!isMorph) {
-            Logging.info("GhidraScript", "Writing final type information for skeleton: " + skt.toString());
+            Logging.debug("GhidraScript", "Writing final type information for skeleton: " + skt.toString());
             var finalDT = skt.finalType;
             if (finalDT instanceof Structure) {
                 var typeRoot = processStructure(skt, (Structure) finalDT);
@@ -110,7 +110,7 @@ public class ReTyper {
             }
             /* Handle global morphing types */
             if (!skt.globalMorphingTypes.isEmpty()) {
-                Logging.info("GhidraScript", "Writing global morphing types for skeleton: " + skt.toString());
+                Logging.debug("GhidraScript", "Writing global morphing types for skeleton: " + skt.toString());
                 var globalMorph = mapper.createObjectNode();
                 var retypeCandidates = new HashSet<NMAE>();
                 var reservedDT = new HashMap<HighSymbol, DataType>();
@@ -149,7 +149,7 @@ public class ReTyper {
 
             /* Handle range morphing types */
             else {
-                Logging.info("GhidraScript", "Writing range morphing types for skeleton: " + skt.toString());
+                Logging.debug("GhidraScript", "Writing range morphing types for skeleton: " + skt.toString());
                 var rangeMorph = mapper.createArrayNode();
                 for (var entry: skt.rangeMorphingTypes.entrySet()) {
                     var rangeObj = mapper.createObjectNode();
@@ -419,7 +419,7 @@ public class ReTyper {
                     memberAccessExprs.addAll(skt.finalConstraint.fieldExprMap.get(offset));
                 }
             }
-            Logging.info("GhidraScript",
+            Logging.debug("GhidraScript",
                     String.format("Member access in %s of range [0x%x, 0x%x]:\n%s", skt, start, end, memberAccessExprs));
         }
         /* If global morphing */
@@ -434,7 +434,7 @@ public class ReTyper {
             if (parsedExpr.isEmpty()) continue;
             var base = parsedExpr.get().base;
             if (base.isVariable()) {
-                Logging.info("GhidraScript", String.format("Get Retype candidate: %s", base));
+                Logging.debug("GhidraScript", String.format("Get Retype candidate: %s", base));
                 retypeCandidates.add(base);
                 var rootHighSym = base.getRootHighSymbol();
                 reservedDT.put(rootHighSym, rootHighSym.getDataType());
@@ -476,7 +476,7 @@ public class ReTyper {
                 originalDT = reservedDT.get(highSym);
                 updatedDT = DataTypeHelper.getPointerDT(newDt, 1);
                 if (originalDT.getLength() < Global.currentProgram.getDefaultPointerSize()) {
-                    Logging.info("GhidraScript", String.format("Variable %s is not a pointer skipped", var));
+                    Logging.debug("GhidraScript", String.format("Variable %s is not a pointer skipped", var));
                     continue;
                 }
             /* Retyped as Nested */
@@ -487,7 +487,7 @@ public class ReTyper {
                 continue;
             }
 
-            Logging.info("GhidraScript", String.format("Retyping variable %s to data type %s", var, updatedDT.getName()));
+            Logging.debug("GhidraScript", String.format("Retyping variable %s to data type %s", var, updatedDT.getName()));
             /* update the data type of the variable */
             DecompilerHelper.setLocalVariableDataType(highSym, updatedDT);
             decompiledFuncCandidates.add(highSym.getHighFunction().getFunction());
@@ -507,7 +507,7 @@ public class ReTyper {
             callback.dispose();
         }
 
-        Logging.info("GhidraScript", "Decompiled functions count: " + callback.addrToCodeMap.size());
+        Logging.debug("GhidraScript", "Decompiled functions count: " + callback.addrToCodeMap.size());
         for (var entry: callback.addrToCodeMap.entrySet()) {
             var addr = entry.getKey();
             var code = entry.getValue();
@@ -550,7 +550,7 @@ public class ReTyper {
     private void saveJsonToFile(String fileName, ObjectNode jsonRoot) {
         try {
             mapper.writerWithDefaultPrettyPrinter().writeValue(new File(fileName), jsonRoot);
-            Logging.info("GhidraScript", "Successfully wrote JSON to file: " + fileName);
+            Logging.debug("GhidraScript", "Successfully wrote JSON to file: " + fileName);
         } catch (IOException e) {
             Logging.error("GhidraScript", "Error writing JSON to file: " + e.getMessage());
         }
@@ -560,7 +560,7 @@ public class ReTyper {
     private String retypeAndGetUpdatedDecompiledCode(Function func, HighSymbol highSym, DataType dt) {
         try {
             HighFunctionDBUtil.updateDBVariable(highSym, null, dt, SourceType.USER_DEFINED);
-            Logging.info("DecompilerHelper", "Set data type for variable: " + highSym.getName() + " to " + dt.getName());
+            Logging.debug("DecompilerHelper", "Set data type for variable: " + highSym.getName() + " to " + dt.getName());
         } catch (Exception e) {
             Logging.error("DecompilerHelper", "Failed to set data type for local variable: " + highSym.getName());
             return null;
@@ -578,7 +578,7 @@ public class ReTyper {
                 Logging.error("FunctionNode", "Function decompile failed" + func.getName());
                 return null;
             } else {
-                Logging.info("FunctionNode", "Success to get updated function pseudocode" + func.getName());
+                Logging.debug("FunctionNode", "Success to get updated function pseudocode" + func.getName());
                 return decompileRes.getDecompiledFunction().getC();
             }
         } finally {
