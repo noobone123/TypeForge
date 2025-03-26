@@ -70,6 +70,7 @@ public class ConstPropagator {
     //  2. For those Skeletons with size, we propagate them along the TFG, propagate should be 波纹扩散法：
     //      即：假设图中有 n 个这样的节点，每一轮我们都将节点的信息，沿着dataflow边传播到它的邻居节点，然后我们检查这些新传播到的邻居节点的信息是否存在冲突，如果不存在，那么
     //      我们就把他们视作一个整体节点（邻居），然后继续传播。如果存在冲突，那么这个新的邻居节点就不应该被加入已有的整体节点，且该新节点和整体节点相连的所有的边都应该被删除。
+    //  后续的每个子图的 type-hint propagation 是否也能够采用类似的思路？ 用于处理来自每个Source之间的类型传播，只不过此时的 check 的 conflict 变成了 field conflict
 
     // TODO: Implement me.
     private boolean hasPathFromAllocPtrToReceiver(NMAE allocPtr, NMAE receiver) {
