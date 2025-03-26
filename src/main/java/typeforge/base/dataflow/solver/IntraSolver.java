@@ -292,35 +292,23 @@ public class IntraSolver {
     }
 
     /**
-     * Add edges in the Type Flow Graph
+     * Add intra-function edges in the Type Flow Graph
      * @param from the source NMAE
      * @param to the target NMAE
      * @param edgeType the type of the edge
      */
-    public void addTFGEdges(NMAE from, NMAE to, TypeFlowGraph.EdgeType edgeType) {
+    public void addIntraTFGEdges(NMAE from, NMAE to, TypeFlowGraph.EdgeType edgeType) {
         if (from.equals(to)) {
             return;
         }
 
-        if (isMergedVariableExpr(from) || isMergedVariableExpr(to)) {
+        if (FunctionNode.isMergedVariableExpr(funcNode, from) || FunctionNode.isMergedVariableExpr(funcNode, to)) {
             Logging.info("IntraSolver",
                     String.format("Skip adding TFG Edges between merged variables: %s and %s", from, to));
             return;
         }
 
         graphManager.addEdge(from, to, edgeType);
-    }
-
-
-    private boolean isMergedVariableExpr(NMAE expr) {
-        if (expr.isConst) { return false; }
-        if (expr.isTemp) { return false; }
-        var rootSym = expr.getRootHighSymbol();
-        if (rootSym.isGlobal()) { return false; }
-        if (funcNode.mergedVariables.isEmpty()) { return false; }
-        else {
-            return funcNode.mergedVariables.contains(rootSym);
-        }
     }
 
     /**

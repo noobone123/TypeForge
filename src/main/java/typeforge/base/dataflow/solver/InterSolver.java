@@ -131,7 +131,9 @@ public class InterSolver {
                     for (var argExpr: argFacts) {
                         var param = calleeNode.parameters.get(argIdx);
                         var paramExpr = new NMAEManager.Builder().rootSymbol(param).build();
-                        intraSolver.addTFGEdges(argExpr, paramExpr, TypeFlowGraph.EdgeType.CALL);
+                        addInterTFGEdges(argExpr, funcNode,
+                                paramExpr, calleeNode,
+                                TypeFlowGraph.EdgeType.CALL);
                     }
                 }
 
@@ -152,7 +154,9 @@ public class InterSolver {
 
                 for (var recevierExpr: recevierFacts) {
                     for (var retExpr: retExprs) {
-                        intraSolver.addTFGEdges(retExpr, recevierExpr, TypeFlowGraph.EdgeType.RETURN);
+                        addInterTFGEdges(retExpr, calleeNode,
+                                recevierExpr, funcNode,
+                                TypeFlowGraph.EdgeType.RETURN);
                     }
                 }
             }
@@ -304,15 +308,37 @@ public class InterSolver {
         }
     }
 
+    /**
+     * Add inter-function edges in the Type Flow Graph
+     * @param from the source NMAE
+     * @param fromNode the source function node
+     * @param to the target NMAE
+     * @param toNode the target function node
+     * @param edgeType the type of the edge
+     */
+    public void addInterTFGEdges(NMAE from, FunctionNode fromNode,
+                                 NMAE to, FunctionNode toNode,
+                                 TypeFlowGraph.EdgeType edgeType) {
+        if (fromNode.equals(toNode)) {
+            return;
+        }
+
+        if (FunctionNode.isMergedVariableExpr(fromNode, from) || FunctionNode.isMergedVariableExpr(toNode, to)) {
+            Logging.info("InterSolver",
+                    String.format("Skip adding TFG Edges between merged variables: %s:%s and %s:%s",
+                            fromNode.value.getName(), from, toNode.value.getName(), to));
+            return;
+        }
+
+        graphManager.addEdge(from, to, edgeType);
+    }
+
+
     private void updateFieldAccessConstraint(TypeConstraint baseConstraint, long offsetValue, NMAE fieldExpr) {
         var fieldAPs = APs.getFieldAccessPoints(fieldExpr);
         baseConstraint.addFieldExpr(offsetValue, fieldExpr);
         for (var ap: fieldAPs) {
             baseConstraint.addFieldAccess(offsetValue, ap);
         }
-    }
-
-    public boolean isFunctionSolved(FunctionNode funcNode) {
-        return visitedFunc.contains(funcNode);
     }
 }

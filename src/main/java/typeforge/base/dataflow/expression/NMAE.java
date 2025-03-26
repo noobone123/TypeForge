@@ -88,7 +88,7 @@ public class NMAE {
         } else {
             var rootSymbol = getRootSymExpr().getRootSymbol();
             this.function = rootSymbol.getHighFunction().getFunction();
-            this.prefix = String.format("[%s]-%s", this.function.getEntryPoint().toString(), this.function.getName());
+            this.prefix = String.format("[%s-%s]", this.function.getEntryPoint().toString(), this.function.getName());
         }
 
         Logging.debug("SymbolExpr","Created new SymbolExpr: " + this);

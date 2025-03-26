@@ -186,7 +186,7 @@ public class PCodeVisitor {
         for (var inputSymExpr: inputFact) {
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
-                    intraSolver.addTFGEdges(inputSymExpr, outputSymExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addIntraTFGEdges(inputSymExpr, outputSymExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
             intraSolver.updateDataFlowFacts(outputVn, inputSymExpr);
@@ -315,7 +315,7 @@ public class PCodeVisitor {
             var leftExprs = intraSolver.getDataFlowFacts(pcodeOp.getOutput());
             if (leftExprs != null) {
                 for (var leftExpr : leftExprs) {
-                    intraSolver.addTFGEdges(outputExpr, leftExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addIntraTFGEdges(outputExpr, leftExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
             intraSolver.updateDataFlowFacts(pcodeOp.getOutput(), outputExpr);
@@ -456,7 +456,7 @@ public class PCodeVisitor {
             if (leftValueExprs != null) {
                 for (var leftValueExpr : leftValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Loaded varnode has already held %s, set type alias of %s and %s", leftValueExpr, loadedValueExpr, leftValueExpr));
-                    intraSolver.addTFGEdges(loadedValueExpr, leftValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addIntraTFGEdges(loadedValueExpr, leftValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
 
@@ -487,7 +487,7 @@ public class PCodeVisitor {
             if (rightValueExprs != null) {
                 for (var rightValueExpr : rightValueExprs) {
                     Logging.debug("PCodeVisitor", String.format("Stored varnode has already held %s, set type alias of %s and %s", rightValueExpr, storedValueExpr, rightValueExpr));
-                    intraSolver.addTFGEdges(rightValueExpr, storedValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
+                    intraSolver.addIntraTFGEdges(rightValueExpr, storedValueExpr, TypeFlowGraph.EdgeType.DATAFLOW);
                 }
             }
         }

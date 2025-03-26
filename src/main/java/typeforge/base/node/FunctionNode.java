@@ -1,5 +1,6 @@
 package typeforge.base.node;
 
+import typeforge.base.dataflow.expression.NMAE;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.DecompilerHelper;
 import typeforge.utils.Global;
@@ -54,6 +55,17 @@ public class FunctionNode extends NodeBase<Function> {
      merged variable's dataType should not be inferred, because there are derived from
      decompiler's inaccuracy */
     public HashSet<HighSymbol> mergedVariables = new HashSet<>();
+
+    public static boolean isMergedVariableExpr(FunctionNode funcNode, NMAE expr) {
+        if (expr.isConst) { return false; }
+        if (expr.isTemp) { return false; }
+        var rootSym = expr.getRootHighSymbol();
+        if (rootSym.isGlobal()) { return false; }
+        if (funcNode.mergedVariables.isEmpty()) { return false; }
+        else {
+            return funcNode.mergedVariables.contains(rootSym);
+        }
+    }
 
     public FunctionNode(Function value, int id) {
         super(value, id);
