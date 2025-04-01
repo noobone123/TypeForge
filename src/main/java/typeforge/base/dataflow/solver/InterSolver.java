@@ -1,5 +1,7 @@
 package typeforge.base.dataflow.solver;
 
+import ghidra.program.model.address.Address;
+import ghidra.program.model.address.AddressFactory;
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.expression.ParsedExpr;
@@ -10,6 +12,8 @@ import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.CallSite;
 import typeforge.base.node.FunctionNode;
+import typeforge.utils.FunctionHelper;
+import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import typeforge.base.dataflow.expression.NMAE;
 import ghidra.program.model.listing.Function;
@@ -30,6 +34,9 @@ public class InterSolver {
     /** The set of functions that are stitched with its callee */
     public Set<FunctionNode> stitchedFunc;
 
+    public Map<CallSite, FunctionNode> callSiteToCallee;
+    public Map<FunctionNode, Set<CallSite>> calleeToCallSites;
+
     public HashMap<Function, IntraSolver> intraSolverMap;
 
     public AccessPoints APs;
@@ -44,10 +51,16 @@ public class InterSolver {
     public InterSolver(CallGraph cg) {
         this.callGraph = cg;
         this.workList = new LinkedList<>();
+
         this.visitedFunc = new HashSet<>();
         this.stitchedFunc = new HashSet<>();
+
+        this.callSiteToCallee = new HashMap<>();
+        this.calleeToCallSites = new HashMap<>();
+
         this.intraSolverMap = new HashMap<>();
         this.APs = new AccessPoints();
+
         this.graphManager = new TFGManager();
         this.exprManager = new NMAEManager(this.graphManager);
         this.typeHintCollector = new TypeHintCollector(exprManager);
@@ -105,6 +118,14 @@ public class InterSolver {
                 continue;
             }
 
+            // Recording the CallSite Information.
+            callSiteToCallee.put(callSite, calleeNode);
+            calleeToCallSites.computeIfAbsent(
+                    calleeNode,
+                    k -> new HashSet<>()
+            ).add(callSite);
+
+            // Do Stitching
             if (calleeNode.isExternal) {
                 Logging.trace("InterSolver", "Callee node is external: " + callSite.calleeAddr);
                 handleExternalCall(callSite, calleeNode, intraSolver);
@@ -189,6 +210,8 @@ public class InterSolver {
      */
     public void typeHintPropagation() {
         graphManager.earlyTFGStatistics();
+
+        Logging.debug("InterSolver", "Size of callSiteToCallee: " + callSiteToCallee.size());
 
         // Run the ConstPropagator to propagate the constant information in the TFG
         var constPropagator = new ConstPropagator(this);

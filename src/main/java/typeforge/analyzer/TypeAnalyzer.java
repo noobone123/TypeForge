@@ -198,6 +198,8 @@ public class TypeAnalyzer {
     }
 
 
+
+
     private void postOrderTraversal(FunctionNode node, Set<FunctionNode> visited, List<FunctionNode> sortedFuncs) {
         if (visited.contains(node)) {
             return;
