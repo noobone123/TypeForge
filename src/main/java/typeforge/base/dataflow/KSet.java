@@ -1,5 +1,7 @@
 package typeforge.base.dataflow;
 
+import typeforge.utils.Logging;
+
 import java.util.HashSet;
 import java.util.Iterator;
 
@@ -19,9 +21,14 @@ public class KSet<E> implements Iterable<E> {
 
     public boolean add(E element) {
         if (set.size() >= maxSize) {
+            Logging.warn("KSet", "Set is full, cannot add element: " + element);
             return false;
         }
         return set.add(element);
+    }
+
+    public boolean isEmpty() {
+        return set.isEmpty();
     }
 
     public boolean contains(E element) {

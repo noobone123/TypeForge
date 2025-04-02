@@ -45,7 +45,7 @@ public class ConstPropagator {
                 var arg1 = cs.arguments.get(0);
                 var arg2 = cs.arguments.get(1);
                 var receiver = cs.receiver;
-                var arg1Facts = intraSolverMap.get(cs.caller).getDataFlowFacts(arg1);
+                var arg1Facts = intraSolverMap.get(cs.caller).getOrCreateDataFlowFacts(arg1);
                 for (var arg1Fact: arg1Facts) {
                     graphManager.dumpPartialTFG(arg1Fact, 5, new File(Global.outputDirectory));
                 }

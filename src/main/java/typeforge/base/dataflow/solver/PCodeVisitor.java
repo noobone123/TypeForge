@@ -139,8 +139,7 @@ public class PCodeVisitor {
             return;
         }
 
-        var inputFact_0 = intraSolver.getDataFlowFacts(inputs[0]);
-        assert inputFact_0 != null;
+        var inputFact_0 = intraSolver.getOrCreateDataFlowFacts(inputs[0]);
 
         if (inputs[1].isConstant()) {
             for (var symExpr: inputFact_0) {
@@ -158,7 +157,7 @@ public class PCodeVisitor {
                 Logging.trace("PCodeVisitor", String.format("%s is not traced", inputs[1]));
                 return;
             }
-            var inputFact_1 = intraSolver.getDataFlowFacts(inputs[1]);
+            var inputFact_1 = intraSolver.getOrCreateDataFlowFacts(inputs[1]);
             for (var symExpr: inputFact_0) {
                 for (var symExpr_1: inputFact_1) {
                     var newExpr = exprManager.add(symExpr, symExpr_1);
@@ -175,14 +174,22 @@ public class PCodeVisitor {
         var inputVn = pcodeOp.getInput(0);
         var outputVn = pcodeOp.getOutput();
 
-        if (!intraSolver.isTracedVn(inputVn)) {
+        // If input is not traced but output is, we need to update the input Fact as output
+        if (!intraSolver.isTracedVn(inputVn) && intraSolver.isTracedVn(outputVn)
+            && !inputVn.isConstant()) {
+            Logging.debug("PCodeVisitor",
+                    "[Assign] " + outputVn + " is traced, but input is not traced: " + inputVn);
+            for (var fact: intraSolver.getOrCreateDataFlowFacts(outputVn)) {
+                intraSolver.updateDataFlowFacts(inputVn, fact);
+            }
+            workList.add((PcodeOpAST) inputVn.getDef());
             return;
         }
 
-        var inputFact = intraSolver.getDataFlowFacts(inputVn);
+        var inputFact = intraSolver.getOrCreateDataFlowFacts(inputVn);
 
         // If output has already held symbolExpr, we can update the symbol alias map
-        var outputFacts = intraSolver.getDataFlowFacts(outputVn);
+        var outputFacts = intraSolver.getOrCreateDataFlowFacts(outputVn);
         for (var inputSymExpr: inputFact) {
             if (outputFacts != null) {
                 for (var outputSymExpr: outputFacts) {
@@ -208,7 +215,7 @@ public class PCodeVisitor {
             return;
         }
 
-        var input0Fact = intraSolver.getDataFlowFacts(inputs[0]);
+        var input0Fact = intraSolver.getOrCreateDataFlowFacts(inputs[0]);
 
         if (inputs[1].isConstant() && inputs[2].isConstant()) {
             for (var symExpr: input0Fact) {
@@ -235,7 +242,7 @@ public class PCodeVisitor {
             }
             var scaleExpr = new NMAEManager.Builder().constant(scaleValue).build();
             for (var symExpr: input0Fact) {
-                var indexFacts = intraSolver.getDataFlowFacts(inputs[1]);
+                var indexFacts = intraSolver.getOrCreateDataFlowFacts(inputs[1]);
                 for (var indexExpr: indexFacts) {
                     var newIndexScale = exprManager.multiply(indexExpr, scaleExpr);
                     if (newIndexScale != null) {
@@ -297,7 +304,7 @@ public class PCodeVisitor {
         }
         // if base is a traced varnode, means it's a fieldAccess of a structure
         else if (intraSolver.isTracedVn(base) && offset.isConstant()) {
-            var baseExprs = intraSolver.getDataFlowFacts(base);
+            var baseExprs = intraSolver.getOrCreateDataFlowFacts(base);
             var offsetValue = getSigned(offset);
             if (OffsetSanityCheck(offsetValue)) {
                 var offsetExpr = new NMAEManager.Builder().constant(offsetValue).build();
@@ -312,7 +319,7 @@ public class PCodeVisitor {
         }
 
         if (outputExpr != null) {
-            var leftExprs = intraSolver.getDataFlowFacts(pcodeOp.getOutput());
+            var leftExprs = intraSolver.getOrCreateDataFlowFacts(pcodeOp.getOutput());
             if (leftExprs != null) {
                 for (var leftExpr : leftExprs) {
                     intraSolver.addIntraTFGEdges(outputExpr, leftExpr, TypeFlowGraph.EdgeType.DATAFLOW);
@@ -354,7 +361,7 @@ public class PCodeVisitor {
             return;
         }
 
-        var inputFacts = intraSolver.getDataFlowFacts(input);
+        var inputFacts = intraSolver.getOrCreateDataFlowFacts(input);
         for (var symExpr : inputFacts) {
             // TODO: IntZext need add constraint ?
             intraSolver.updateDataFlowFacts(output, symExpr);
@@ -371,7 +378,7 @@ public class PCodeVisitor {
             return;
         }
 
-        var inputFacts = intraSolver.getDataFlowFacts(input);
+        var inputFacts = intraSolver.getOrCreateDataFlowFacts(input);
         for (var symExpr : inputFacts) {
             // TODO: IntSext need add constraint ?
             intraSolver.updateDataFlowFacts(output, symExpr);
@@ -397,10 +404,10 @@ public class PCodeVisitor {
         KSet<NMAE> inputFacts;
         long size = 0;
         if (input0.isConstant()) {
-            inputFacts = intraSolver.getDataFlowFacts(input1);
+            inputFacts = intraSolver.getOrCreateDataFlowFacts(input1);
             size = getSigned(input0);
         } else {
-            inputFacts = intraSolver.getDataFlowFacts(input0);
+            inputFacts = intraSolver.getOrCreateDataFlowFacts(input0);
             size = getSigned(input1);
         }
 
@@ -444,8 +451,8 @@ public class PCodeVisitor {
 
         // The amount of data loaded by this instruction is determined by the size of the output variable
         DataType outDT = DecompilerHelper.getDataTypeTraceForward(output);
-        var leftValueExprs = intraSolver.getDataFlowFacts(output);
-        var loadAddrExprs = intraSolver.getDataFlowFacts(input);
+        var leftValueExprs = intraSolver.getOrCreateDataFlowFacts(output);
+        var loadAddrExprs = intraSolver.getOrCreateDataFlowFacts(input);
         for (var loadAddrExpr : loadAddrExprs) {
             var loadedValueExpr = exprManager.dereference(loadAddrExpr);
 
@@ -478,10 +485,10 @@ public class PCodeVisitor {
             return;
         }
 
-        var rightValueExprs = intraSolver.getDataFlowFacts(rightValueVn);
+        var rightValueExprs = intraSolver.getOrCreateDataFlowFacts(rightValueVn);
         var storedValueDT = DecompilerHelper.getDataTypeTraceBackward(pcodeOp.getInput(2));
 
-        for (var storedAddrExpr : intraSolver.getDataFlowFacts(storedAddrVn)) {
+        for (var storedAddrExpr : intraSolver.getOrCreateDataFlowFacts(storedAddrVn)) {
             var storedValueExpr = exprManager.dereference(storedAddrExpr);
             intraSolver.addFieldAccessExpr(storedValueExpr, pcodeOp, storedValueDT, AccessPoints.AccessType.STORE, funcNode.value);
             if (rightValueExprs != null) {
@@ -500,7 +507,7 @@ public class PCodeVisitor {
             return;
         }
 
-        var indirectCallFacts = intraSolver.getDataFlowFacts(indirectCallVn);
+        var indirectCallFacts = intraSolver.getOrCreateDataFlowFacts(indirectCallVn);
         for (var symExpr : indirectCallFacts) {
             exprManager.addExprAttribute(symExpr, NMAE.Attribute.CODE_PTR);
         }
@@ -514,7 +521,7 @@ public class PCodeVisitor {
                 continue;
             }
 
-            var retFacts = intraSolver.getDataFlowFacts(retVn);
+            var retFacts = intraSolver.getOrCreateDataFlowFacts(retVn);
             for (var retExpr : retFacts) {
                 intraSolver.setReturnExpr(retExpr);
                 exprManager.addExprAttribute(retExpr, NMAE.Attribute.RETURN);
@@ -548,7 +555,7 @@ public class PCodeVisitor {
                 continue;
             }
 
-            var argFacts = intraSolver.getDataFlowFacts(arg);
+            var argFacts = intraSolver.getOrCreateDataFlowFacts(arg);
             argToFacts.put(arg, argFacts);
 
             for (var argExpr : argFacts) {
@@ -565,31 +572,15 @@ public class PCodeVisitor {
         }
 
         var receiverVn = callSite.receiver;
-        var receiverFacts = intraSolver.getDataFlowFacts(receiverVn);
+        var receiverFacts = intraSolver.getOrCreateDataFlowFacts(receiverVn);
 
-        if (receiverFacts != null) {
-            intraSolver.bridgeInfo.computeIfAbsent(
-                    callSite,
-                    k -> new HashMap<>()
-            ).put(receiverVn, receiverFacts);
-        } else {
-            if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
-                Logging.warn("PCodeVisitor", String.format("Receiver %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
-            }
-            else {
-                var receiverLongDescend = receiverVn.getLoneDescend();
-                var newReceiverVn = receiverLongDescend.getOutput();
-                var newReceiverFacts = intraSolver.getDataFlowFacts(newReceiverVn);
-                if (newReceiverFacts != null) {
-                    callSite.receiver = newReceiverVn;
-                    intraSolver.bridgeInfo.computeIfAbsent(
-                            callSite,
-                            k -> new HashMap<>()
-                    ).put(newReceiverVn, newReceiverFacts);
-                } else {
-                    Logging.warn("PCodeVisitor", "????????????????????");
-                }
-            }
+        intraSolver.bridgeInfo.computeIfAbsent(
+                callSite,
+                k -> new HashMap<>()
+        ).put(receiverVn, receiverFacts);
+
+        if (receiverVn.getHigh() != null && receiverVn.getHigh().getSymbol() != null) {
+            Logging.warn("PCodeVisitor", String.format("Receiver %s is not traced, maybe merged variables", receiverVn.getHigh().getName()));
         }
     }
 

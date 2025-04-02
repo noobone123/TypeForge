@@ -167,19 +167,30 @@ public class InterSolver {
                 var recevierVn = callSite.receiver;
                 var recevierFacts = bridgeInfo.get(callSite).get(recevierVn);
                 var retExprs = intraSolverMap.get(calleeNode.value).getReturnExpr();
-                // It's common because some functions has primitive return type which we don't trace
-                if (retExprs.isEmpty()) {
-                    Logging.warn("InterSolver",
+
+                // It's common because some functions may contain Facts related to primitive types
+                // which we are not interested, so we just skip them.
+                if (recevierFacts.isEmpty() && retExprs.isEmpty()) {
+                    Logging.trace("InterSolver",
+                            String.format("CallSite %s is not important so we did not trace them", callSite));
+                }
+                else if (recevierFacts.isEmpty() && !retExprs.isEmpty()) {
+                    Logging.trace("InterSolver",
+                            String.format("CallSite %s has no receiver but callee %s has traced return expression",
+                                    callSite, calleeNode.value.getName()));
+                }
+                else if (!recevierFacts.isEmpty() && retExprs.isEmpty()) {
+                    Logging.trace("InterSolver",
                             String.format("CallSite %s has receiver but callee %s has no traced return expression",
                                     callSite, calleeNode.value.getName()));
-                    continue;
                 }
-
-                for (var recevierExpr: recevierFacts) {
-                    for (var retExpr: retExprs) {
-                        addInterTFGEdges(retExpr, calleeNode,
-                                recevierExpr, funcNode,
-                                TypeFlowGraph.EdgeType.RETURN);
+                else {
+                    for (var recevierExpr: recevierFacts) {
+                        for (var retExpr : retExprs) {
+                            addInterTFGEdges(retExpr, calleeNode,
+                                    recevierExpr, funcNode,
+                                    TypeFlowGraph.EdgeType.RETURN);
+                        }
                     }
                 }
             }

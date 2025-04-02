@@ -242,7 +242,7 @@ public class IntraSolver {
         addTracedVarnode(vn);
     }
 
-    public KSet<NMAE> getDataFlowFacts(Varnode vn) {
+    public KSet<NMAE> getOrCreateDataFlowFacts(Varnode vn) {
         if (dataFlowFacts.get(vn) == null) {
             return new KSet<>(dataFlowFactKSize);
         } else {

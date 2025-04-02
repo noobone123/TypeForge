@@ -25,18 +25,18 @@ public class ExternalHandler {
     public static class Malloc extends Handler {
         @Override
         public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
-            var ptrExprs = intraSolver.getDataFlowFacts(callSite.receiver);
+            var ptrExprs = intraSolver.getOrCreateDataFlowFacts(callSite.receiver);
             for (var expr: ptrExprs) {
                 Logging.debug("ExternalHandler.Malloc",
-                        String.format("Set composite of constraint: %s to true", expr));
-                var constraint = exprManager.getOrCreateSkeleton(expr);
-                constraint.setComposite(true);
+                        String.format("Set composite of skeleton: %s to true", expr));
+                var skeleton = exprManager.getOrCreateSkeleton(expr);
+                skeleton.setComposite(true);
 
                 var mallocSize = callSite.arguments.get(0);
                 if (mallocSize.isConstant()) {
-                    constraint.setSizeFromCallSite(mallocSize.getOffset(), callSite);
+                    skeleton.setSizeFromCallSite(mallocSize.getOffset(), callSite);
                     Logging.debug("ExternalHandler.Malloc",
-                            String.format("Set size of constraint: %s to %d", expr, callSite.arguments.get(0).getOffset()));
+                            String.format("(malloc) Set size of skeleton : %s to 0x%x", expr, callSite.arguments.get(0).getOffset()));
                 }
             }
         }
@@ -45,19 +45,19 @@ public class ExternalHandler {
     public static class Calloc extends Handler {
         @Override
         public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
-            var ptrExprs = intraSolver.getDataFlowFacts(callSite.receiver);
+            var ptrExprs = intraSolver.getOrCreateDataFlowFacts(callSite.receiver);
             for (var expr: ptrExprs) {
                 Logging.debug("ExternalHandler.Calloc",
-                        String.format("Set composite of constraint: %s to true", expr));
-                var constraint = exprManager.getOrCreateSkeleton(expr);
-                constraint.setComposite(true);
+                        String.format("Set composite of skeleton: %s to true", expr));
+                var skeleton = exprManager.getOrCreateSkeleton(expr);
+                skeleton.setComposite(true);
 
                 var nmemblock = callSite.arguments.get(0);
                 var memsize = callSite.arguments.get(1);
                 if (nmemblock.isConstant() && memsize.isConstant()) {
-                    constraint.setSizeFromCallSite(nmemblock.getOffset() * memsize.getOffset(), callSite);
+                    skeleton.setSizeFromCallSite(nmemblock.getOffset() * memsize.getOffset(), callSite);
                     Logging.debug("ExternalHandler.Calloc",
-                            String.format("Set size of constraint: %s to %d", expr, nmemblock.getOffset() * memsize.getOffset()));
+                            String.format("(calloc) Set size of skeleton: %s to 0x%x", expr, nmemblock.getOffset() * memsize.getOffset()));
                 }
             }
         }
@@ -74,7 +74,7 @@ public class ExternalHandler {
         public void handle(CallSite callSite, IntraSolver intraSolver, NMAEManager exprManager) {
             var lengthArg = callSite.arguments.get(2);
 
-            var ptrExprs = intraSolver.getDataFlowFacts(callSite.arguments.get(0));
+            var ptrExprs = intraSolver.getOrCreateDataFlowFacts(callSite.arguments.get(0));
             for (var expr: ptrExprs) {
                 Logging.debug("ExternalHandler.Memset",
                         String.format("Set composite of constraint: %s to true", expr));
@@ -105,8 +105,8 @@ public class ExternalHandler {
             if (!intraSolver.isTracedVn(dstVn) || !intraSolver.isTracedVn(srcVn)) {
                 return;
             }
-            var dstExprs = intraSolver.getDataFlowFacts(dstVn);
-            var srcExprs = intraSolver.getDataFlowFacts(srcVn);
+            var dstExprs = intraSolver.getOrCreateDataFlowFacts(dstVn);
+            var srcExprs = intraSolver.getOrCreateDataFlowFacts(srcVn);
             for (var dstExpr : dstExprs) {
                 for (var srcExpr : srcExprs) {
                     var dstConstraint = exprManager.getOrCreateSkeleton(dstExpr);
