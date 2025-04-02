@@ -3,7 +3,9 @@ package typeforge.base.dataflow.solver;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.Varnode;
 import typeforge.base.dataflow.expression.NMAE;
+import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.node.CallSite;
+import typeforge.base.node.FunctionNode;
 import typeforge.utils.Logging;
 
 import java.util.HashMap;
@@ -29,6 +31,9 @@ import java.util.Set;
  */
 public class ConstPropagator {
 
+    /**
+     * Allocation type for malloc/calloc/...
+     */
     enum AllocType {
         MALLOC,
         CALLOC
@@ -40,6 +45,10 @@ public class ConstPropagator {
         CALLOC_SIZE,
     }
 
+    /**
+     * WrapperCallSiteInfo is used to store the information of wrapper call sites,
+     * particularly for important size constants about malloc/calloc.
+     */
     static class WrapperCallSiteInfo {
         public CallSite callSite;
         public AllocType allocType;
@@ -95,30 +104,54 @@ public class ConstPropagator {
     }
 
     InterSolver interSolver = null;
+    NMAEManager exprManager;
+    Set<FunctionNode> wrapperFunctions = new HashSet<>();
 
     public ConstPropagator(InterSolver interSolver) {
         this.interSolver = interSolver;
+        this.exprManager = this.interSolver.exprManager;
     }
 
+    // TODO: mark and remove "evil edges", then propagate size info.
+    // TODO:
+    //  1. Constructing CallSite when building CallGraph, there should be a Map<CallSite, Callee> and a Map<Callee, Set<CallSite>>
+    //  2. Reversing constructing the CallSite-Chain (Max-depth: 4? Because wrapper function is not that deep)
+    //  3. For each chain, start from the nearest CallSite, check:
+    //      1. If CallSite Args can not flow to the malloc(1) or calloc(2)'s corresponding arguments, return.
+    //      2. If there are No ConstArg, but arguments can flow to the malloc(1) or calloc(2)'s corresponding arguments, goto the next CallSite and check.
+    //      3. If there are ConstArg and can flow to the malloc(1) or calloc(2)'s corresponding arguments,
+    //          check if the malloc(1) or calloc(2)'s return value can flow to the current callSite's receiver.
+    //          If so, mark current callSite's receiver as composite and set the size, return.
+    //      We will not handle Partial ConstArg, because it's very very rare.
+    //  4. Build Map<Callee, Set<ReturnSize>> from the marked CallSites, if there are multiple sizes, mark it as EvilNode and mark RETURN edges from them as EvilEdges. (Actually TFG should be split)
+
+    // TODO:
+    //  1. If a variable is set to different size (with memset) with the same function, it must be a union, mark it as EvilNode and mark all edges to them as EvilEdges.
+    //  2. For those Skeletons with size, we propagate them along the TFG, propagate should be 多点扩散法：
+    //      即：假设图中有 n 个这样的节点，每一轮我们都将节点的信息，沿着dataflow边传播到它的邻居（函数的所有？）节点（是否按照函数粒度进行每次传播），然后我们检查这些新传播到的邻居节点的信息是否存在冲突，如果不存在，那么
+    //      我们就把他们视作一个整体节点（邻居），然后继续传播。如果存在冲突，那么这个新的邻居节点就不应该被加入已有的整体节点，且该新节点和整体节点相连的所有的边都应该被删除。
+    //  后续的每个子图的 type-hint propagation 是否也能够采用类似的思路？ 用于处理来自每个Source之间的类型传播，只不过此时的 check 的 conflict 变成了 field conflict
     public void run() {
-        propagateConstArgs();
+        MarkWrapperFunctionAndSize();
     }
 
-    private void propagateConstArgs() {
-        var intraSolverMap = interSolver.intraSolverMap;
-        var graphManager = interSolver.graphManager;
-        var exprManager = interSolver.exprManager;
-
-        var wrapperCSSet = new HashSet<CallSite>();
-
+    /**
+     * Find and mark alloc wrapper functions in the program,
+     * then calculate the allocated size information and set these size to the skeletons.
+     */
+    private void MarkWrapperFunctionAndSize() {
         // Process malloc call sites
-        processMallocCallSites(wrapperCSSet);
-
+        processMallocWrapperAndSize();
         // Process calloc call sites
-        processCallocCallSites(wrapperCSSet);
+        processCallocWrapperAndSize();
+
+        for (var wrapperFunc: wrapperFunctions) {
+            Logging.info("ConstPropagator",
+                    String.format("Found Wrapper Function %s", wrapperFunc.value.getName()));
+        }
     }
 
-    private void processMallocCallSites(Set<CallSite> wrapperCSSet) {
+    private void processMallocWrapperAndSize() {
         for (var cs : interSolver.mallocCs) {
             if (cs.arguments.isEmpty()) continue;
 
@@ -136,10 +169,11 @@ public class ConstPropagator {
             Set<NMAE> reachableNodes = findReachableNodes(sensitiveArg, cs.caller);
             var mayWrapperCSInfo = markPossibleWrapperCS(reachableNodes, AllocType.MALLOC, ConstType.MALLOC_SIZE);
             var finalWrapperCSInfo = confirmWrapperCallSites(mayWrapperCSInfo, cs);
+            updateReceivers(finalWrapperCSInfo);
         }
     }
 
-    private void processCallocCallSites(Set<CallSite> wrapperCSSet) {
+    private void processCallocWrapperAndSize() {
         for (var cs : interSolver.callocCs) {
             if (cs.arguments.size() < 2) continue;
 
@@ -162,6 +196,7 @@ public class ConstPropagator {
 
             var mayWrapperCSInfo = mergeCallocWrapperCSInfo(mayWrapperCSInfoCount, mayWrapperCSInfoSize);
             var finalWrapperCSInfo = confirmWrapperCallSites(mayWrapperCSInfo, cs);
+            updateReceivers(finalWrapperCSInfo);
         }
     }
 
@@ -234,7 +269,12 @@ public class ConstPropagator {
             boolean hasPath = false;
             for (var from : sensitiveRetFacts) {
                 for (var to : receiverFacts) {
+                    // If reachable, confirmed
                     if (graphManager.hasDataFlowPath(from, to)) {
+                        // Mark and Confirm Wrapper Functions.
+                        wrapperFunctions.add(interSolver.callGraph.getNodebyAddr(callsite.calleeAddr));
+
+                        // Update the wrapper call site info
                         newWrapperCSInfoMap.put(callsite, mayWrapperCSInfo.get(callsite));
                         var callee = interSolver.callGraph.getNodebyAddr(callsite.calleeAddr);
                         Logging.debug("ConstPropagator",
@@ -290,30 +330,18 @@ public class ConstPropagator {
     }
 
 
-    private void updateReceivers(Set<CallSite> wrapperCallSites, Set<CallSite> wrapperCSSet, int type) {
-    }
-
-    // TODO:
-    //  1. Constructing CallSite when building CallGraph, there should be a Map<CallSite, Callee> and a Map<Callee, Set<CallSite>>
-    //  2. Reversing constructing the CallSite-Chain (Max-depth: 4? Because wrapper function is not that deep)
-    //  3. For each chain, start from the nearest CallSite, check:
-    //      1. If CallSite Args can not flow to the malloc(1) or calloc(2)'s corresponding arguments, return.
-    //      2. If there are No ConstArg, but arguments can flow to the malloc(1) or calloc(2)'s corresponding arguments, goto the next CallSite and check.
-    //      3. If there are ConstArg and can flow to the malloc(1) or calloc(2)'s corresponding arguments,
-    //          check if the malloc(1) or calloc(2)'s return value can flow to the current callSite's receiver.
-    //          If so, mark current callSite's receiver as composite and set the size, return.
-    //      We will not handle Partial ConstArg, because it's very very rare.
-    //  4. Build Map<Callee, Set<ReturnSize>> from the marked CallSites, if there are multiple sizes, mark it as EvilNode and mark RETURN edges from them as EvilEdges. (Actually TFG should be split)
-
-    // TODO:
-    //  1. If a variable is set to different size (with memset) with the same function, it must be a union, mark it as EvilNode and mark all edges to them as EvilEdges.
-    //  2. For those Skeletons with size, we propagate them along the TFG, propagate should be 多点扩散法：
-    //      即：假设图中有 n 个这样的节点，每一轮我们都将节点的信息，沿着dataflow边传播到它的邻居（函数的所有？）节点（是否按照函数粒度进行每次传播），然后我们检查这些新传播到的邻居节点的信息是否存在冲突，如果不存在，那么
-    //      我们就把他们视作一个整体节点（邻居），然后继续传播。如果存在冲突，那么这个新的邻居节点就不应该被加入已有的整体节点，且该新节点和整体节点相连的所有的边都应该被删除。
-    //  后续的每个子图的 type-hint propagation 是否也能够采用类似的思路？ 用于处理来自每个Source之间的类型传播，只不过此时的 check 的 conflict 变成了 field conflict
-
-    // TODO: Implement me.
-    private boolean hasPathFromAllocPtrToReceiver(NMAE allocPtr, NMAE receiver) {
-        return false;
+    private void updateReceivers(Map<CallSite, WrapperCallSiteInfo> finalWrapperCSInfo) {
+        for (var entry: finalWrapperCSInfo.entrySet()) {
+            var callSite = entry.getKey();
+            var wrapperCSInfo = entry.getValue();
+            var receiver = callSite.receiver;
+            var receiverFacts = interSolver.intraSolverMap.get(callSite.caller)
+                    .getOrCreateDataFlowFacts(receiver);
+            for (var expr: receiverFacts) {
+                var skt = this.exprManager.getOrCreateSkeleton(expr);
+                skt.setComposite(true);
+                skt.setSizeFromCallSite(wrapperCSInfo.getSize(), callSite);
+            }
+        }
     }
 }
