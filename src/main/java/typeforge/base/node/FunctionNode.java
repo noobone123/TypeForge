@@ -56,7 +56,7 @@ public class FunctionNode extends NodeBase<Function> {
     public HashSet<HighSymbol> mergedVariables = new HashSet<>();
 
     public static boolean isMergedVariableExpr(FunctionNode funcNode, NMAE expr) {
-        if (expr.isNormalConst() || expr.isArgConst()) { return false; }
+        if (expr.isNormalConst() || expr.isConstArg()) { return false; }
         if (expr.isTemp) { return false; }
         var rootSym = expr.getRootHighSymbol();
         if (rootSym.isGlobal()) { return false; }
@@ -340,7 +340,6 @@ public class FunctionNode extends NodeBase<Function> {
 
         return result.isEmpty() ? Optional.empty() : Optional.of(result);
     }
-
 
     private void splitMergedVariables(HighSymbol highSym) {
         var variable = highSym.getHighVariable();

@@ -72,6 +72,113 @@ public class TFGManager {
         }
     }
 
+    /**
+     * Find all nodes which are reachable target node within a given maxDepth.
+     * @param target The target node
+     * @param maxDepth The maxDepth of the search
+     * @return A set of reachable nodes
+     */
+    public Set<NMAE> findReachableNodes(NMAE target, int maxDepth) {
+        TypeFlowGraph<NMAE> graph = exprToGraph.get(target);
+        if (graph == null) {
+            return Collections.emptySet();
+        }
+
+        Set<NMAE> reachableNodes = new HashSet<>();
+        // Include the target node itself
+        reachableNodes.add(target);
+
+        Queue<NMAE> queue = new LinkedList<>();
+        Map<NMAE, Integer> distances = new HashMap<>();
+        queue.add(target);
+        distances.put(target, 0);
+
+        while (!queue.isEmpty()) {
+            NMAE current = queue.poll();
+            int currentDistance = distances.get(current);
+
+            if (currentDistance < maxDepth) {
+                // Look at all incoming edges (reverse direction)
+                for (TypeFlowGraph.TypeFlowEdge edge : graph.getGraph().incomingEdgesOf(current)) {
+                    TypeFlowGraph.EdgeType edgeType = edge.getType();
+
+                    // Only follow DATAFLOW, CALL, or RETURN edges
+                    if (edgeType == TypeFlowGraph.EdgeType.DATAFLOW ||
+                            edgeType == TypeFlowGraph.EdgeType.CALL ||
+                            edgeType == TypeFlowGraph.EdgeType.RETURN) {
+
+                        NMAE source = graph.getGraph().getEdgeSource(edge);
+                        if (!distances.containsKey(source)) {
+                            distances.put(source, currentDistance + 1);
+                            reachableNodes.add(source);
+                            queue.add(source);
+                        }
+                    }
+                }
+            }
+        }
+
+        return reachableNodes;
+    }
+
+    /**
+     * Check if there is a data flow path from one node to another.
+     * @param from The source node
+     * @param to The target node
+     * @return True if there is a data flow path, false otherwise
+     */
+    public boolean hasDataFlowPath(NMAE from, NMAE to) {
+        // Check if both nodes are in the same graph
+        TypeFlowGraph<NMAE> fromGraph = exprToGraph.get(from);
+        TypeFlowGraph<NMAE> toGraph = exprToGraph.get(to);
+
+        if (fromGraph == null || toGraph == null || fromGraph != toGraph) {
+            return false;
+        }
+
+        // If they're the same node, return true
+        if (from.equals(to)) {
+            return true;
+        }
+
+        // BFS to find a path from 'from' to 'to' following relevant edges
+        Queue<NMAE> queue = new LinkedList<>();
+        Set<NMAE> visited = new HashSet<>();
+
+        queue.add(from);
+        visited.add(from);
+
+        while (!queue.isEmpty()) {
+            NMAE current = queue.poll();
+
+            // Check all outgoing edges
+            for (TypeFlowGraph.TypeFlowEdge edge : fromGraph.getGraph().outgoingEdgesOf(current)) {
+                TypeFlowGraph.EdgeType edgeType = edge.getType();
+
+                // Only follow DATAFLOW, CALL, or RETURN edges
+                if (edgeType == TypeFlowGraph.EdgeType.DATAFLOW ||
+                        edgeType == TypeFlowGraph.EdgeType.CALL ||
+                        edgeType == TypeFlowGraph.EdgeType.RETURN) {
+
+                    NMAE target = fromGraph.getGraph().getEdgeTarget(edge);
+
+                    // If we've reached the destination, return true
+                    if (target.equals(to)) {
+                        return true;
+                    }
+
+                    // If we haven't visited this node yet, add it to the queue
+                    if (!visited.contains(target)) {
+                        visited.add(target);
+                        queue.add(target);
+                    }
+                }
+            }
+        }
+
+        // No path found
+        return false;
+    }
 
     /**
      * If a graph has no nodes with fields, it is redundant and should be removed.

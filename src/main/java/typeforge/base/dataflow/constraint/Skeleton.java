@@ -145,11 +145,13 @@ public class Skeleton {
     public void setSizeFromCallSite(long size, CallSite callSite) {
         var source = new SizeSource(size, callSite);
         sizeSources.add(source);
+        Logging.debug("Skeleton", String.format("Skeleton_%s setting size from callsite: 0x%x", shortUUID, size));
     }
 
     public void setSizeFromExpr(long size, NMAE expr) {
         var source = new SizeSource(size, expr);
         sizeSources.add(source);
+        Logging.debug("Skeleton", String.format("Skeleton_%s setting size from expr: 0x%x", shortUUID, size));
     }
 
     public Set<SizeSource> getSizeSources() {

@@ -90,7 +90,7 @@ public class NMAE {
 
         if (isGlobal) {
             this.prefix = "[Global]";
-        } else if (isArgConst()) {
+        } else if (isConstArg()) {
             this.prefix = String.format("[ConstArg-%s-%d]", this.callSite, this.argIndex);
             this.function = callSite.caller;
         } else if (isNormalConst()) {
@@ -160,7 +160,7 @@ public class NMAE {
         return isNormalConst;
     }
 
-    public boolean isArgConst() {
+    public boolean isConstArg() {
         return isArgConst && callSite != null && argIndex != -1;
     }
 

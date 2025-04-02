@@ -1,9 +1,14 @@
 package typeforge.base.dataflow.solver;
 
+import ghidra.program.model.listing.Function;
+import ghidra.program.model.pcode.Varnode;
 import typeforge.base.dataflow.expression.NMAE;
-import typeforge.utils.Global;
+import typeforge.base.node.CallSite;
+import typeforge.utils.FunctionHelper;
+import typeforge.utils.Logging;
 
-import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * There are many constants in the TFG, such as: malloc(0x10), memset(0x20), and sizes in built MMAE's skeletons.
@@ -36,21 +41,130 @@ public class ConstPropagator {
     private void propagateArgConst() {
         var intraSolverMap = interSolver.intraSolverMap;
         var graphManager = interSolver.graphManager;
+        var exprManager = interSolver.exprManager;
 
-        var mallocCs = interSolver.mallocCs;
-        var callocCs = interSolver.callocCs;
+        var wrapperCSSet = new HashSet<CallSite>();
 
-        for (var cs: callocCs) {
-            if (cs.caller.getName().equals("ck_calloc")) {
-                var arg1 = cs.arguments.get(0);
-                var arg2 = cs.arguments.get(1);
-                var receiver = cs.receiver;
-                var arg1Facts = intraSolverMap.get(cs.caller).getOrCreateDataFlowFacts(arg1);
-                for (var arg1Fact: arg1Facts) {
-                    graphManager.dumpPartialTFG(arg1Fact, 5, new File(Global.outputDirectory));
-                }
+        // Process malloc call sites
+        processMallocCallSites(wrapperCSSet);
+
+        // Process calloc call sites
+        // processCallocCallSites(wrapperCSSet);
+    }
+
+    private void processMallocCallSites(Set<CallSite> wrapperCSSet) {
+        for (var cs : interSolver.mallocCs) {
+            if (cs.arguments.isEmpty()) continue;
+
+            var sensitiveArg = cs.arguments.get(0);
+
+            // Skip direct calls with constant arguments
+            if (sensitiveArg.isConstant()) {
+                Logging.debug("ConstPropagator",
+                        String.format("Found malloc with constant argument: %s, skip", cs));
+                continue;
+            }
+
+            // Find wrapper call sites and update receivers
+            Set<NMAE> reachableNodes = findReachableNodes(sensitiveArg, cs.caller);
+            Set<NMAE> constArgs = filterConstArgs(reachableNodes);
+            Set<CallSite> wrapperCallSites = findWrapperCallSites(constArgs, cs);
+        }
+    }
+
+    private void processCallocCallSites(Set<CallSite> wrapperCSSet) {
+        for (var cs : interSolver.callocCs) {
+            if (cs.arguments.size() < 2) continue;
+
+            var countArg = cs.arguments.get(0);
+            var sizeArg = cs.arguments.get(1);
+            var sensitiveRet = cs.receiver;
+
+            // Skip direct calls with constant arguments
+            if (countArg.isConstant() && sizeArg.isConstant()) {
+                Logging.debug("ConstPropagator",
+                        String.format("Found calloc with constant arguments: %s, skip", cs));
+                continue;
+            }
+
+            // Find common wrapper call sites for both arguments
+            Set<NMAE> reachableNodesCount = findReachableNodes(countArg, cs.caller);
+            Set<NMAE> reachableNodesSize = findReachableNodes(sizeArg, cs.caller);
+
+            Set<NMAE> constArgsCount = filterConstArgs(reachableNodesCount);
+            Set<NMAE> constArgsSize = filterConstArgs(reachableNodesSize);
+
+            // Find wrapper call sites that can reach both arguments
+            Set<CallSite> wrapperCountCallSites = findWrapperCallSites(constArgsCount, cs);
+            Set<CallSite> wrapperSizeCallSites = findWrapperCallSites(constArgsSize, cs);
+
+            // Find common wrapper call sites
+            Set<CallSite> commonWrapperCallSites = new HashSet<>(wrapperCountCallSites);
+            commonWrapperCallSites.retainAll(wrapperSizeCallSites);
+
+            // updateReceivers(commonWrapperCallSites, wrapperCSSet);
+        }
+    }
+
+    private Set<NMAE> findReachableNodes(Varnode sensitiveArg, Function callSiteFunc) {
+        var intraSolver = interSolver.intraSolverMap.get(callSiteFunc);
+        var reachableNodes = new HashSet<NMAE>();
+
+        for (var sensitiveExpr : intraSolver.getOrCreateDataFlowFacts(sensitiveArg)) {
+            var result = interSolver.graphManager.findReachableNodes(sensitiveExpr, 10);
+            Logging.debug("ConstPropagator",
+                    String.format("Size of reachable nodes to %s: %d", sensitiveExpr, result.size()));
+            reachableNodes.addAll(result);
+        }
+
+        return reachableNodes;
+    }
+
+    private Set<NMAE> filterConstArgs(Set<NMAE> nodes) {
+        Set<NMAE> constArgs = new HashSet<>();
+        for (var node : nodes) {
+            if (node.isConstArg()) {
+                Logging.debug("ConstPropagator",
+                        String.format("Found Arg Const which can flow to callsite's argument: %s", node));
+                constArgs.add(node);
             }
         }
+        return constArgs;
+    }
+
+    private Set<CallSite> findWrapperCallSites(Set<NMAE> constArgs, CallSite wrappedCS) {
+        Set<CallSite> wrapperCallSites = new HashSet<>();
+        var graphManager = interSolver.graphManager;
+        var intraSolverMap = interSolver.intraSolverMap;
+
+        for (var constArg : constArgs) {
+            var constArgCSReceiver = constArg.getCallSite().receiver;
+            var receiverFacts = intraSolverMap.get(constArg.getCallSite().caller)
+                    .getOrCreateDataFlowFacts(constArgCSReceiver);
+            var sensitiveRetFacts = intraSolverMap.get(wrappedCS.caller)
+                    .getOrCreateDataFlowFacts(wrappedCS.receiver);
+
+            boolean hasPath = false;
+            for (var from : sensitiveRetFacts) {
+                for (var to : receiverFacts) {
+                    if (graphManager.hasDataFlowPath(from, to)) {
+                        wrapperCallSites.add(constArg.getCallSite());
+                        var callee = interSolver.callGraph.getNodebyAddr(constArg.getCallSite().calleeAddr);
+                        Logging.debug("ConstPropagator",
+                                String.format("Found Wrapper Function %s called by %s", callee.value.getName(), constArg.getCallSite()));
+                        hasPath = true;
+                        break;
+                    }
+                }
+                if (hasPath) break;
+            }
+        }
+
+        return wrapperCallSites;
+    }
+
+    private void updateReceivers(Set<CallSite> wrapperCallSites, Set<CallSite> wrapperCSSet, int type) {
+
     }
 
     // TODO:
