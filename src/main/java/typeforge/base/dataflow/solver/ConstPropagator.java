@@ -4,10 +4,11 @@ import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.Varnode;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.node.CallSite;
-import typeforge.utils.FunctionHelper;
 import typeforge.utils.Logging;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -28,6 +29,71 @@ import java.util.Set;
  */
 public class ConstPropagator {
 
+    enum AllocType {
+        MALLOC,
+        CALLOC
+    }
+
+    enum ConstType {
+        MALLOC_SIZE,
+        CALLOC_NITEMS,
+        CALLOC_SIZE,
+    }
+
+    static class WrapperCallSiteInfo {
+        public CallSite callSite;
+        public AllocType allocType;
+
+        public long mallocSize;
+        public long callocNitems;
+        public long callocSize;
+
+        Set<NMAE> constArgs;
+
+        public WrapperCallSiteInfo(CallSite callSite, AllocType allocType) {
+            this.callSite = callSite;
+            this.allocType = allocType;
+            this.constArgs = new HashSet<>();
+        }
+
+        public WrapperCallSiteInfo(CallSite callSite, AllocType allocType, long callocNitems, long callocSize) {
+            this.callSite = callSite;
+            this.allocType = allocType;
+            this.callocNitems = callocNitems;
+            this.callocSize = callocSize;
+            this.constArgs = new HashSet<>();
+        }
+
+        public void updateConstArgs(NMAE constArg) {
+            this.constArgs.add(constArg);
+        }
+
+        public Set<NMAE> getConstArgs() {
+            return this.constArgs;
+        }
+
+        public void updateMallocSizeInformation(long size) {
+            this.mallocSize = size;
+        }
+
+        public void updateCallocNitemsInformation(long nitems) {
+            this.callocNitems = nitems;
+        }
+
+        public void updateCallocSizeInformation(long size) {
+            this.callocSize = size;
+        }
+
+        public long getSize() {
+            if (allocType == AllocType.MALLOC) {
+                return this.mallocSize;
+            } else if (allocType == AllocType.CALLOC) {
+                return this.callocNitems * this.callocSize;
+            }
+            return 0;
+        }
+    }
+
     InterSolver interSolver = null;
 
     public ConstPropagator(InterSolver interSolver) {
@@ -35,10 +101,10 @@ public class ConstPropagator {
     }
 
     public void run() {
-        propagateArgConst();
+        propagateConstArgs();
     }
 
-    private void propagateArgConst() {
+    private void propagateConstArgs() {
         var intraSolverMap = interSolver.intraSolverMap;
         var graphManager = interSolver.graphManager;
         var exprManager = interSolver.exprManager;
@@ -49,7 +115,7 @@ public class ConstPropagator {
         processMallocCallSites(wrapperCSSet);
 
         // Process calloc call sites
-        // processCallocCallSites(wrapperCSSet);
+        processCallocCallSites(wrapperCSSet);
     }
 
     private void processMallocCallSites(Set<CallSite> wrapperCSSet) {
@@ -65,10 +131,11 @@ public class ConstPropagator {
                 continue;
             }
 
+
             // Find wrapper call sites and update receivers
             Set<NMAE> reachableNodes = findReachableNodes(sensitiveArg, cs.caller);
-            Set<NMAE> constArgs = filterConstArgs(reachableNodes);
-            Set<CallSite> wrapperCallSites = findWrapperCallSites(constArgs, cs);
+            var mayWrapperCSInfo = markPossibleWrapperCS(reachableNodes, AllocType.MALLOC, ConstType.MALLOC_SIZE);
+            var finalWrapperCSInfo = confirmWrapperCallSites(mayWrapperCSInfo, cs);
         }
     }
 
@@ -78,7 +145,6 @@ public class ConstPropagator {
 
             var countArg = cs.arguments.get(0);
             var sizeArg = cs.arguments.get(1);
-            var sensitiveRet = cs.receiver;
 
             // Skip direct calls with constant arguments
             if (countArg.isConstant() && sizeArg.isConstant()) {
@@ -91,18 +157,11 @@ public class ConstPropagator {
             Set<NMAE> reachableNodesCount = findReachableNodes(countArg, cs.caller);
             Set<NMAE> reachableNodesSize = findReachableNodes(sizeArg, cs.caller);
 
-            Set<NMAE> constArgsCount = filterConstArgs(reachableNodesCount);
-            Set<NMAE> constArgsSize = filterConstArgs(reachableNodesSize);
+            var mayWrapperCSInfoCount = markPossibleWrapperCS(reachableNodesCount, AllocType.CALLOC, ConstType.CALLOC_NITEMS);
+            var mayWrapperCSInfoSize = markPossibleWrapperCS(reachableNodesSize, AllocType.CALLOC, ConstType.CALLOC_SIZE);
 
-            // Find wrapper call sites that can reach both arguments
-            Set<CallSite> wrapperCountCallSites = findWrapperCallSites(constArgsCount, cs);
-            Set<CallSite> wrapperSizeCallSites = findWrapperCallSites(constArgsSize, cs);
-
-            // Find common wrapper call sites
-            Set<CallSite> commonWrapperCallSites = new HashSet<>(wrapperCountCallSites);
-            commonWrapperCallSites.retainAll(wrapperSizeCallSites);
-
-            // updateReceivers(commonWrapperCallSites, wrapperCSSet);
+            var mayWrapperCSInfo = mergeCallocWrapperCSInfo(mayWrapperCSInfoCount, mayWrapperCSInfoSize);
+            var finalWrapperCSInfo = confirmWrapperCallSites(mayWrapperCSInfo, cs);
         }
     }
 
@@ -120,38 +179,69 @@ public class ConstPropagator {
         return reachableNodes;
     }
 
-    private Set<NMAE> filterConstArgs(Set<NMAE> nodes) {
-        Set<NMAE> constArgs = new HashSet<>();
-        for (var node : nodes) {
+    /**
+     * Mark possible wrapper call sites based on the reachable nodes and their allocation types.
+     * also update important constant information for malloc/calloc.
+     */
+    private Map<CallSite, WrapperCallSiteInfo>
+        markPossibleWrapperCS(Set<NMAE> reachableNodes, AllocType allocType, ConstType constType) {
+
+        Map<CallSite, WrapperCallSiteInfo> mayWrapperCSInfoMap = new HashMap<>();
+
+        for (var node : reachableNodes) {
             if (node.isConstArg()) {
-                Logging.debug("ConstPropagator",
-                        String.format("Found Arg Const which can flow to callsite's argument: %s", node));
-                constArgs.add(node);
+                var wrapperCS = node.getCallSite();
+                var wrapperCSInfo = mayWrapperCSInfoMap.computeIfAbsent(wrapperCS,
+                        cs -> new WrapperCallSiteInfo(cs, allocType));
+
+                wrapperCSInfo.updateConstArgs(node);
+                if (allocType == AllocType.MALLOC) {
+                    wrapperCSInfo.updateMallocSizeInformation(node.getConstant());
+                    Logging.debug("ConstPropagator",
+                            String.format("Found Arg Const which can flow to Malloc's size: %s", node));
+                } else if (allocType == AllocType.CALLOC) {
+                    if (constType == ConstType.CALLOC_NITEMS) {
+                        wrapperCSInfo.updateCallocNitemsInformation(node.getConstant());
+                        Logging.debug("ConstPropagator",
+                                String.format("Found Arg Const which can flow to Calloc's nitems: %s", node));
+                    } else if (constType == ConstType.CALLOC_SIZE) {
+                        wrapperCSInfo.updateCallocSizeInformation(node.getConstant());
+                        Logging.debug("ConstPropagator",
+                                String.format("Found Arg Const which can flow to Calloc's size: %s", node));
+                    }
+                }
             }
         }
-        return constArgs;
+
+        return mayWrapperCSInfoMap;
     }
 
-    private Set<CallSite> findWrapperCallSites(Set<NMAE> constArgs, CallSite wrappedCS) {
-        Set<CallSite> wrapperCallSites = new HashSet<>();
+    private Map<CallSite, WrapperCallSiteInfo> confirmWrapperCallSites(
+            Map<CallSite, WrapperCallSiteInfo> mayWrapperCSInfo,
+            CallSite allocCS
+    ) {
+        Map<CallSite, WrapperCallSiteInfo> newWrapperCSInfoMap = new HashMap<>();
         var graphManager = interSolver.graphManager;
         var intraSolverMap = interSolver.intraSolverMap;
 
-        for (var constArg : constArgs) {
-            var constArgCSReceiver = constArg.getCallSite().receiver;
-            var receiverFacts = intraSolverMap.get(constArg.getCallSite().caller)
-                    .getOrCreateDataFlowFacts(constArgCSReceiver);
-            var sensitiveRetFacts = intraSolverMap.get(wrappedCS.caller)
-                    .getOrCreateDataFlowFacts(wrappedCS.receiver);
+        for (var callsite: mayWrapperCSInfo.keySet()) {
+            var wrapperCSReceiver = callsite.receiver;
+            var receiverFacts = intraSolverMap.get(callsite.caller)
+                    .getOrCreateDataFlowFacts(wrapperCSReceiver);
+            var sensitiveRetFacts = intraSolverMap.get(allocCS.caller)
+                    .getOrCreateDataFlowFacts(allocCS.receiver);
 
             boolean hasPath = false;
             for (var from : sensitiveRetFacts) {
                 for (var to : receiverFacts) {
                     if (graphManager.hasDataFlowPath(from, to)) {
-                        wrapperCallSites.add(constArg.getCallSite());
-                        var callee = interSolver.callGraph.getNodebyAddr(constArg.getCallSite().calleeAddr);
+                        newWrapperCSInfoMap.put(callsite, mayWrapperCSInfo.get(callsite));
+                        var callee = interSolver.callGraph.getNodebyAddr(callsite.calleeAddr);
                         Logging.debug("ConstPropagator",
-                                String.format("Found Wrapper Function %s called by %s", callee.value.getName(), constArg.getCallSite()));
+                                String.format("Found Wrapper Function %s called by %s with size: 0x%x",
+                                        callee.value.getName(),
+                                        callsite,
+                                        newWrapperCSInfoMap.get(callsite).getSize()));
                         hasPath = true;
                         break;
                     }
@@ -160,11 +250,47 @@ public class ConstPropagator {
             }
         }
 
-        return wrapperCallSites;
+        // Print mayWrapperCSInfo - newWrapperCSInfoMap
+        // As Ghidra may miss some dataflow edges due to tail call, some not all Wrapper Function call be successfully identified.
+        var temp = new HashSet<>(mayWrapperCSInfo.keySet());
+        temp.removeAll(newWrapperCSInfoMap.keySet());
+        for (var callsite : temp) {
+            Logging.trace("ConstPropagator",
+                    String.format("Found Wrapper Function %s, but not confirmed", callsite));
+        }
+
+        return newWrapperCSInfoMap;
     }
 
-    private void updateReceivers(Set<CallSite> wrapperCallSites, Set<CallSite> wrapperCSSet, int type) {
 
+    private Map<CallSite, WrapperCallSiteInfo> mergeCallocWrapperCSInfo(
+            Map<CallSite, WrapperCallSiteInfo> mayWrapperCSInfoCount,
+            Map<CallSite, WrapperCallSiteInfo> mayWrapperCSInfoSize
+    ) {
+        Map<CallSite, WrapperCallSiteInfo> mergedMap = new HashMap<>();
+        // Key: CallSite should exist in both maps
+        for (var entry : mayWrapperCSInfoCount.entrySet()) {
+            var callSite = entry.getKey();
+            if (mayWrapperCSInfoSize.containsKey(callSite)) {
+                var wrapperCSInfoCount = entry.getValue();
+                var wrapperCSInfoSize = mayWrapperCSInfoSize.get(callSite);
+                var newWrapperCSInfo = new WrapperCallSiteInfo(
+                        callSite,
+                        AllocType.CALLOC,
+                        wrapperCSInfoCount.callocNitems,
+                        wrapperCSInfoSize.callocSize
+                );
+                newWrapperCSInfo.constArgs.addAll(wrapperCSInfoCount.constArgs);
+                newWrapperCSInfo.constArgs.addAll(wrapperCSInfoSize.constArgs);
+
+                mergedMap.put(callSite, newWrapperCSInfo);
+            }
+        }
+        return mergedMap;
+    }
+
+
+    private void updateReceivers(Set<CallSite> wrapperCallSites, Set<CallSite> wrapperCSSet, int type) {
     }
 
     // TODO:
