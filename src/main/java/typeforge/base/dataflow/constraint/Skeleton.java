@@ -171,6 +171,10 @@ public class Skeleton {
         this.sizeSources.add(newSizeSource);
     }
 
+    public void updateSizeSource(SizeSource newSizeSource) {
+        this.sizeSources.add(newSizeSource);
+    }
+
     public void setElementSize(long size) {
         this.elementSize.add(size);
         Logging.debug("Skeleton", String.format("Skeleton_%s setting element size: %d", shortUUID, size));
@@ -268,6 +272,20 @@ public class Skeleton {
             return this.uuid.equals(((Skeleton) obj).uuid);
         }
         return false;
+    }
+
+    public boolean checkSizeConflict(SizeSource other) {
+        if (sizeSources.isEmpty()) {
+            return false;
+        } else {
+            var sizes = new HashSet<Long>();
+            for (var sizeSource: sizeSources) {
+                sizes.add(sizeSource.getSize());
+            }
+
+            var otherSize = other.getSize();
+            return !sizes.contains(otherSize);
+        }
     }
 
     public boolean isEmpty() {

@@ -1,19 +1,18 @@
 package typeforge.base.dataflow.solver;
 
+import generic.stl.Pair;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.Varnode;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.constraint.SizeSource;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.node.CallSite;
 import typeforge.base.node.FunctionNode;
 import typeforge.utils.Logging;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 /**
  * There are many constants in the TFG, such as: malloc(0x10), memset(0x20), and sizes in built MMAE's skeletons.
@@ -109,9 +108,12 @@ public class ConstPropagator {
     NMAEManager exprManager;
     TFGManager graphManager;
     Set<FunctionNode> wrapperFunctions;
-    Map<NMAE, Set<NMAE>> wrapperEvilEdges;
+
+    Set<Pair<NMAE, NMAE>> wrapperEvilEdges;
     Set<NMAE> unionEvilNodes;
-    Map<NMAE, Set<NMAE>> unionEvilEdges;
+    Set<Pair<NMAE, NMAE>> sizeConflictEdges;
+    Set<NMAE> sizeConflictNodes;
+    Map<NMAE, Map<SizeSource, NMAE>> conflictInfoMap;
 
     public ConstPropagator(InterSolver interSolver) {
         this.interSolver = interSolver;
@@ -119,22 +121,59 @@ public class ConstPropagator {
         this.graphManager = this.interSolver.graphManager;
 
         wrapperFunctions = new HashSet<>();
-        wrapperEvilEdges = new HashMap<>();
+
+        wrapperEvilEdges = new HashSet<>();
         unionEvilNodes = new HashSet<>();
-        unionEvilEdges = new HashMap<>();
+        sizeConflictEdges = new HashSet<>();
+        sizeConflictNodes = new HashSet<>();
+        conflictInfoMap = new HashMap<>();
     }
 
-
-    // TODO:
-    //  2. For those Skeletons with size, we propagate them along the TFG, propagate should be 多点扩散法：
-    //      即：假设图中有 n 个这样的节点，每一轮我们都将节点的信息，沿着dataflow边传播到它的邻居（函数的所有？）节点（是否按照函数粒度进行每次传播），然后我们检查这些新传播到的邻居节点的信息是否存在冲突，如果不存在，那么
-    //      我们就把他们视作一个整体节点（邻居），然后继续传播。如果存在冲突，那么这个新的邻居节点就不应该被加入已有的整体节点，且该新节点和整体节点相连的所有的边都应该被删除。
-    //  后续的每个子图的 type-hint propagation 是否也能够采用类似的思路？ 用于处理来自每个Source之间的类型传播，只不过此时的 check 的 conflict 变成了 field conflict
     public void run() {
         markWrapperFunctionAndSize();
         removeEvilEdgesInWrapper();
         handleMultiSizeSources();
         removeEvilEdgesInUnions();
+
+        sizeConstantPropagation();
+    }
+
+
+    /**
+     * After all size information of skeletons is collected, we can propagate the size information along the TFG forward.
+     * And detect then mark the size conflicts.
+     */
+    private void sizeConstantPropagation() {
+        // 1st: Get all propagated sources
+        Map<NMAE, Skeleton> propagatedSources = new HashMap<>();
+        for (var entry: exprManager.getExprToSkeletonBeforeMerge().entrySet()) {
+            var expr = entry.getKey();
+            if (unionEvilNodes.contains(expr)) {
+                continue;
+            }
+            if (expr.isReference()) {
+                // Reference mains stack allocated expr, just skip
+                continue;
+            }
+            var skt = entry.getValue();
+            if (skt.hasSizeSource()) {
+                if (skt.getSizeSources().size() > 1) {
+                    Logging.warn("ConstPropagator",
+                            String.format("Skeleton of %s has multiple size sources: %s", expr, skt.getSizeSources()));
+                } else {
+                    propagatedSources.put(expr, skt);
+                }
+            }
+        }
+        Logging.info("ConstPropagator",
+                String.format("There are total %d sources with size information ready to propagate.", propagatedSources.size()));
+
+        // 2nd: Propagate size information forward the dataflow/call/return edges in the TFG
+        doPropagateBFSOnTFG(propagatedSources, true);
+        doPropagateBFSOnTFG(propagatedSources, false);
+
+        Logging.info("ConstPropagator",
+                String.format("There are total %d size conflict edges, %d size conflict nodes", sizeConflictEdges.size(), sizeConflictNodes.size()));
     }
 
     /**
@@ -170,7 +209,9 @@ public class ConstPropagator {
                     for (var expr2: wrapperCSReceiverExpr) {
                         if (graphManager.hasDataFlowPath(expr1, expr2)) {
                             // Mark the edge as evil
-                            wrapperEvilEdges.computeIfAbsent(expr1, k -> new HashSet<>()).add(expr2);
+                            wrapperEvilEdges.add(
+                                    new Pair<>(expr1, expr2) // wrapperRetExpr -> wrapperCSReceiverExpr
+                            );
                             Logging.debug("ConstPropagator",
                                     String.format("Found Evil Edge %s -> %s", expr1, expr2));
                         }
@@ -180,12 +221,10 @@ public class ConstPropagator {
         }
 
         // Remove EvilEdges
-        for (var entry: wrapperEvilEdges.entrySet()) {
-            var from = entry.getKey();
-            var toSet = entry.getValue();
-            for (var to: toSet) {
-                graphManager.removeEdge(from, to);
-            }
+        for (var pair: wrapperEvilEdges) {
+            var from = pair.first;
+            var to = pair.second;
+            graphManager.removeEdge(from, to);
         }
     }
 
@@ -467,6 +506,109 @@ public class ConstPropagator {
                 var skt = this.exprManager.getOrCreateSkeleton(expr);
                 skt.setComposite(true);
                 skt.setSizeFromCallSite(wrapperCSInfo.getSize(), callSite);
+            }
+        }
+    }
+
+
+    /**
+     * Propagate size information in BFS on the TFG, propagate should start from each source in each round.
+     *
+     * @param propagatedSources the sources to propagate
+     * @param forward if true, propagate forward, otherwise backward
+     */
+    private void doPropagateBFSOnTFG(Map<NMAE, Skeleton> propagatedSources, boolean forward) {
+        // When propagating, the information may be propagated to multiple nodes, and forming a
+        // continuously expanding region. So we need to keep track of the source nodes and their
+        // border nodes to do next round of BFS propagation.
+        Map<NMAE, Set<NMAE>> sourceToBorderNodes = new HashMap<>();
+        // initial border nodes are the source nodes itself
+        for (var expr: propagatedSources.keySet()) {
+            var borderNodes = new HashSet<NMAE>();
+            borderNodes.add(expr);
+            sourceToBorderNodes.put(expr, borderNodes);
+        }
+
+        // Used to recording the propagated nodes from each source node,
+        // avoid repeating propagate to the same node for each source.
+        Map<NMAE, Set<NMAE>> sourceToPropagatedNodes = new HashMap<>();
+        for (var expr: propagatedSources.keySet()) {
+            sourceToPropagatedNodes.put(expr, new HashSet<>());
+            sourceToPropagatedNodes.get(expr).add(expr);
+        }
+
+        // Process sources in a deterministic order
+        List<NMAE> sortedSources = new ArrayList<>(propagatedSources.keySet());
+        sortedSources.sort(Comparator.comparing(NMAE::hashCode));
+
+        boolean hasNewBorderNode = true;
+        // If no new border node can be found, we stop the propagation.
+        while (hasNewBorderNode) {
+            hasNewBorderNode = false;
+
+            // Each round, propagate size information from each source.
+            for (var source: sortedSources) {
+                var sourceSkt = propagatedSources.get(source);
+                var sourceSizeInfo = sourceSkt.getSizeSources().iterator().next();
+                var currentBorderNodes = sourceToBorderNodes.get(source);
+                var newBorderNodes = new HashSet<NMAE>();
+
+                // For each border node, propagate the size information to its neighbors.
+                // And finally update the border.
+                List<NMAE> sortedBorderNodes = new ArrayList<>(currentBorderNodes);
+                sortedBorderNodes.sort(Comparator.comparing(NMAE::hashCode));
+                for (var borderNode: sortedBorderNodes) {
+                    // IMPORTANT: SizeConflictNodes should not be seen as border nodes.
+                    if (sizeConflictNodes.contains(borderNode)) continue;
+
+                    Set<NMAE> neighbors = new HashSet<>();
+                    if (forward) {
+                        neighbors.addAll(graphManager.getForwardNeighbors(borderNode));
+                    } else {
+                        neighbors.addAll(graphManager.getBackwardNeighbors(borderNode));
+                    }
+
+                    // Propagate to each neighbor of current border node
+                    List<NMAE> sortedNeighbors = new ArrayList<>(neighbors);
+                    sortedNeighbors.sort(Comparator.comparing(NMAE::hashCode));
+                    for (var neighbor: neighbors) {
+                        // If the neighbor is already propagated from the source, just continue
+                        if (sourceToPropagatedNodes.get(source).contains(neighbor)) continue;
+
+                        var neighborSkt = exprManager.getOrCreateSkeleton(neighbor);
+                        var hasConflict = neighborSkt.checkSizeConflict(sourceSizeInfo);
+
+                        if (hasConflict) {
+                            var direct = forward ? "forward" : "backward";
+                            Logging.debug("ConstPropagator",
+                                    String.format("Found Size Conflict when propagating (%s) from %s -> %s",
+                                            direct, borderNode, neighbor));
+                            Logging.debug("ConstPropagator",
+                                    String.format("Source Size Info: %s", sourceSizeInfo));
+                            Logging.debug("ConstPropagator",
+                                    String.format("Neighbor Size Info: %s", neighborSkt.getSizeSources()));
+
+                            sizeConflictEdges.add(new Pair<>(borderNode, neighbor));
+                            sizeConflictNodes.add(neighbor);
+
+                            neighborSkt.updateSizeSource(sourceSizeInfo);
+                            sourceToPropagatedNodes.get(source).add(neighbor);
+                            // graphManager.removeEdge(borderNode, neighbor);
+                            // graphManager.removeEdge(neighbor, borderNode);
+                        } else {
+                            // mark as the new Border node
+                            newBorderNodes.add(neighbor);
+                            sourceToPropagatedNodes.get(source).add(neighbor);
+                            neighborSkt.updateSizeSource(sourceSizeInfo);
+                        }
+                    }
+                }
+
+                // After all old border nodes are processed, we need to update the new border nodes.
+                if (!newBorderNodes.isEmpty()) {
+                    sourceToBorderNodes.get(source).addAll(newBorderNodes);
+                    hasNewBorderNode = true;
+                }
             }
         }
     }

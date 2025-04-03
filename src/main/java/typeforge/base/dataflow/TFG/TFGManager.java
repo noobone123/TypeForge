@@ -85,6 +85,42 @@ public class TFGManager {
         }
     }
 
+    public Set<NMAE> getForwardNeighbors(NMAE node) {
+        var graph = exprToGraph.get(node);
+        var result = new HashSet<NMAE>();
+
+        if (graph != null) {
+            for (var edge: graph.getGraph().outgoingEdgesOf(node)) {
+                if (edge.getType() == TypeFlowGraph.EdgeType.DATAFLOW ||
+                        edge.getType() == TypeFlowGraph.EdgeType.CALL ||
+                        edge.getType() == TypeFlowGraph.EdgeType.RETURN) {
+                    var target = graph.getGraph().getEdgeTarget(edge);
+                    result.add(target);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public Set<NMAE> getBackwardNeighbors(NMAE node) {
+        var graph = exprToGraph.get(node);
+        var result = new HashSet<NMAE>();
+
+        if (graph != null) {
+            for (var edge: graph.getGraph().incomingEdgesOf(node)) {
+                if (edge.getType() == TypeFlowGraph.EdgeType.DATAFLOW ||
+                        edge.getType() == TypeFlowGraph.EdgeType.CALL ||
+                        edge.getType() == TypeFlowGraph.EdgeType.RETURN) {
+                    var source = graph.getGraph().getEdgeSource(edge);
+                    result.add(source);
+                }
+            }
+        }
+
+        return result;
+    }
+
 
     public boolean hasEdge(NMAE from, NMAE to) {
         TypeFlowGraph<NMAE> fromGraph = exprToGraph.get(from);
