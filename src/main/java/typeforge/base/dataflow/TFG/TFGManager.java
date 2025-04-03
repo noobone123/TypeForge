@@ -48,6 +48,23 @@ public class TFGManager {
         }
     }
 
+    public void removeEdge(NMAE from, NMAE to) {
+        TypeFlowGraph<NMAE> fromGraph = exprToGraph.get(from);
+        TypeFlowGraph<NMAE> toGraph = exprToGraph.get(to);
+        if (fromGraph != null && fromGraph == toGraph) {
+            Logging.debug("TFGManager",
+                    String.format("Removing Evil Edge %s -> %s", from, to));
+            fromGraph.removeEdge(from, to);
+            if (fromGraph.getNumNodes() == 0) {
+                graphs.remove(fromGraph);
+                for (var node: fromGraph.getNodes()) {
+                    exprToGraph.remove(node);
+                }
+            }
+        }
+    }
+
+
     public boolean hasEdge(NMAE from, NMAE to) {
         TypeFlowGraph<NMAE> fromGraph = exprToGraph.get(from);
         TypeFlowGraph<NMAE> toGraph = exprToGraph.get(to);
@@ -55,7 +72,7 @@ public class TFGManager {
     }
 
 
-    public TypeFlowGraph<NMAE> getTypeRelationGraph(NMAE node) {
+    public TypeFlowGraph<NMAE> getTFG(NMAE node) {
         return exprToGraph.get(node);
     }
 

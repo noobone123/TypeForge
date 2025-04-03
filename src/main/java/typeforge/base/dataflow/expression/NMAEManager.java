@@ -152,7 +152,7 @@ public class NMAEManager {
 
         var mayAliasExpr = new HashSet<NMAE>();
 
-        var taG = graphManager.getTypeRelationGraph(baseExpr);
+        var taG = graphManager.getTFG(baseExpr);
         if (taG == null) {
             return mayAliasExpr;
         }

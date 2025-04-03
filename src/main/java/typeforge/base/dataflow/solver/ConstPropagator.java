@@ -2,6 +2,7 @@ package typeforge.base.dataflow.solver;
 
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.Varnode;
+import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.node.CallSite;
@@ -105,11 +106,17 @@ public class ConstPropagator {
 
     InterSolver interSolver = null;
     NMAEManager exprManager;
-    Set<FunctionNode> wrapperFunctions = new HashSet<>();
+    TFGManager graphManager;
+    Set<FunctionNode> wrapperFunctions;
+    Map<NMAE, Set<NMAE>> wrapperEvilEdges;
 
     public ConstPropagator(InterSolver interSolver) {
         this.interSolver = interSolver;
         this.exprManager = this.interSolver.exprManager;
+        this.graphManager = this.interSolver.graphManager;
+
+        wrapperFunctions = new HashSet<>();
+        wrapperEvilEdges = new HashMap<>();
     }
 
     // TODO: mark and remove "evil edges", then propagate size info.
@@ -132,14 +139,15 @@ public class ConstPropagator {
     //      我们就把他们视作一个整体节点（邻居），然后继续传播。如果存在冲突，那么这个新的邻居节点就不应该被加入已有的整体节点，且该新节点和整体节点相连的所有的边都应该被删除。
     //  后续的每个子图的 type-hint propagation 是否也能够采用类似的思路？ 用于处理来自每个Source之间的类型传播，只不过此时的 check 的 conflict 变成了 field conflict
     public void run() {
-        MarkWrapperFunctionAndSize();
+        markWrapperFunctionAndSize();
+        removeEvilEdgesInWrapper();
     }
 
     /**
      * Find and mark alloc wrapper functions in the program,
      * then calculate the allocated size information and set these size to the skeletons.
      */
-    private void MarkWrapperFunctionAndSize() {
+    private void markWrapperFunctionAndSize() {
         // Process malloc call sites
         processMallocWrapperAndSize();
         // Process calloc call sites
@@ -148,6 +156,42 @@ public class ConstPropagator {
         for (var wrapperFunc: wrapperFunctions) {
             Logging.info("ConstPropagator",
                     String.format("Found Wrapper Function %s", wrapperFunc.value.getName()));
+        }
+    }
+
+    /**
+     * The edge between the wrapper function's return NMAE and the receiver NMAE is evil.
+     * Should be marked as evil and removed.
+     */
+    private void removeEvilEdgesInWrapper() {
+        // Found EvilEdges
+        for (var wrapper: wrapperFunctions) {
+            var wrapperRetExpr = interSolver.intraSolverMap.get(wrapper.value).getReturnExpr();
+            var wrapperCSs = interSolver.calleeToCallSites.get(wrapper);
+            for (var wrapperCS: wrapperCSs) {
+                var wrapperCSReceiver = wrapperCS.receiver;
+                var wrapperCSReceiverExpr = interSolver.intraSolverMap.get(wrapperCS.caller)
+                        .getOrCreateDataFlowFacts(wrapperCSReceiver);
+                for (var expr1: wrapperRetExpr) {
+                    for (var expr2: wrapperCSReceiverExpr) {
+                        if (graphManager.hasDataFlowPath(expr1, expr2)) {
+                            // Mark the edge as evil
+                            wrapperEvilEdges.computeIfAbsent(expr1, k -> new HashSet<>()).add(expr2);
+                            Logging.debug("ConstPropagator",
+                                    String.format("Found Evil Edge %s -> %s", expr1, expr2));
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remove EvilEdges
+        for (var entry: wrapperEvilEdges.entrySet()) {
+            var from = entry.getKey();
+            var toSet = entry.getValue();
+            for (var to: toSet) {
+                graphManager.removeEdge(from, to);
+            }
         }
     }
 
