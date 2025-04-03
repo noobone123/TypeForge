@@ -7,7 +7,7 @@ import org.jgrapht.GraphPath;
 
 import java.util.*;
 
-public class TypeRelationPath<T> {
+public class TypeFlowPath<T> {
     public final UUID uuid = UUID.randomUUID();
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
@@ -26,7 +26,7 @@ public class TypeRelationPath<T> {
      */
     public Map<Integer, Map<Integer, List<T>>> subPathsOfLengthWithHash = new HashMap<>();
 
-    public TypeRelationPath(GraphPath<T, TypeFlowGraph.TypeFlowEdge> path) {
+    public TypeFlowPath(GraphPath<T, TypeFlowGraph.TypeFlowEdge> path) {
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
@@ -39,7 +39,7 @@ public class TypeRelationPath<T> {
         this.evilEdges = new HashSet<>();
     }
 
-    public TypeRelationPath(List<T> nodes, List<TypeFlowGraph.TypeFlowEdge> edges) {
+    public TypeFlowPath(List<T> nodes, List<TypeFlowGraph.TypeFlowEdge> edges) {
         this.nodes = nodes;
         this.edges = edges;
 
@@ -262,7 +262,7 @@ public class TypeRelationPath<T> {
         if (obj == null || getClass() != obj.getClass()) {
             return false;
         }
-        TypeRelationPath<?> other = (TypeRelationPath<?>) obj;
+        TypeFlowPath<?> other = (TypeFlowPath<?>) obj;
         return this.hashCode() == other.hashCode();
     }
 

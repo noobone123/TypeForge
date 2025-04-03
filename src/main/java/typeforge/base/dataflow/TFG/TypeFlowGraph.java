@@ -59,14 +59,14 @@ public class TypeFlowGraph<T> {
     private final UUID uuid;
     private final String shortUUID;
 
-    public TypeRelationPathManager<T> pathManager;
+    public TypeFlowPathManager<T> pathManager;
 
     public TypeFlowGraph() {
         graph = new DefaultDirectedGraph<>(TypeFlowEdge.class);
         uuid = UUID.randomUUID();
         shortUUID = uuid.toString().substring(0, 8);
 
-        pathManager = new TypeRelationPathManager<T>(this);
+        pathManager = new TypeFlowPathManager<T>(this);
 
         Logging.trace("TypeFlowGraph", String.format("Create TypeFlowGraph_%s", shortUUID));
     }
@@ -138,8 +138,8 @@ public class TypeFlowGraph<T> {
         if (getNumNodes() <= 1) {
             return false;
         }
-        this.pathManager = new TypeRelationPathManager<T>(this);
-        this.pathManager.build();
+        this.pathManager = new TypeFlowPathManager<T>(this);
+        this.pathManager.initialize();
         return true;
     }
 

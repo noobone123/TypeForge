@@ -5,7 +5,7 @@ import typeforge.base.dataflow.Range;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.constraint.TypeConstraint;
-import typeforge.base.dataflow.constraint.TypeHintCollector;
+import typeforge.base.dataflow.solver.TypeHintCollector;
 import typeforge.base.passes.SlidingWindowProcessor;
 import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Logging;

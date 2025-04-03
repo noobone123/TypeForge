@@ -1,11 +1,13 @@
-package typeforge.base.dataflow.constraint;
+package typeforge.base.dataflow.solver;
 
+import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
-import typeforge.base.dataflow.TFG.TypeRelationPath;
+import typeforge.base.dataflow.TFG.TypeFlowPath;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import typeforge.utils.TCHelper;
@@ -25,7 +27,7 @@ public class TypeHintCollector {
     private final NMAEManager exprManager;
 
     /** fields for handle conflict paths and nodes */
-    public final Set<TypeRelationPath<NMAE>> evilPaths = new HashSet<>();
+    public final Set<TypeFlowPath<NMAE>> evilPaths = new HashSet<>();
     public final Set<NMAE> evilNodes = new HashSet<>();
     public final Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
     public final Set<NMAE> evilSource = new HashSet<>();
@@ -561,7 +563,7 @@ public class TypeHintCollector {
         typeConstraints.add(skt);
     }
 
-    public void updateEvilPaths(Set<TypeRelationPath<NMAE>> evilPaths) {
+    public void updateEvilPaths(Set<TypeFlowPath<NMAE>> evilPaths) {
         this.evilPaths.addAll(evilPaths);
     }
 

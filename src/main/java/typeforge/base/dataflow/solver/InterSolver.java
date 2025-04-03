@@ -4,7 +4,6 @@ import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.constraint.TypeHintCollector;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
@@ -230,10 +229,13 @@ public class InterSolver {
 
         // Parsing all fieldAccess Expressions collected in intra-procedural analysis
         for (var expr : exprManager.getFieldAccessExprSet()) {
-            buildSkeletonByFieldAccessExpr(expr, null, 0);
+            collectFieldAccessHints(expr, null, 0);
         }
-//
-//        buildSkeletons(typeHintCollector);
+
+        var layoutPropagator = new LayoutPropagator(this);
+        layoutPropagator.run();
+
+        // buildSkeletons(typeHintCollector);
 //
 //
 //        /* Following handler's order is important */
@@ -253,7 +255,7 @@ public class InterSolver {
     private void buildSkeletons(TypeHintCollector collector) {
         Logging.debug("InterSolver", "========================= Start to merge skeletons =========================");
         Logging.debug("InterSolver", "Total Graph Number: " + graphManager.getGraphs().size());
-        graphManager.buildAllPathManagers();
+        graphManager.initAllPathManagers();
 
         Set<Function> evilFunctions = new HashSet<>();
 
@@ -309,13 +311,15 @@ public class InterSolver {
     }
 
     /**
-     * Parse the Field Access SymbolExpr and build the skeletons for it.
+     * Collect the field access expressions during intra-procedural analysis.
+     * Parse the Field Access SymbolExpr and create the skeletons for it, basic member information should be
+     * added into skeletons of decompiler-inferred variables in this step.
      * For example: if there is a statement: *(a + 0x8) = b, the FieldAccess Expression is *(a + 0x8)
      * @param expr the Expression to parse
      * @param outerSkt if the expr is a recursive dereference, the outerSkt is the Skeleton of the outer expr
      * @param derefDepth the dereference depth of the expr
      */
-    private void buildSkeletonByFieldAccessExpr(NMAE expr, Skeleton outerSkt, long derefDepth) {
+    private void collectFieldAccessHints(NMAE expr, Skeleton outerSkt, long derefDepth) {
         if (expr == null) return;
 
         Logging.debug("InterSolver", String.format("Parsing FieldAccess Expression %s, outerSkt: %s, derefDepth: %d",
@@ -351,7 +355,7 @@ public class InterSolver {
 
         // If base is still dereference expr, means base is a field with pointer type which points to a composite data type.
         if (parsed.base.isDereference()) {
-            buildSkeletonByFieldAccessExpr(parsed.base, baseSkeleton, derefDepth + 1);
+            collectFieldAccessHints(parsed.base, baseSkeleton, derefDepth + 1);
         }
     }
 

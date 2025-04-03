@@ -206,11 +206,10 @@ public class TFGManager {
         return graphs;
     }
 
-    public void buildAllPathManagers() {
+    public void initAllPathManagers() {
         for (var graph: graphs) {
             if (graph.getNumNodes() > 1) {
-                Logging.debug("InterContext", String.format("Handing type alias graph %s", graph));
-                graph.pathManager.build();
+                graph.pathManager.initialize();
             }
         }
     }

@@ -4,7 +4,7 @@ import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
 import typeforge.base.dataflow.constraint.TypeConstraint;
-import typeforge.base.dataflow.constraint.TypeHintCollector;
+import typeforge.base.dataflow.solver.TypeHintCollector;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.Layout;
 import typeforge.utils.Logging;
@@ -14,19 +14,19 @@ import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 import java.io.FileWriter;
 import java.util.*;
 
-public class TypeRelationPathManager<T> {
+public class TypeFlowPathManager<T> {
     public TypeFlowGraph<T> graph;
     public boolean hasSrcSink = true;
     public final Set<T> source;
     public final Set<T> sink;
 
-    public final Map<T, Set<TypeRelationPath<T>>> nodeToPathsMap;
-    public final Map<T, Set<TypeRelationPath<T>>> srcToPathsMap;
+    public final Map<T, Set<TypeFlowPath<T>>> nodeToPathsMap;
+    public final Map<T, Set<TypeFlowPath<T>>> srcToPathsMap;
 
-    public final Map<T, Set<Skeleton>> nodeToConstraints;
+    public final Map<T, Set<Skeleton>> nodeToSkeletons;
 
     /** fields for handle conflict paths and nodes */
-    public final Set<TypeRelationPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
+    public final Set<TypeFlowPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
     public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
     public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
     public final Set<T> evilSource = new HashSet<>();
@@ -45,21 +45,24 @@ public class TypeRelationPathManager<T> {
     public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
     public final Map<T, Skeleton> sourceToConstraints = new HashMap<>();
 
-    public TypeRelationPathManager(TypeFlowGraph<T> graph) {
+    public TypeFlowPathManager(TypeFlowGraph<T> graph) {
         this.graph = graph;
         this.source = new HashSet<>();
         this.sink = new HashSet<>();
         this.nodeToPathsMap = new HashMap<>();
         this.srcToPathsMap = new HashMap<>();
-        this.nodeToConstraints = new HashMap<>();
+        this.nodeToSkeletons = new HashMap<>();
     }
 
-    public void build() {
+    public void initialize() {
+        Logging.debug("TypeFlowPathManager",
+                String.format("Initialize TypeFlowPathManager for graph: %s", graph));
+
         this.source.clear();
         this.sink.clear();
         this.nodeToPathsMap.clear();
         this.srcToPathsMap.clear();
-        this.nodeToConstraints.clear();
+        this.nodeToSkeletons.clear();
 
         findSources();
         findSinks();
@@ -196,8 +199,8 @@ public class TypeRelationPathManager<T> {
      * from different sources, we should handle them and try to merge them.
      */
     public void tryHandleConflictNodes() {
-        for (var node: nodeToConstraints.keySet()) {
-            var constraints = nodeToConstraints.get(node);
+        for (var node: nodeToSkeletons.keySet()) {
+            var constraints = nodeToSkeletons.get(node);
             if (constraints.size() > 1) {
                 // Two Problem to solve:
                 // 1. How to find which nodes need to remove edge
@@ -415,7 +418,9 @@ public class TypeRelationPathManager<T> {
         collector.addSkeleton(skeleton);
     }
 
-
+    /**
+     * Find Source nodes in the TFG
+     */
     public void findSources() {
         for (T vertex : graph.getGraph().vertexSet()) {
             if (graph.getGraph().inDegreeOf(vertex) == 0 && graph.getGraph().outDegreeOf(vertex) > 0) {
@@ -424,6 +429,9 @@ public class TypeRelationPathManager<T> {
         }
     }
 
+    /**
+     * Find Sink nodes in the TFG
+     */
     public void findSinks() {
         for (T vertex : graph.getGraph().vertexSet()) {
             if (graph.getGraph().inDegreeOf(vertex) > 0 && graph.getGraph().outDegreeOf(vertex) == 0) {
@@ -437,8 +445,8 @@ public class TypeRelationPathManager<T> {
             for (T sk: sink) {
                 var allPaths = new AllDirectedPaths<>(graph.getGraph()).getAllPaths(src, sk, true, Integer.MAX_VALUE);
                 for (var path: allPaths) {
-                    TypeRelationPath<T> typeRelationPath = new TypeRelationPath<>(path);
-                    srcToPathsMap.computeIfAbsent(src, k -> new HashSet<>()).add(typeRelationPath);
+                    TypeFlowPath<T> typeFlowPath = new TypeFlowPath<>(path);
+                    srcToPathsMap.computeIfAbsent(src, k -> new HashSet<>()).add(typeFlowPath);
                 }
             }
         }
@@ -449,7 +457,7 @@ public class TypeRelationPathManager<T> {
      * @param paths Set of given paths
      * @return Set of sub-paths
      */
-    public Set<List<T>> getLongestCommonSubpath(Set<TypeRelationPath<T>> paths) {
+    public Set<List<T>> getLongestCommonSubpath(Set<TypeFlowPath<T>> paths) {
         int lowBound = 1;
         int highBound = Integer.MAX_VALUE;
         Map<Integer, Set<Integer>> lengthToPathHash = new HashMap<>();
@@ -511,7 +519,7 @@ public class TypeRelationPathManager<T> {
      * @param lcs given Longest Common Subpath in the set of paths
      * @param paths set of paths
      */
-    private Set<TypeFlowGraph.TypeFlowEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+    private Set<TypeFlowGraph.TypeFlowEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeFlowPath<T>> paths) {
         Set<TypeFlowGraph.TypeFlowEdge> endEdges = new HashSet<>();
         if (lcs.isEmpty()) {
             return endEdges;
@@ -544,12 +552,12 @@ public class TypeRelationPathManager<T> {
     }
 
 
-    private Set<TypeFlowGraph.TypeFlowEdge> getEdgesInLCS(List<T> lcs, Set<TypeRelationPath<T>> paths) {
+    private Set<TypeFlowGraph.TypeFlowEdge> getEdgesInLCS(List<T> lcs, Set<TypeFlowPath<T>> paths) {
         // Initialize a set to store the edges within the LCS
         Set<TypeFlowGraph.TypeFlowEdge> lcsEdges = new HashSet<>();
 
         // Loop through each path in the set
-        for (TypeRelationPath<T> path : paths) {
+        for (TypeFlowPath<T> path : paths) {
             List<T> nodes = path.nodes;
             List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
 
@@ -576,12 +584,12 @@ public class TypeRelationPathManager<T> {
         return lcsEdges;
     }
 
-    private Set<TypeRelationPath<T>> splitPathsByLCS(Set<TypeRelationPath<T>> candidatePaths,
-                                                     Set<TypeFlowGraph.TypeFlowEdge> endEdgesOfLCS,
-                                                     NMAEManager exprManager) {
-        Set<TypeRelationPath<T>> newPaths = new HashSet<>();
+    private Set<TypeFlowPath<T>> splitPathsByLCS(Set<TypeFlowPath<T>> candidatePaths,
+                                                 Set<TypeFlowGraph.TypeFlowEdge> endEdgesOfLCS,
+                                                 NMAEManager exprManager) {
+        Set<TypeFlowPath<T>> newPaths = new HashSet<>();
 
-        for (TypeRelationPath<T> path : candidatePaths) {
+        for (TypeFlowPath<T> path : candidatePaths) {
             List<T> nodes = path.nodes;
             List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
 
@@ -592,7 +600,7 @@ public class TypeRelationPathManager<T> {
                     List<TypeFlowGraph.TypeFlowEdge> subPathEdges = new ArrayList<>(edges.subList(0, i));
 
                     if (!subPathNodes.isEmpty()) {
-                        TypeRelationPath<T> newPath = new TypeRelationPath<>(subPathNodes, subPathEdges);
+                        TypeFlowPath<T> newPath = new TypeFlowPath<>(subPathNodes, subPathEdges);
                         newPaths.add(newPath);
                     }
 
@@ -607,7 +615,7 @@ public class TypeRelationPathManager<T> {
                 List<TypeFlowGraph.TypeFlowEdge> remainingEdges = new ArrayList<>(edges.subList(splitIndex, edges.size()));
 
                 if (!remainingNodes.isEmpty()) {
-                    TypeRelationPath<T> newPath = new TypeRelationPath<>(remainingNodes, remainingEdges);
+                    TypeFlowPath<T> newPath = new TypeFlowPath<>(remainingNodes, remainingEdges);
                     newPaths.add(newPath);
                 }
             }
@@ -628,7 +636,7 @@ public class TypeRelationPathManager<T> {
     }
 
 
-    public void updateNodeToPathsMap(TypeRelationPath<T> path) {
+    public void updateNodeToPathsMap(TypeFlowPath<T> path) {
         for (var node: path.nodes) {
             nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
         }
@@ -649,8 +657,8 @@ public class TypeRelationPathManager<T> {
     }
 
 
-    public Set<TypeRelationPath<T>> getAllValidPathsFromSource(T source) {
-        var result = new HashSet<TypeRelationPath<T>>();
+    public Set<TypeFlowPath<T>> getAllValidPathsFromSource(T source) {
+        var result = new HashSet<TypeFlowPath<T>>();
         if (!srcToPathsMap.containsKey(source)) {
             return result;
         }
@@ -663,13 +671,13 @@ public class TypeRelationPathManager<T> {
         return result;
     }
 
-    public void propagateConstraintOnPath(Skeleton constraint, TypeRelationPath<T> path) {
+    public void propagateConstraintOnPath(Skeleton constraint, TypeFlowPath<T> path) {
         for (var node: path.nodes) {
-            nodeToConstraints.computeIfAbsent(node, k -> new HashSet<>()).add(constraint);
+            nodeToSkeletons.computeIfAbsent(node, k -> new HashSet<>()).add(constraint);
         }
     }
 
-    public Set<TypeRelationPath<T>> getAllPathContainsNode(T node) {
+    public Set<TypeFlowPath<T>> getAllPathContainsNode(T node) {
         return nodeToPathsMap.get(node);
     }
 
