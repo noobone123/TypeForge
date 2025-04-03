@@ -154,12 +154,21 @@ public class Skeleton {
         Logging.debug("Skeleton", String.format("Skeleton_%s setting size 0x%x from expr: %s", shortUUID, size, expr));
     }
 
-    public boolean hasSize() {
+    public boolean hasSizeSource() {
         return !sizeSources.isEmpty();
+    }
+
+    public boolean hasMultiSizeSource() {
+        return sizeSources.size() > 1;
     }
 
     public Set<SizeSource> getSizeSources() {
         return sizeSources;
+    }
+
+    public void strongUpdateSizeSources(SizeSource newSizeSource) {
+        this.sizeSources.clear();
+        this.sizeSources.add(newSizeSource);
     }
 
     public void setElementSize(long size) {

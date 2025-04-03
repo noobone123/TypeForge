@@ -90,6 +90,24 @@ public class NMAEManager {
         return attributeToExpr.getOrDefault(attr, new HashSet<>());
     }
 
+    public Map<NMAE, Skeleton> getExprToSkeletonBeforeMerge() {
+        return exprToSkeletonBeforeMerge;
+    }
+
+    /**
+     * Get or create a Skeleton for the given expression.
+     * The created Skeleton will be auto associated with
+     *  the expression in the `exprToSkeletonBeforeMerge` map.
+     * @return the Skeleton for the given expression
+     */
+    public Skeleton getOrCreateSkeleton(NMAE expr) {
+        var result = getSkeleton(expr);
+        if (result == null) {
+            return createSkeleton(expr);
+        }
+        return result;
+    }
+
     /**
      * Create a Skeleton for the given expression
      * @param expr the expression to create Skeleton for
@@ -114,20 +132,6 @@ public class NMAEManager {
             Logging.trace("NMAEManager", String.format("No Skeleton found for %s", expr));
             return null;
         }
-    }
-
-    /**
-     * Get or create a Skeleton for the given expression.
-     * The created Skeleton will be auto associated with
-     *  the expression in the `exprToSkeletonBeforeMerge` map.
-     * @return the Skeleton for the given expression
-     */
-    public Skeleton getOrCreateSkeleton(NMAE expr) {
-        var result = getSkeleton(expr);
-        if (result == null) {
-            return createSkeleton(expr);
-        }
-        return result;
     }
 
     /**

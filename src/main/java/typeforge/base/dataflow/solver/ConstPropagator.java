@@ -3,6 +3,7 @@ package typeforge.base.dataflow.solver;
 import ghidra.program.model.listing.Function;
 import ghidra.program.model.pcode.Varnode;
 import typeforge.base.dataflow.TFG.TFGManager;
+import typeforge.base.dataflow.constraint.SizeSource;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.node.CallSite;
@@ -109,6 +110,8 @@ public class ConstPropagator {
     TFGManager graphManager;
     Set<FunctionNode> wrapperFunctions;
     Map<NMAE, Set<NMAE>> wrapperEvilEdges;
+    Set<NMAE> unionEvilNodes;
+    Map<NMAE, Set<NMAE>> unionEvilEdges;
 
     public ConstPropagator(InterSolver interSolver) {
         this.interSolver = interSolver;
@@ -117,23 +120,12 @@ public class ConstPropagator {
 
         wrapperFunctions = new HashSet<>();
         wrapperEvilEdges = new HashMap<>();
+        unionEvilNodes = new HashSet<>();
+        unionEvilEdges = new HashMap<>();
     }
 
-    // TODO: mark and remove "evil edges", then propagate size info.
-    // TODO:
-    //  1. Constructing CallSite when building CallGraph, there should be a Map<CallSite, Callee> and a Map<Callee, Set<CallSite>>
-    //  2. Reversing constructing the CallSite-Chain (Max-depth: 4? Because wrapper function is not that deep)
-    //  3. For each chain, start from the nearest CallSite, check:
-    //      1. If CallSite Args can not flow to the malloc(1) or calloc(2)'s corresponding arguments, return.
-    //      2. If there are No ConstArg, but arguments can flow to the malloc(1) or calloc(2)'s corresponding arguments, goto the next CallSite and check.
-    //      3. If there are ConstArg and can flow to the malloc(1) or calloc(2)'s corresponding arguments,
-    //          check if the malloc(1) or calloc(2)'s return value can flow to the current callSite's receiver.
-    //          If so, mark current callSite's receiver as composite and set the size, return.
-    //      We will not handle Partial ConstArg, because it's very very rare.
-    //  4. Build Map<Callee, Set<ReturnSize>> from the marked CallSites, if there are multiple sizes, mark it as EvilNode and mark RETURN edges from them as EvilEdges. (Actually TFG should be split)
 
     // TODO:
-    //  1. If a variable is set to different size (with memset) with the same function, it must be a union, mark it as EvilNode and mark all edges to them as EvilEdges.
     //  2. For those Skeletons with size, we propagate them along the TFG, propagate should be 多点扩散法：
     //      即：假设图中有 n 个这样的节点，每一轮我们都将节点的信息，沿着dataflow边传播到它的邻居（函数的所有？）节点（是否按照函数粒度进行每次传播），然后我们检查这些新传播到的邻居节点的信息是否存在冲突，如果不存在，那么
     //      我们就把他们视作一个整体节点（邻居），然后继续传播。如果存在冲突，那么这个新的邻居节点就不应该被加入已有的整体节点，且该新节点和整体节点相连的所有的边都应该被删除。
@@ -141,6 +133,8 @@ public class ConstPropagator {
     public void run() {
         markWrapperFunctionAndSize();
         removeEvilEdgesInWrapper();
+        handleMultiSizeSources();
+        removeEvilEdgesInUnions();
     }
 
     /**
@@ -192,6 +186,94 @@ public class ConstPropagator {
             for (var to: toSet) {
                 graphManager.removeEdge(from, to);
             }
+        }
+    }
+
+    /**
+     * Some skeletons may have different sizes before ConstantPropagation.
+     * We need to ensure that there are only one reliable size used for constant propagation.
+     * <br>
+     * Some Obvious unions are also identified in this step.
+     */
+    private void handleMultiSizeSources() {
+        int sktWithSizeCount = 0;
+        int sktWithMultiSizeCount = 0;
+        for (var expr: exprManager.getExprToSkeletonBeforeMerge().keySet()) {
+            var skt = exprManager.getSkeleton(expr);
+            if (skt.hasSizeSource()) {
+                sktWithSizeCount++;
+            }
+
+            if (skt.hasMultiSizeSource()) {
+                var sizeSources = skt.getSizeSources();
+                var sizeSourceFromExprs = new HashSet<SizeSource>();
+                var sizeSourceFromCallSites = new HashSet<SizeSource>();
+
+                for (var sizeSource: sizeSources) {
+                    if (sizeSource.getSourceType() == SizeSource.SourceType.EXPRESSION) {
+                        sizeSourceFromExprs.add(sizeSource);
+                    } else if (sizeSource.getSourceType() == SizeSource.SourceType.CALLSITE) {
+                        sizeSourceFromCallSites.add(sizeSource);
+                    }
+                }
+
+                // IMPORTANT: We need to ensure there are only one size used for constant propagation.
+                var sizeFromExprs = new HashSet<Long>();
+                var sizeFromCallSites = new HashSet<Long>();
+                for (var sizeSource: sizeSourceFromExprs) {
+                    sizeFromExprs.add(sizeSource.getSize());
+                }
+                for (var sizeSource: sizeSourceFromCallSites) {
+                    sizeFromCallSites.add(sizeSource.getSize());
+                }
+
+                // If stack allocated expr, its decompiler inferred size should be omitted as decompiler-inferred
+                // size is always not reliable, so we choose to believe the size from callSite.
+                var isStackAllocated = expr.isReference();
+                if (isStackAllocated && !sizeFromCallSites.isEmpty()) {
+                    sizeSources = sizeSourceFromCallSites;
+                }
+
+                // If there's only one size from exprs and one size from call sites,
+                // we choose the larger one for final size.
+                // sizeFromExprs's max size should be 1.
+                if (!isStackAllocated && sizeFromExprs.size() == 1 && sizeFromCallSites.size() == 1) {
+                    var sizeFromExpr = sizeFromExprs.iterator().next();
+                    var sizeFromCallSite = sizeFromCallSites.iterator().next();
+                    if (sizeFromExpr > sizeFromCallSite) {
+                        sizeSources = sizeSourceFromExprs;
+                    } else {
+                        sizeSources = sizeSourceFromCallSites;
+                    }
+                }
+
+                var consideredSizes = new HashSet<Long>();
+                for (var sizeSource: sizeSources) {
+                    consideredSizes.add(sizeSource.getSize());
+                }
+
+                // These are union.
+                if (consideredSizes.size() > 1) {
+                    sktWithMultiSizeCount++;
+                    unionEvilNodes.add(expr);
+                    Logging.debug("ConstPropagator",
+                            String.format("Found Union Expr %s with multiple SizeSource: %s", expr, sizeSources));
+                } else {
+                    var sizeSource = sizeSources.iterator().next();
+                    exprManager.getSkeleton(expr).strongUpdateSizeSources(sizeSource);
+                    Logging.debug("ConstPropagator",
+                            String.format("Set Final SizeSource for Expr %s -> %s", expr, sizeSource));
+                }
+            }
+        }
+
+        Logging.info("ConstPropagator",
+                String.format("Found %d skeletons with size, %d skeletons with multiple sizes", sktWithSizeCount, sktWithMultiSizeCount));
+    }
+
+    private void removeEvilEdgesInUnions() {
+        for (var expr: unionEvilNodes) {
+            graphManager.removeAllEdgesOfNode(expr);
         }
     }
 

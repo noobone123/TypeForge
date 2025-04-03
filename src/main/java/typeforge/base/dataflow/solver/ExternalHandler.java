@@ -77,14 +77,14 @@ public class ExternalHandler {
             var ptrExprs = intraSolver.getOrCreateDataFlowFacts(callSite.arguments.get(0));
             for (var expr: ptrExprs) {
                 Logging.debug("ExternalHandler.Memset",
-                        String.format("Set composite of constraint: %s to true", expr));
-                var constraint = exprManager.getOrCreateSkeleton(expr);
-                constraint.setComposite(true);
+                        String.format("(memset) Set composite of skeleton: %s to true", expr));
+                var skeleton = exprManager.getOrCreateSkeleton(expr);
+                skeleton.setComposite(true);
 
                 if (lengthArg.isConstant()) {
-                    constraint.setSizeFromCallSite(lengthArg.getOffset(), callSite);
+                    skeleton.setSizeFromCallSite(lengthArg.getOffset(), callSite);
                     Logging.debug("ExternalHandler.Memset",
-                            String.format("Set size of constraint: %s to %d", expr, lengthArg.getOffset()));
+                            String.format("(memset) Set size of skeleton: %s to %d", expr, lengthArg.getOffset()));
                 }
             }
         }
@@ -109,16 +109,16 @@ public class ExternalHandler {
             var srcExprs = intraSolver.getOrCreateDataFlowFacts(srcVn);
             for (var dstExpr : dstExprs) {
                 for (var srcExpr : srcExprs) {
-                    var dstConstraint = exprManager.getOrCreateSkeleton(dstExpr);
-                    var srcConstraint = exprManager.getOrCreateSkeleton(srcExpr);
+                    var dstSkt = exprManager.getOrCreateSkeleton(dstExpr);
+                    var srcSkt = exprManager.getOrCreateSkeleton(srcExpr);
 
                     if (lengthVn.isConstant()) {
-                        dstConstraint.setComposite(true);
-                        dstConstraint.setSizeFromCallSite(lengthVn.getOffset(), callSite);
-                        srcConstraint.setComposite(true);
-                        srcConstraint.setSizeFromCallSite(lengthVn.getOffset(), callSite);
+                        dstSkt.setComposite(true);
+                        dstSkt.setSizeFromCallSite(lengthVn.getOffset(), callSite);
+                        srcSkt.setComposite(true);
+                        srcSkt.setSizeFromCallSite(lengthVn.getOffset(), callSite);
                         Logging.debug("ExternalHandler.Memcpy",
-                                String.format("Set size and composite from %s -> %s with size %d", srcExpr, dstExpr, lengthVn.getOffset()));
+                                String.format("(memcpy) Set size and composite from %s -> %s with size %d", srcExpr, dstExpr, lengthVn.getOffset()));
                     }
                 }
             }

@@ -64,6 +64,27 @@ public class TFGManager {
         }
     }
 
+    public void removeAllEdgesOfNode(NMAE node) {
+        Logging.debug("TFGManager",
+                String.format("Removing all edges of node %s", node));
+
+        TypeFlowGraph<NMAE> graph = exprToGraph.get(node);
+        if (graph != null) {
+            var inEdges = graph.getGraph().incomingEdgesOf(node);
+            // Important: make a copy of the inEdges set to avoid ConcurrentModificationException
+            for (var edge: new ArrayList<>(inEdges)) {
+                var source = graph.getGraph().getEdgeSource(edge);
+                graph.removeEdge(source, node);
+            }
+
+            var outEdges = graph.getGraph().outgoingEdgesOf(node);
+            for (var edge: new ArrayList<>(outEdges)) {
+                var target = graph.getGraph().getEdgeTarget(edge);
+                graph.removeEdge(node, target);
+            }
+        }
+    }
+
 
     public boolean hasEdge(NMAE from, NMAE to) {
         TypeFlowGraph<NMAE> fromGraph = exprToGraph.get(from);

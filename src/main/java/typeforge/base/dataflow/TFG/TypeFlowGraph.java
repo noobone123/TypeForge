@@ -84,7 +84,7 @@ public class TypeFlowGraph<T> {
 
     public void removeEdge(T src, T dst) {
         graph.removeEdge(src, dst);
-        Logging.trace("TypeFlowGraph", String.format("TypeFlowGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
+        Logging.debug("TypeFlowGraph", String.format("TypeFlowGraph_%s Remove edge: %s ---> %s", shortUUID, src, dst));
     }
 
     public void removeNode(T node) {

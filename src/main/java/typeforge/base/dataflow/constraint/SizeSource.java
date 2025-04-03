@@ -50,10 +50,10 @@ public class SizeSource {
     @Override
     public String toString() {
         if (sourceType == SourceType.CALLSITE) {
-            return String.format("SizeSource{size=%d, callsite=%s}",
+            return String.format("SizeSource{size=0x%x, callsite=%s}",
                     size, callSite);
         } else {
-            return String.format("SizeSource{size=%d, expr=%s}",
+            return String.format("SizeSource{size=0x%x, expr=%s}",
                     size, expression);
         }
     }
