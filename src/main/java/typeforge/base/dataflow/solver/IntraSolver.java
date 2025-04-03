@@ -287,7 +287,7 @@ public class IntraSolver {
      * @param function the function that contains the field access expression
      */
     public void addFieldAccessExpr(NMAE expr, PcodeOp pcodeOp, DataType dt, AccessPoints.AccessType accessType, Function function) {
-        exprManager.addFieldExpr(expr);
+        exprManager.addFieldAccessExpr(expr);
         APs.addFieldAccessPoint(expr, pcodeOp, dt, accessType, function);
     }
 

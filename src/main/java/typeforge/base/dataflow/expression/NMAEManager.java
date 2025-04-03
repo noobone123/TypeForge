@@ -57,16 +57,17 @@ public class NMAEManager {
         }
     }
 
-    public void addFieldExpr(NMAE fieldExpr) {
+    public void addFieldAccessExpr(NMAE fieldExpr) {
         fieldExprSet.add(fieldExpr);
     }
 
-    public Set<NMAE> getFieldExprSet() {
+    public Set<NMAE> getFieldAccessExprSet() {
         return fieldExprSet;
     }
 
     /**
-     * Update the SymbolExpr's field relationship
+     * Update the SymbolExpr's field relationship.
+     * Can also been seen as a member edge in TFG
      */
     public void addFieldRelation(NMAE base, long offset, NMAE field) {
         // fieldExprsMap's Value is a Set, because there may be multiple fieldsAccessExpr

@@ -11,7 +11,6 @@ public class ParsedExpr {
     public NMAE scale = null;
     public long offsetValue = 0;
 
-
     public static Optional<ParsedExpr> parseFieldAccessExpr(NMAE expr) {
         ParsedExpr parsedExpr = new ParsedExpr();
 
@@ -20,6 +19,10 @@ public class ParsedExpr {
             parsedExpr.offsetValue = 0L;
         }
         else if (expr.getNestedExpr().isRootSymExpr()) {
+            parsedExpr.base = expr.getNestedExpr();
+            parsedExpr.offsetValue = 0L;
+        }
+        else if (expr.getNestedExpr().isReference()) {
             parsedExpr.base = expr.getNestedExpr();
             parsedExpr.offsetValue = 0L;
         }

@@ -228,10 +228,10 @@ public class InterSolver {
         // Maybe not necessary, but it's elegance to do so. (however, it may cause some performance issue)
         graphManager.reOrganize();
 
-//        // Parsing all fieldAccess Expressions first to build the constraint's skeleton
-//        for (var symExpr : exprManager.getFieldExprSet()) {
-//            buildConstraintByFieldAccessExpr(symExpr, null, 0);
-//        }
+        // Parsing all fieldAccess Expressions collected in intra-procedural analysis
+        for (var expr : exprManager.getFieldAccessExprSet()) {
+            buildSkeletonByFieldAccessExpr(expr, null, 0);
+        }
 //
 //        buildSkeletons(typeHintCollector);
 //
@@ -312,14 +312,14 @@ public class InterSolver {
      * Parse the Field Access SymbolExpr and build the skeletons for it.
      * For example: if there is a statement: *(a + 0x8) = b, the FieldAccess Expression is *(a + 0x8)
      * @param expr the Expression to parse
-     * @param parentSkeleton if the expr is a recursive dereference, the parentSkeleton is the constraint of the parent expr
+     * @param outerSkt if the expr is a recursive dereference, the outerSkt is the Skeleton of the outer expr
      * @param derefDepth the dereference depth of the expr
      */
-    private void buildSkeletonByFieldAccessExpr(NMAE expr, Skeleton parentSkeleton, long derefDepth) {
+    private void buildSkeletonByFieldAccessExpr(NMAE expr, Skeleton outerSkt, long derefDepth) {
         if (expr == null) return;
 
-        Logging.debug("InterSolver", String.format("Parsing FieldAccess Expression %s, parentSkeleton: %s, derefDepth: %d",
-                expr, parentSkeleton != null ? parentSkeleton : "null", derefDepth));
+        Logging.debug("InterSolver", String.format("Parsing FieldAccess Expression %s, outerSkt: %s, derefDepth: %d",
+                expr, outerSkt != null ? outerSkt : "null", derefDepth));
 
         ParsedExpr parsed;
         if (!expr.isDereference()) {
@@ -332,9 +332,14 @@ public class InterSolver {
         }
 
         var baseSkeleton = exprManager.getOrCreateSkeleton(parsed.base);
-        updateFieldAccessSkeleton(baseSkeleton, parsed.offsetValue, expr);
+        updateFieldAccess(baseSkeleton, parsed.offsetValue, expr);
         exprManager.addFieldRelation(parsed.base, parsed.offsetValue, expr);
-        if (parentSkeleton != null) {
+
+        // For example: if parsing *(*(a + 0x8) + 0x2),
+        // At 1st level of recursion: base -> *(a + 0x8), offset -> 0x2, outerSkt -> null
+        // At 2nd level of recursion: base -> a, offset -> 0x8, outerSkt -> *(a + 0x8)'s skt
+        // We can infer that a's member(0x8) is a pointer type.
+        if (outerSkt != null) {
             baseSkeleton.addFieldAttr(parsed.offsetValue, Skeleton.Attribute.POINTER);
         }
 
@@ -375,8 +380,13 @@ public class InterSolver {
         graphManager.addEdge(from, to, edgeType);
     }
 
-
-    private void updateFieldAccessSkeleton(Skeleton baseSkeleton, long offsetValue, NMAE fieldExpr) {
+    /**
+     * Update the field access NMAE and APs into base's Skeleton.
+     * @param baseSkeleton the base's Skeleton
+     * @param offsetValue the offset value of the field access
+     * @param fieldExpr the NMAE that indicates the field access
+     */
+    private void updateFieldAccess(Skeleton baseSkeleton, long offsetValue, NMAE fieldExpr) {
         var fieldAPs = APs.getFieldAccessPoints(fieldExpr);
         baseSkeleton.addFieldExpr(offsetValue, fieldExpr);
         for (var ap: fieldAPs) {
