@@ -89,19 +89,19 @@ public class TypeFlowPathManager<T> {
     public void tryMergeOnPath(NMAEManager exprManager) {
         for (var src: srcToPathsMap.keySet()) {
             for (var path: srcToPathsMap.get(src)) {
-                Logging.debug("TypeRelationPathManager", "============================================== start ==============================================\n");
-                Logging.debug("TypeRelationPathManager", String.format("Try merge by path: %s", path));
+                Logging.debug("TypeFlowPathManager", "============================================== start ==============================================\n");
+                Logging.debug("TypeFlowPathManager", String.format("Try merge by path: %s", path));
                 var success = path.tryMergeOnPath(exprManager);
                 if (!success) {
                     evilPaths.add(path);
                     path.evil = true;
-                    Logging.debug("TypeRelationPathManager", String.format("Conflict found in path: \n%s", path));
+                    Logging.debug("TypeFlowPathManager", String.format("Conflict found in path: \n%s", path));
                 } else {
                     if (path.finalConstraint.isEmpty()) {
                         path.noComposite = true;
                     }
                 }
-                Logging.debug("TypeRelationPathManager", "============================================== end ==============================================\n");
+                Logging.debug("TypeFlowPathManager", "============================================== end ==============================================\n");
             }
         }
     }

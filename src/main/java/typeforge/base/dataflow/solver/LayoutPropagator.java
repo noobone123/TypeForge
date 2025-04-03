@@ -2,6 +2,7 @@ package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.expression.NMAEManager;
+import typeforge.utils.Logging;
 
 /**
  * Used for propagating Layout information through the whole-program TFG and
@@ -21,5 +22,12 @@ public class LayoutPropagator {
 
     public void run() {
         graphManager.initAllPathManagers();
+        for (var graph: graphManager.getGraphs()) {
+            if (graph.pathManager.hasSrcSink) {
+                Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
+
+                graph.pathManager.tryMergeOnPath(exprManager);
+            }
+        }
     }
 }

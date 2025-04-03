@@ -262,7 +262,7 @@ public class InterSolver {
         // Remove some redundant edges in the graph
         for (var graph: graphManager.getGraphs()) {
             if (graph.pathManager.hasSrcSink) {
-                Logging.debug("InterSolver", String.format("*********************** Handle Graph %s ***********************", graph));
+
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
                 graph.pathManager.tryMergeOnPath(exprManager);
                 graph.pathManager.tryMergePathsFromSameSource(exprManager);
