@@ -131,9 +131,7 @@ public class TypeFlowGraph<T> {
 
     public List<Set<T>> getConnectedComponents() {
         ConnectivityInspector<T, TypeFlowEdge> inspector = new ConnectivityInspector<>(graph);
-        var result = inspector.connectedSets();
-
-        return result;
+        return inspector.connectedSets();
     }
 
     public boolean rebuildPathManager() {

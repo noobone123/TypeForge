@@ -1,7 +1,5 @@
 package typeforge.base.dataflow.solver;
 
-import ghidra.program.model.address.Address;
-import ghidra.program.model.address.AddressFactory;
 import typeforge.base.dataflow.AccessPoints;
 import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.expression.ParsedExpr;
@@ -12,8 +10,6 @@ import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.graph.CallGraph;
 import typeforge.base.node.CallSite;
 import typeforge.base.node.FunctionNode;
-import typeforge.utils.FunctionHelper;
-import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import typeforge.base.dataflow.expression.NMAE;
 import ghidra.program.model.listing.Function;
@@ -220,13 +216,17 @@ public class InterSolver {
      * All HighSymbol with ComplexType should in the tracedSymbols set.
      */
     public void typeHintPropagation() {
-        graphManager.earlyTFGStatistics();
+        graphManager.simpleTFGStatistics();
 
         Logging.debug("InterSolver", "Size of callSiteToCallee: " + callSiteToCallee.size());
 
         // Run the ConstPropagator to propagate the constant information in the TFG
         var constPropagator = new ConstPropagator(this);
         constPropagator.run();
+
+        // Since some edges are removed during the Const Propagate, so we need to re-organize the whole-program TFG
+        // Maybe not necessary, but it's elegance to do so. (however, it may cause some performance issue)
+        graphManager.reOrganize();
 
 //        // Parsing all fieldAccess Expressions first to build the constraint's skeleton
 //        for (var symExpr : exprManager.getFieldExprSet()) {
