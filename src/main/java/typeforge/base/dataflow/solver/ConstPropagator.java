@@ -107,13 +107,15 @@ public class ConstPropagator {
     InterSolver interSolver = null;
     NMAEManager exprManager;
     TFGManager graphManager;
-    Set<FunctionNode> wrapperFunctions;
 
+    Set<FunctionNode> wrapperFunctions;
     Set<Pair<NMAE, NMAE>> wrapperEvilEdges;
     Set<NMAE> unionEvilNodes;
-    Set<Pair<NMAE, NMAE>> sizeConflictEdges;
+    Set<Pair<NMAE, NMAE>> unionEvilEdges;
     Set<NMAE> sizeConflictNodes;
-    Map<NMAE, Map<SizeSource, NMAE>> conflictInfoMap;
+
+    // By checking connected node's skeleton, size and layout information can be obtained.
+    Set<Pair<NMAE, NMAE>> sizeConflictEvilEdges;
 
     public ConstPropagator(InterSolver interSolver) {
         this.interSolver = interSolver;
@@ -121,12 +123,13 @@ public class ConstPropagator {
         this.graphManager = this.interSolver.graphManager;
 
         wrapperFunctions = new HashSet<>();
-
         wrapperEvilEdges = new HashSet<>();
+
         unionEvilNodes = new HashSet<>();
-        sizeConflictEdges = new HashSet<>();
+        unionEvilEdges = new HashSet<>();
+
         sizeConflictNodes = new HashSet<>();
-        conflictInfoMap = new HashMap<>();
+        sizeConflictEvilEdges = new HashSet<>();
     }
 
     public void run() {
@@ -136,8 +139,32 @@ public class ConstPropagator {
         removeEvilEdgesInUnions();
 
         sizeConstantPropagation();
-    }
 
+        Logging.info("ConstPropagator",
+                String.format("There are total %d wrapper functions", wrapperFunctions.size()));
+        for (var wrapper: wrapperFunctions) {
+            Logging.info("ConstPropagator",
+                    String.format("Wrapper Function: %s", wrapper.value.getName()));
+        }
+
+        Logging.info("ConstPropagator",
+                String.format("There are total %d confirmed union nodes", unionEvilNodes.size()));
+        Logging.info("ConstPropagator",
+                String.format("There are total %d union evil edges", unionEvilEdges.size()));
+        for (var union: unionEvilNodes) {
+            Logging.info("ConstPropagator",
+                    String.format("Union Node: %s", union));
+        }
+
+        Logging.info("ConstPropagator",
+                String.format("There are total %d size conflict nodes", sizeConflictNodes.size()));
+        Logging.info("ConstPropagator",
+                String.format("There are total %d size conflict evil edges", sizeConflictEvilEdges.size()));
+        for (var node: sizeConflictNodes) {
+            Logging.info("ConstPropagator",
+                    String.format("Size Conflict Node: %s", node));
+        }
+    }
 
     /**
      * After all size information of skeletons is collected, we can propagate the size information along the TFG forward.
@@ -151,10 +178,7 @@ public class ConstPropagator {
             if (unionEvilNodes.contains(expr)) {
                 continue;
             }
-            if (expr.isReference()) {
-                // Reference mains stack allocated expr, just skip
-                continue;
-            }
+
             var skt = entry.getValue();
             if (skt.hasSizeSource()) {
                 if (skt.getSizeSources().size() > 1) {
@@ -165,15 +189,30 @@ public class ConstPropagator {
                 }
             }
         }
-        Logging.info("ConstPropagator",
+        Logging.debug("ConstPropagator",
                 String.format("There are total %d sources with size information ready to propagate.", propagatedSources.size()));
 
-        // 2nd: Propagate size information forward the dataflow/call/return edges in the TFG
+        // 2nd: Propagate size information forward and backward along the dataflow/call/return edges in the TFG
         doPropagateBFSOnTFG(propagatedSources, true);
         doPropagateBFSOnTFG(propagatedSources, false);
 
-        Logging.info("ConstPropagator",
-                String.format("There are total %d size conflict edges, %d size conflict nodes", sizeConflictEdges.size(), sizeConflictNodes.size()));
+        // Simple statistics
+        for (var node: sizeConflictNodes) {
+            var skt = exprManager.getOrCreateSkeleton(node);
+            if (!skt.hasMultiSizeSource()) {
+                Logging.warn("ConstPropagator", "Unexpected: Size Conflict Node has no multi size source");
+            }
+            var sizeSources = skt.getSizeSources();
+            Logging.debug("ConstPropagator",
+                    String.format("Size sources: %s", sizeSources));
+        }
+
+        // 3rd: Remove "evil edges" related to these conflict nodes.
+        // These conflict nodes typically account for no more than 1%, and it is worthwhile to remove their edges to prevent the propagation of errors in the data flow.
+        for (var node: sizeConflictNodes) {
+            var removedEdges = graphManager.removeAllEdgesOfNode(node);
+            sizeConflictEvilEdges.addAll(removedEdges);
+        }
     }
 
     /**
@@ -312,7 +351,8 @@ public class ConstPropagator {
 
     private void removeEvilEdgesInUnions() {
         for (var expr: unionEvilNodes) {
-            graphManager.removeAllEdgesOfNode(expr);
+            var removedEdges = graphManager.removeAllEdgesOfNode(expr);
+            unionEvilEdges.addAll(removedEdges);
         }
     }
 
@@ -583,23 +623,16 @@ public class ConstPropagator {
                             Logging.debug("ConstPropagator",
                                     String.format("Found Size Conflict when propagating (%s) from %s -> %s",
                                             direct, borderNode, neighbor));
-                            Logging.debug("ConstPropagator",
-                                    String.format("Source Size Info: %s", sourceSizeInfo));
-                            Logging.debug("ConstPropagator",
-                                    String.format("Neighbor Size Info: %s", neighborSkt.getSizeSources()));
 
-                            sizeConflictEdges.add(new Pair<>(borderNode, neighbor));
                             sizeConflictNodes.add(neighbor);
 
                             neighborSkt.updateSizeSource(sourceSizeInfo);
                             sourceToPropagatedNodes.get(source).add(neighbor);
-                            // graphManager.removeEdge(borderNode, neighbor);
-                            // graphManager.removeEdge(neighbor, borderNode);
                         } else {
                             // mark as the new Border node
+                            neighborSkt.updateSizeSource(sourceSizeInfo);
                             newBorderNodes.add(neighbor);
                             sourceToPropagatedNodes.get(source).add(neighbor);
-                            neighborSkt.updateSizeSource(sourceSizeInfo);
                         }
                     }
                 }

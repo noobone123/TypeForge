@@ -1,5 +1,6 @@
 package typeforge.base.dataflow.TFG;
 
+import generic.stl.Pair;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -64,9 +65,9 @@ public class TFGManager {
         }
     }
 
-    public void removeAllEdgesOfNode(NMAE node) {
-        Logging.debug("TFGManager",
-                String.format("Removing all edges of node %s", node));
+    public Set<Pair<NMAE, NMAE>> removeAllEdgesOfNode(NMAE node) {
+        var removedEdges = new HashSet<Pair<NMAE, NMAE>>();
+        Logging.debug("TFGManager", String.format("Removing all edges of node %s", node));
 
         TypeFlowGraph<NMAE> graph = exprToGraph.get(node);
         if (graph != null) {
@@ -75,14 +76,18 @@ public class TFGManager {
             for (var edge: new ArrayList<>(inEdges)) {
                 var source = graph.getGraph().getEdgeSource(edge);
                 graph.removeEdge(source, node);
+                removedEdges.add(new Pair<>(source, node));
             }
 
             var outEdges = graph.getGraph().outgoingEdgesOf(node);
             for (var edge: new ArrayList<>(outEdges)) {
                 var target = graph.getGraph().getEdgeTarget(edge);
                 graph.removeEdge(node, target);
+                removedEdges.add(new Pair<>(node, target));
             }
         }
+
+        return removedEdges;
     }
 
     public Set<NMAE> getForwardNeighbors(NMAE node) {
