@@ -26,7 +26,7 @@ public class LayoutPropagator {
             if (graph.pathManager.hasSrcSink) {
                 Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
                 graph.pathManager.tryMergeLayoutFormSamePaths(exprManager);
-                // graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
+                graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
             }
         }
     }

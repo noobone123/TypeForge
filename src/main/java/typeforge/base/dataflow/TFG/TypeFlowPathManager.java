@@ -125,6 +125,10 @@ public class TypeFlowPathManager<T> {
                 pathPrefix.conflict = true;
                 evilEdgesInPerPath.add(pathPrefix.conflictEdge);
                 workList.add(pathPrefix); // Add back to workList for further processing
+            } else {
+                if (pathPrefix.finalSkeletonOnPath.isEmpty()) {
+                    pathPrefix.noComposite = true;
+                }
             }
 
             // Process suffix path
@@ -134,6 +138,10 @@ public class TypeFlowPathManager<T> {
                 pathSuffix.conflict = true;
                 evilEdgesInPerPath.add(pathSuffix.conflictEdge);
                 workList.add(pathSuffix); // Add back to workList for further processing
+            } else {
+                if (pathSuffix.finalSkeletonOnPath.isEmpty()) {
+                    pathSuffix.noComposite = true;
+                }
             }
         }
     }
@@ -141,6 +149,8 @@ public class TypeFlowPathManager<T> {
     /**
      * Since a Source node in whole-program TFG may have multiple paths,
      * We should try to merge Skeletons from each path to build layout information of each source.
+     * IMPORTANT: This Function should be called after `tryMergeLayoutFormSamePaths`,
+     *              Now all paths get from `srcToPathsMap` has no conflicts.
      * @param exprManager NMAE Manager
      */
     public void tryMergeLayoutFromSameSource(NMAEManager exprManager) {
@@ -149,6 +159,7 @@ public class TypeFlowPathManager<T> {
         while (!workList.isEmpty()) {
             var src = workList.poll();
             var mergedSkt = new Skeleton();
+
             // These valid edges does not contain paths with conflicts or noComposite
             var validPathsFromSrc = getAllValidPathsFromSource(src);
             if (validPathsFromSrc.isEmpty()) {
@@ -165,50 +176,43 @@ public class TypeFlowPathManager<T> {
 
             if (success) {
                 Logging.debug("TypeFlowPathManager", String.format("No Conflict when merging paths from same source: %s", src));
-                // TODO: do we need to propagate these now ?
-                /*
-                for (var path: validPathsFromSrc) {
-                    propagateSkeletonsOnPath(mergedSkt, path);
-                }
-                */
                 srcToMergedSkeleton.put(src, mergedSkt);
             } else {
                 Logging.debug("TypeFlowPathManager",
                         String.format("Found Conflict when merging paths from same source: %s, total paths: %d", src, validPathsFromSrc.size()));
                 conflictSources.add(src);
-                for (var path: validPathsFromSrc) {
-                    Logging.debug("TypeFlowPathManager", path.toString());
-                }
 
                 var LCP = getLongestCommonPrefixPath(validPathsFromSrc);
-                var intraLCPEdges = getEdgesInLCS(LCP, validPathsFromSrc);
-                var LCPEndEdges = getEndEdgesOfLCS(LCP, validPathsFromSrc);
-                // We keep the edges intra LCP, and remove the edges between LCP and end edges
-                // So the new paths and source will derive.
+                Logging.debug("TypeFlowPathManager", String.format("Found common prefix path: %s", LCP));
+                var intraLCPEdges = getEdgesInLCP(LCP, validPathsFromSrc);
                 keepEdges.addAll(intraLCPEdges);
-                mustRemove.addAll(LCPEndEdges);
 
-                /* Split Paths from Source by end Edges, And Created New Paths */
-                var newSplitPaths = splitPathsByLCS(validPathsFromSrc, LCPEndEdges, exprManager);
-
-                /* update metadata using newSplitPaths */
                 for (var path: validPathsFromSrc) {
-                    source.remove(path.start);
-                    srcToPathsMap.remove(path.start);
-//                    for (var node: path.nodes) {
-//                        nodeToPathsMap.get(node).remove(path);
-//                    }
+                    Logging.debug("TypeFlowPathManager", String.format("Split path: %s", path));
+                    var LCPEndEdge = getEndEdgeOfLCP(LCP, path);
+                    if (LCPEndEdge == null) continue;
+                    mustRemove.add(LCPEndEdge);
+                    var newPaths = splitPathByEdge(path, LCPEndEdge);
+                    if (newPaths == null) continue;
+                    var pathPrefix = newPaths.first;
+                    var pathSuffix = newPaths.second;
+
+                    // Due to workList process in `tryMergeLayoutFormSamePaths`, now these split paths should not have conflicts
+                    var pathPrefixSuccess = pathPrefix.tryMergeLayoutForwardOnPath(exprManager);
+                    var pathSuffixSuccess = pathSuffix.tryMergeLayoutForwardOnPath(exprManager);
+                    if (!pathPrefixSuccess || !pathSuffixSuccess) {
+                        Logging.error("TypeFlowPathManager", "These should not happen ....");
+                    }
+                    if (pathPrefix.finalSkeletonOnPath.isEmpty()) {
+                        pathPrefix.noComposite = true;
+                    }
+                    if (pathSuffix.finalSkeletonOnPath.isEmpty()) {
+                        pathSuffix.noComposite = true;
+                    }
+
+                    workList.add(pathPrefix.start);
+                    workList.add(pathSuffix.start);
                 }
-                var newSources = new HashSet<T>();
-                for (var path: newSplitPaths) {
-                    newSources.add(path.start);
-                    source.add(path.start);
-                    srcToPathsMap.computeIfAbsent(path.start, k -> new HashSet<>()).add(path);
-//                    for (var node: path.nodes) {
-//                        nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
-//                    }
-                }
-                workList.addAll(newSources);
             }
         }
     }
@@ -460,6 +464,9 @@ public class TypeFlowPathManager<T> {
         }
     }
 
+    /**
+     * Be aware that alias edges are also considered as valid edges
+     */
     public void findAllPathFromSrcToSink() {
         for (T src: source) {
             for (T sk: sink) {
@@ -523,81 +530,71 @@ public class TypeFlowPathManager<T> {
 
         // Extract the common prefix if any
         if (commonLength > 0) {
-            List<T> commonPath = new ArrayList<>(firstPath.subList(0, commonLength));
-            Logging.debug("TypeFlowPathManager", String.format("Found common prefix path: %s", commonPath));
-            return commonPath;
+            return new ArrayList<>(firstPath.subList(0, commonLength));
         }
         return new ArrayList<>();
     }
 
     /**
-     * Obtain the edges located at ends of the given LCS (Longest Common Subpath) in the set of paths.
-     * @param lcs given Longest Common Subpath in the set of paths
-     * @param paths set of paths
+     * Get the edge at the end of the Longest Common Prefix for a specific path
+     *
+     * @param lcp The longest common prefix nodes
+     * @param path The path to analyze
+     * @return The edge connecting LCP end to the next node, or null if not found
      */
-    private Set<TypeFlowGraph.TypeFlowEdge> getEndEdgesOfLCS(List<T> lcs, Set<TypeFlowPath<T>> paths) {
-        Set<TypeFlowGraph.TypeFlowEdge> endEdges = new HashSet<>();
-        if (lcs.isEmpty()) {
-            return endEdges;
+    private TypeFlowGraph.TypeFlowEdge getEndEdgeOfLCP(List<T> lcp, TypeFlowPath<T> path) {
+        if (lcp == null || lcp.isEmpty() || path.nodes.size() <= lcp.size()) {
+            return null;
         }
 
-        for (var path: paths) {
-            List<T> nodes = path.nodes;
-            List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
-
-            // Find the start index of the LCS in the current path
-            int startIdx = Collections.indexOfSubList(nodes, lcs);
-            if (startIdx == -1) {
-                continue;
-            }
-
-            // Find the ending index of the LCS in the current path
-            int endIdx = startIdx + lcs.size() - 1;
-
-            // Get the edge at the end of the LCS
-            if (endIdx < edges.size()) {
-                endEdges.add(edges.get(endIdx));
+        // Check if this path starts with the LCP
+        for (int i = 0; i < lcp.size(); i++) {
+            if (!path.nodes.get(i).equals(lcp.get(i))) {
+                return null; // Path doesn't contain LCP at the start
             }
         }
 
-        for (var edge: endEdges) {
-            Logging.debug("TypeFlowPathManager", String.format("End Edge of LCS: %s", edge));
-        }
-
-        return endEdges;
+        // Return the edge connecting the last LCP node to the next node
+        return path.edges.get(lcp.size() - 1);
     }
 
+    /**
+     * Get all edges within the Longest Common Prefix
+     *
+     * @param lcp The longest common prefix nodes
+     * @param paths Set of paths to examine (only used to find one path containing the LCP)
+     * @return Set of edges within the LCP
+     */
+    private Set<TypeFlowGraph.TypeFlowEdge> getEdgesInLCP(List<T> lcp, Set<TypeFlowPath<T>> paths) {
+        Set<TypeFlowGraph.TypeFlowEdge> lcpEdges = new HashSet<>();
 
-    private Set<TypeFlowGraph.TypeFlowEdge> getEdgesInLCS(List<T> lcs, Set<TypeFlowPath<T>> paths) {
-        // Initialize a set to store the edges within the LCS
-        Set<TypeFlowGraph.TypeFlowEdge> lcsEdges = new HashSet<>();
+        if (lcp == null || lcp.size() < 2) {
+            return lcpEdges; // No internal edges in empty or single-node LCP
+        }
 
-        // Loop through each path in the set
+        // Find the first path containing the LCP
         for (TypeFlowPath<T> path : paths) {
-            List<T> nodes = path.nodes;
-            List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
+            if (path.nodes.size() >= lcp.size()) {
+                boolean containsLCP = true;
+                for (int i = 0; i < lcp.size(); i++) {
+                    if (!path.nodes.get(i).equals(lcp.get(i))) {
+                        containsLCP = false;
+                        break;
+                    }
+                }
 
-            // Find the starting index of LCS in the current path
-            int startIdx = Collections.indexOfSubList(nodes, lcs);
-            if (startIdx == -1) {
-                // LCS not found in this path, continue to the next path
-                continue;
-            }
-
-            // Find the ending index of LCS in the current path
-            int endIdx = startIdx + lcs.size() - 1;
-
-            // Collect the edges corresponding to the LCS
-            for (int i = startIdx; i < endIdx; i++) {
-                lcsEdges.add(edges.get(i));
+                if (containsLCP) {
+                    // Extract all edges within the LCP
+                    for (int i = 0; i < lcp.size() - 1; i++) {
+                        lcpEdges.add(path.edges.get(i));
+                    }
+                    break; // Found what we needed
+                }
             }
         }
 
-        for (var edge: lcsEdges) {
-            Logging.debug("TypeFlowPathManager", String.format("Edges in LCS: %s", edge));
-        }
-
-        return lcsEdges;
+        Logging.debug("TypeFlowPathManager", "Found " + lcpEdges.size() + " edges in LCP");
+        return lcpEdges;
     }
 
     /**
