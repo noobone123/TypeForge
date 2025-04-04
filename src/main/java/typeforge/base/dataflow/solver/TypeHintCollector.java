@@ -553,7 +553,7 @@ public class TypeHintCollector {
     private boolean twoSkeletonsConflict(TypeConstraint skt1, TypeConstraint skt2) {
         // Only check if both skeletons have single constraint
         if (!skt1.hasMultiSkeleton && !skt2.hasMultiSkeleton) {
-            return TCHelper.checkFieldOverlap(skt1.skeletons.iterator().next(), skt2.skeletons.iterator().next());
+            return TCHelper.checkFieldOverlapStrict(skt1.skeletons.iterator().next(), skt2.skeletons.iterator().next());
         } else {
             return false;
         }

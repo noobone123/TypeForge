@@ -494,7 +494,7 @@ public class TypeConstraint {
             var noConflict = true;
             for (var c: newSkeletons) {
                 Logging.debug("TypeConstraint", String.format("Merging skeleton:\n %s", c.dumpLayout(0)));
-                noConflict = mergedSkeleton.tryMerge(c);
+                noConflict = mergedSkeleton.tryMergeLayout(c);
                 if (!noConflict) {
                     break;
                 }

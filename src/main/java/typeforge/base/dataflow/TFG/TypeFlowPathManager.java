@@ -26,7 +26,7 @@ public class TypeFlowPathManager<T> {
     public final Map<T, Set<Skeleton>> nodeToSkeletons;
 
     /** fields for handle conflict paths and nodes */
-    public final Set<TypeFlowPath<T>> evilPaths = new HashSet<>();  /** EvilPaths are paths that may cause type ambiguity */
+    public final Set<TypeFlowPath<T>> conflictPaths = new HashSet<>();
     public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
     public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
     public final Set<T> evilSource = new HashSet<>();
@@ -83,25 +83,23 @@ public class TypeFlowPathManager<T> {
     }
 
     /**
-     * Try merge TypeConstraints using nodes in one path
+     * Try merge Skeletons from each node along the same path
      * IMPORTANT: This Function should be called after all Graph's pathManager built
      */
-    public void tryMergeOnPath(NMAEManager exprManager) {
+    public void tryMergeLayoutOnPaths(NMAEManager exprManager) {
         for (var src: srcToPathsMap.keySet()) {
             for (var path: srcToPathsMap.get(src)) {
-                Logging.debug("TypeFlowPathManager", "============================================== start ==============================================\n");
                 Logging.debug("TypeFlowPathManager", String.format("Try merge by path: %s", path));
-                var success = path.tryMergeOnPath(exprManager);
+                var success = path.tryMergeLayoutForwardOnPath(exprManager);
                 if (!success) {
-                    evilPaths.add(path);
-                    path.evil = true;
+                    conflictPaths.add(path);
+                    path.conflict = true;
                     Logging.debug("TypeFlowPathManager", String.format("Conflict found in path: \n%s", path));
                 } else {
-                    if (path.finalConstraint.isEmpty()) {
+                    if (path.finalSkeletonOnPath.isEmpty()) {
                         path.noComposite = true;
                     }
                 }
-                Logging.debug("TypeFlowPathManager", "============================================== end ==============================================\n");
             }
         }
     }
@@ -122,7 +120,7 @@ public class TypeFlowPathManager<T> {
 
             var success = true;
             for (var path: pathsFromSrc) {
-                success = mergedCon.tryMerge(path.finalConstraint);
+                success = mergedCon.tryMergeLayout(path.finalSkeletonOnPath);
                 if (!success) {
                     break;
                 }
@@ -185,7 +183,7 @@ public class TypeFlowPathManager<T> {
             else {
                 Logging.debug("TypeRelationPathManager", String.format("No Conflict when merging paths from same source: %s", src));
                 for (var path: pathsFromSrc) {
-                    if (path.evil || path.noComposite) {
+                    if (path.conflict || path.noComposite) {
                         continue;
                     }
                     propagateConstraintOnPath(mergedCon, path);
@@ -214,7 +212,7 @@ public class TypeFlowPathManager<T> {
                     var success = true;
                     var mergedConstraints = new Skeleton();
                     for (var con: constraints) {
-                        success = mergedConstraints.tryMerge(con);
+                        success = mergedConstraints.tryMergeLayout(con);
                         if (!success) { break; }
                     }
 
@@ -229,7 +227,7 @@ public class TypeFlowPathManager<T> {
                             Logging.debug("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
                         }
                         for (var path: nodeToPathsMap.get(node)) {
-                            if (path.evil || path.noComposite) {
+                            if (path.conflict || path.noComposite) {
                                 continue;
                             }
                             Logging.debug("TypeRelationPathManager", path.toString());
@@ -284,13 +282,13 @@ public class TypeFlowPathManager<T> {
     public void mergeOnPath(NMAEManager exprManager) {
         for (var src: srcToPathsMap.keySet()) {
             for (var path: srcToPathsMap.get(src)) {
-                var success = path.tryMergeOnPath(exprManager);
+                var success = path.tryMergeLayoutForwardOnPath(exprManager);
                 if (!success) {
-                    evilPaths.add(path);
-                    path.evil = true;
+                    conflictPaths.add(path);
+                    path.conflict = true;
                     Logging.debug("TypeRelationPathManager", String.format("Evil in path: \n%s", path));
                 } else {
-                    if (path.finalConstraint.isEmpty()) {
+                    if (path.finalSkeletonOnPath.isEmpty()) {
                         path.noComposite = true;
                         continue;
                     }
@@ -311,7 +309,7 @@ public class TypeFlowPathManager<T> {
             var pathsFromSource = getAllValidPathsFromSource(src);
             var success = true;
             for (var path: pathsFromSource) {
-                success = mergedConstraints.tryMerge(path.finalConstraint);
+                success = mergedConstraints.tryMergeLayout(path.finalSkeletonOnPath);
                 if (!success) {
                     break;
                 }
@@ -327,7 +325,7 @@ public class TypeFlowPathManager<T> {
                 Logging.debug("TypeRelationPathManager", "Unexpected Evil Source");
                 for (var path: pathsFromSource) {
                     Logging.debug("TypeRelationPathManager", path.toString());
-                    Logging.debug("TypeRelationPathManager", path.finalConstraint.dumpLayout(0));
+                    Logging.debug("TypeRelationPathManager", path.finalSkeletonOnPath.dumpLayout(0));
                 }
             }
         }
@@ -622,11 +620,11 @@ public class TypeFlowPathManager<T> {
         }
 
         for (var path: newPaths) {
-            var success = path.tryMergeOnPath(exprManager);
+            var success = path.tryMergeLayoutForwardOnPath(exprManager);
             if (!success) {
-                path.evil = true;
+                path.conflict = true;
             }
-            if (path.finalConstraint.isEmpty()) {
+            if (path.finalSkeletonOnPath.isEmpty()) {
                 path.noComposite = true;
             }
             Logging.debug("TypeRelationPathManager", String.format("New Path split by LCS:\n%s", path));
@@ -663,7 +661,7 @@ public class TypeFlowPathManager<T> {
             return result;
         }
         for (var path: srcToPathsMap.get(source)) {
-            if (path.evil || path.noComposite) {
+            if (path.conflict || path.noComposite) {
                 continue;
             }
             result.add(path);
@@ -694,12 +692,12 @@ public class TypeFlowPathManager<T> {
             }
             for (var path: paths) {
                 writer.write(String.format("\t\t\tPath: %s\n", path));
-                if (path.evil) {
+                if (path.conflict) {
                     writer.write("\t\t\t\tConflict\n");
                 } else if (path.noComposite) {
                     writer.write("\t\t\t\tNo Composite\n");
                 } else {
-                    writer.write(path.finalConstraint.dumpLayout(4));
+                    writer.write(path.finalSkeletonOnPath.dumpLayout(4));
                 }
                 writer.write("\t\t\t\t======================================================\n");
             }

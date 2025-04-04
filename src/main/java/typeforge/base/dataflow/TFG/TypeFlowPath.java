@@ -1,4 +1,5 @@
 package typeforge.base.dataflow.TFG;
+import generic.stl.Pair;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.constraint.Skeleton;
@@ -12,11 +13,10 @@ public class TypeFlowPath<T> {
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
     public List<TypeFlowGraph.TypeFlowEdge> edges;
-    public List<Skeleton> forwardMergedConstraints;
-    public List<Skeleton> backwardMergedConstraints;
-    public Skeleton finalConstraint = null;
-    public boolean evil = false;
+    public Skeleton finalSkeletonOnPath = null;
+    public boolean conflict = false;
     public boolean noComposite = false;
+    public Pair<T, T> conflictEdge = null;
     public T start;
     public T end;
     public Set<TypeFlowGraph.TypeFlowEdge> evilEdges;
@@ -31,9 +31,6 @@ public class TypeFlowPath<T> {
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
 
-        this.forwardMergedConstraints = new ArrayList<>();
-        this.backwardMergedConstraints = new ArrayList<>();
-
         this.start = nodes.get(0);
         this.end = nodes.get(nodes.size() - 1);
         this.evilEdges = new HashSet<>();
@@ -43,139 +40,48 @@ public class TypeFlowPath<T> {
         this.nodes = nodes;
         this.edges = edges;
 
-        this.forwardMergedConstraints = new ArrayList<>();
-        this.backwardMergedConstraints = new ArrayList<>();
-
         this.start = nodes.get(0);
         this.end = nodes.get(nodes.size() - 1);
         this.evilEdges = new HashSet<>();
     }
 
-    public boolean tryMergeOnPath(NMAEManager exprManager) {
-        for (int i = 0; i < nodes.size(); i++) {
-            T node = nodes.get(i);
-            Skeleton curMergedCon;
-            NMAE curExpr = (NMAE) node;
-            Skeleton curExprCon = exprManager.getSkeleton(curExpr);
-
-            if (curExprCon == null) {
-                Logging.warn("TypeAliasPath", String.format("Cannot find constraint for %s in path", node));
-                curMergedCon = new Skeleton();
-                Logging.debug("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
-            } else {
-                curMergedCon = new Skeleton(curExprCon);
-                Logging.debug("TypeAliasPath", String.format("Created new Constraint %s for %s in path", curMergedCon, curExpr));
-
-                // If Current Expr is fieldAccessExpr, try to merge its memAliasExpr's TypeConstraint
-                if (curExpr.isDereference()) {
-                    Logging.debug("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
-                    var mayMemAliases = exprManager.fastGetMayMemAliases(curExpr);
-                    for (var alias: mayMemAliases) {
-                        if (alias == curExpr) {
-                            continue;
-                        }
-                        var aliasCon = exprManager.getSkeleton(alias);
-                        if (aliasCon == null) {
-                            continue;
-                        }
-                        var noConflict = curMergedCon.tryMerge(aliasCon);
-                        if (!noConflict) {
-                            Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in memAlias for %s and %s", curExpr, alias));
-                        }
-                    }
-                }
+    /**
+     * Try Merge skeletons of each node in the path in forward direction.
+     * If all merges are success without any conflict, return true and update finalSkeletonOnPath.
+     * If any merge fails, return false and update evilEdges.
+     * @param exprManager NMAE Manager
+     * @return true if no conflict, false if conflict
+     */
+    public boolean tryMergeLayoutForwardOnPath(NMAEManager exprManager) {
+        Skeleton mergedSkt = new Skeleton();
+        for (var i = 0; i < nodes.size(); i++) {
+            var curNode = nodes.get(i);
+            NMAE curExpr = (NMAE) curNode;
+            // TODO: should we also merge current node's alias?
+            var curExprSkt = exprManager.getSkeleton(curExpr);
+            if (curExprSkt == null) {
+                continue;
             }
-
-            // Merge forward constraints in the path
-            if (i > 0) {
-                var prevMergedCon = forwardMergedConstraints.get(i - 1);
-                if (prevMergedCon.isEmpty()) {
-                    forwardMergedConstraints.add(curMergedCon);
-                    continue;
-                } else if (curMergedCon.isEmpty()) {
-                    forwardMergedConstraints.add(prevMergedCon);
-                    continue;
-                } else {
-                    var noConflict = curMergedCon.tryMerge(prevMergedCon);
-                    if (noConflict) {
-                        forwardMergedConstraints.add(curMergedCon);
-                        continue;
-                    }
-                    else {
-                        Logging.warn("TypeAliasPath", String.format("Conflict when forward merging TypeConstraints on path for %s", curExpr));
-                        /* Deprecated Features: Find Evil Edges
-                        var rightBoundIndex = i;
-                        var leftBoundIndex = tryMergeBackward(exprManager).orElse(-1);
-                        // Find evil edges via forwardMergedConstraints and backwardMergedConstraint
-                        findEvilEdges(rightBoundIndex, leftBoundIndex);
-                        */
-                        return false;
-                    }
+            var success = mergedSkt.tryMergeLayout(curExprSkt);
+            if (!success) {
+                Logging.warn("TypeFlowPath",
+                        String.format("Layout Conflict when forward merging Skeletons on path for %s", curExpr));
+                Logging.warn("TypeFlowPath",
+                        String.format("Merged Skeleton: %s", mergedSkt.dumpLayout(2)));
+                Logging.warn("TypeFlowPath",
+                        String.format("Current Skeleton: %s", curExprSkt.dumpLayout(2)));
+                conflict = true;
+                if (i > 0) {
+                    var prevNode = nodes.get(i - 1);
+                    conflictEdge = new Pair<>(prevNode, curNode);
+                    Logging.warn("TypeFlowPath",
+                            String.format("Marked Layout Conflict Edge: %s ---> %s", prevNode, curNode));
                 }
-            } else {
-                forwardMergedConstraints.add(curMergedCon);
+                return false;
             }
         }
-
-        // update finalConstraint
-        finalConstraint = forwardMergedConstraints.get(forwardMergedConstraints.size() - 1);
+        finalSkeletonOnPath = mergedSkt;
         return true;
-    }
-
-
-    public Optional<Integer> tryMergeBackward(NMAEManager exprManager) {
-        for (int i = nodes.size() - 1; i >= 0; i--) {
-            T node = nodes.get(i);
-            Skeleton curMergedCon;
-            NMAE curExpr = (NMAE) node;
-            Skeleton curExprCon = exprManager.getSkeleton(curExpr);
-
-            if (curExprCon == null) {
-                curMergedCon = new Skeleton();
-            } else {
-                curMergedCon = new Skeleton(curExprCon);
-                if (curExpr.isDereference()) {
-                    Logging.debug("TypeAliasPath", String.format("Try to merge memAlias into %s", curMergedCon));
-                    var mayMemAliases = exprManager.fastGetMayMemAliases(curExpr);
-                    for (var alias: mayMemAliases) {
-                        if (alias == curExpr) {
-                            continue;
-                        }
-                        var aliasCon = exprManager.getSkeleton(alias);
-                        if (aliasCon == null) {
-                            continue;
-                        }
-                        var noConflict = curMergedCon.tryMerge(aliasCon);
-                        if (!noConflict) {
-                            Logging.warn("TypeAliasPath", String.format("Conflict when merging TypeConstraints in memAlias for %s and %s", curExpr, alias));
-                        }
-                    }
-                }
-            }
-
-            if (i == nodes.size() - 1) {
-                backwardMergedConstraints.add(curMergedCon);
-            } else {
-                var nextMergedCon = backwardMergedConstraints.get(backwardMergedConstraints.size() - 1);
-                if (nextMergedCon.isEmpty()) {
-                    backwardMergedConstraints.add(curMergedCon);
-                    continue;
-                } else if (curMergedCon.isEmpty()) {
-                    backwardMergedConstraints.add(nextMergedCon);
-                    continue;
-                } else {
-                    var noConflict = curMergedCon.tryMerge(nextMergedCon);
-                    if (noConflict) {
-                        backwardMergedConstraints.add(curMergedCon);
-                        continue;
-                    } else {
-                        Logging.warn("TypeAliasPath", String.format("Conflict when backward merging TypeConstraints on path for %s", curExpr));
-                        return Optional.of(i);
-                    }
-                }
-            }
-        }
-        return Optional.empty();
     }
 
     // TODO: Evil Edges is hard to find accurately, need to be improved

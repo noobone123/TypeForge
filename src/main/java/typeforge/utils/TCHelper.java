@@ -37,7 +37,7 @@ public class TCHelper {
      * If two fields have same start, but one field's end is larger than other field's start, then return true
      * @return if overlap occurs
      */
-    public static boolean checkFieldOverlap(Skeleton a, Skeleton b) {
+    public static boolean checkFieldOverlapStrict(Skeleton a, Skeleton b) {
         var aIntervals = buildIntervals(a);
         var bIntervals = buildIntervals(b);
         for (var aI: aIntervals) {

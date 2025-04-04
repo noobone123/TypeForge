@@ -45,6 +45,9 @@ public class Skeleton {
     /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
     public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
 
+    /** Recording where this size information comes from */
+    private final Set<SizeSource> sizeSources;
+
     public final Set<DataType> polymorphicTypes;
 
     public Set<Long> elementSize;
@@ -52,8 +55,6 @@ public class Skeleton {
     /** If the Skeleton indicates a composite type */
     private boolean isComposite = false;
 
-    /** Recording where this size information comes from */
-    private final Set<SizeSource> sizeSources;
 
     public Skeleton() {
         uuid = UUID.randomUUID();
@@ -202,8 +203,8 @@ public class Skeleton {
      * @param other the other Skeleton to merge
      * @return false if there is a conflict, true otherwise
      */
-    public boolean tryMerge(Skeleton other) {
-        if (TCHelper.checkFieldOverlap(this, other)) {
+    public boolean tryMergeLayout(Skeleton other) {
+        if (TCHelper.checkFieldOverlapStrict(this, other)) {
             return false;
         }
         mergeOther(other);
@@ -243,7 +244,6 @@ public class Skeleton {
             this.accessOffsets.get(ap).addAll(offsets);
         });
 
-        // TODO: checking sizeKnown / size
         // Merging size
         this.sizeSources.addAll(other.sizeSources);
         this.elementSize.addAll(other.elementSize);
@@ -290,8 +290,7 @@ public class Skeleton {
 
     public boolean isEmpty() {
         return fieldAccess.isEmpty() && fieldAttrs.isEmpty() &&
-                polymorphicTypes.isEmpty() && sizeSources.isEmpty()
-                && elementSize.isEmpty();
+                polymorphicTypes.isEmpty() && sizeSources.isEmpty();
     }
 
     public void addPolymorphicType(DataType dataType) {
