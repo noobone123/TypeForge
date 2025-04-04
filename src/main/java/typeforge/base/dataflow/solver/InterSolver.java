@@ -266,17 +266,17 @@ public class InterSolver {
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
                 graph.pathManager.tryMergeLayoutFormSamePaths(exprManager);
                 graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
-                graph.pathManager.tryHandleConflictNodes();
-                var removeEdges = graph.pathManager.getEdgesToRemove();
-                for (var edge: removeEdges) {
-                    graph.getGraph().removeEdge(edge);
-                }
+                // graph.pathManager.tryHandleConflictNodes();
+//                var removeEdges = graph.pathManager.getEdgesToRemove();
+//                for (var edge: removeEdges) {
+//                    graph.getGraph().removeEdge(edge);
+//                }
 
-                collector.updateEvilSource(graph.pathManager.conflictSources,
-                        graph.pathManager.evilSourceLCSEdges, graph.pathManager.evilSourceEndEdges);
-                collector.updateEvilNodes(graph.pathManager.evilNodes,
-                        graph.pathManager.evilNodeEdges);
-                evilFunctions.addAll(graph.pathManager.evilFunction);
+//                collector.updateEvilSource(graph.pathManager.evilSources,
+//                        graph.pathManager.evilSourceLCSEdges, graph.pathManager.evilSourceEndEdges);
+//                collector.updateEvilNodes(graph.pathManager.evilNodes,
+//                        graph.pathManager.evilNodeEdges);
+//                evilFunctions.addAll(graph.pathManager.evilFunction);
             }
         }
 

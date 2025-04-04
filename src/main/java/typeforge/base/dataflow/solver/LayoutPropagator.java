@@ -39,6 +39,7 @@ public class LayoutPropagator {
                 }
 
                 // Propagate the aggregated layout information to the whole-program TFG by BFS
+                graph.pathManager.propagateLayoutFromSources();
             }
         }
     }

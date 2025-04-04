@@ -211,6 +211,9 @@ public class Skeleton {
         return true;
     }
 
+    public boolean checkLayoutConflict(Skeleton other) {
+        return TCHelper.checkFieldOverlapStrict(this, other);
+    }
 
     /**
      * Merge other Skeleton's info into the current Skeleton

@@ -6,6 +6,7 @@ import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.Graphs;
 
+import typeforge.base.dataflow.expression.NMAE;
 import typeforge.utils.Logging;
 
 import java.util.*;
@@ -102,6 +103,21 @@ public class TypeFlowGraph<T> {
 
     public Graph<T, TypeFlowEdge> getGraph() {
         return graph;
+    }
+
+    public Set<T> getForwardNeighbors(T node) {
+        var result = new HashSet<T>();
+
+        for (var edge: graph.outgoingEdgesOf(node)) {
+            if (edge.getType() == TypeFlowGraph.EdgeType.DATAFLOW ||
+                    edge.getType() == TypeFlowGraph.EdgeType.CALL ||
+                    edge.getType() == TypeFlowGraph.EdgeType.RETURN) {
+                var target = graph.getEdgeTarget(edge);
+                result.add(target);
+            }
+        }
+
+        return result;
     }
 
     public void mergeGraph(TypeFlowGraph<T> other) {

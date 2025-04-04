@@ -9,7 +9,6 @@ import typeforge.base.dataflow.solver.TypeHintCollector;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.Layout;
 import typeforge.utils.Logging;
-import ghidra.program.model.listing.Function;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
 import java.io.FileWriter;
@@ -26,20 +25,17 @@ public class TypeFlowPathManager<T> {
     public final Map<T, Skeleton> srcToMergedSkeleton;
 
     /** node to Skeletons when propagating layout information BFS */
-    public final Map<T, Set<Skeleton>> nodeToSkeletons;
+    public final Map<T, Skeleton> nodeToMergedSkeleton;
 
     /** fields for handle conflict paths and nodes */
     public final Set<TypeFlowPath<T>> pathsHasConflict = new HashSet<>();
-    public final Set<T> evilNodes = new HashSet<>();
-    public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
-    public final Set<T> conflictSources = new HashSet<>();
-    public final Set<Function> evilFunction = new HashSet<>();
-    public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceLCSEdges = new HashMap<>();
-    public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceEndEdges = new HashMap<>();
 
     /** fields for handle edges that introduce conflicts */
     public final Set<Pair<T, T>> evilEdgesInPerPath = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInSourceAggregate = new HashSet<>();
+    public final Set<T> conflictSources = new HashSet<>();
+    public final Set<T> conflictNonSourceNodes = new HashSet<>();
+    public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> mayRemove = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> keepEdges = new HashSet<>();
 
@@ -55,7 +51,7 @@ public class TypeFlowPathManager<T> {
         this.sink = new HashSet<>();
         this.srcToPathsMap = new HashMap<>();
         this.srcToMergedSkeleton = new HashMap<>();
-        this.nodeToSkeletons = new HashMap<>();
+        this.nodeToMergedSkeleton = new HashMap<>();
     }
 
     public void initialize() {
@@ -66,7 +62,7 @@ public class TypeFlowPathManager<T> {
         this.sink.clear();
         this.srcToPathsMap.clear();
         this.srcToMergedSkeleton.clear();
-        this.nodeToSkeletons.clear();
+        this.nodeToMergedSkeleton.clear();
 
         findSources();
         findSinks();
@@ -217,88 +213,124 @@ public class TypeFlowPathManager<T> {
     }
 
     /**
-     * If there has multiple TypeConstraints in one node, means there has TypeConstraints
-     * from different sources, we should handle them and try to merge them.
+     * Propagate layout information from source nodes with merged skeletons using BFS
+     * Only propagates forward along the graph and handles conflicts
      */
-    public void tryHandleConflictNodes() {
-        for (var node: nodeToSkeletons.keySet()) {
-            var constraints = nodeToSkeletons.get(node);
-            if (constraints.size() > 1) {
-                // Two Problem to solve:
-                // 1. How to find which nodes need to remove edge
-                // 2. which edge to remove: all edge? backward edges? forward edges?
-                // 3. which type of edge to remove? CALL? DATAFLOW? or ...
-                var layoutToConstraints = buildLayoutToConstraints(constraints);
+    public void propagateLayoutFromSources() {
+        if (srcToMergedSkeleton.isEmpty()) {
+            Logging.debug("TypeFlowPathManager", "No merged skeletons to propagate");
+            return;
+        }
 
-                if (layoutToConstraints.size() > 1) {
-                    Logging.debug("TypeRelationPathManager", String.format("Node has multiple Layouts: %s: %d", node, layoutToConstraints.size()));
+        // Track source nodes and their border nodes
+        Map<T, Set<T>> sourceToBorderNodes = new HashMap<>();
+        // Initialize border nodes as source nodes themselves
+        for (var src : srcToMergedSkeleton.keySet()) {
+            var borderNodes = new HashSet<T>();
+            nodeToMergedSkeleton.put(src, srcToMergedSkeleton.get(src));
+            borderNodes.add(src);
+            sourceToBorderNodes.put(src, borderNodes);
+        }
 
-                    var success = true;
-                    var mergedConstraints = new Skeleton();
-                    for (var con: constraints) {
-                        success = mergedConstraints.tryMergeLayout(con);
-                        if (!success) { break; }
-                    }
+        // Track propagated nodes to avoid repetition
+        Map<T, Set<T>> sourceToPropagatedNodes = new HashMap<>();
+        for (var src : srcToMergedSkeleton.keySet()) {
+            sourceToPropagatedNodes.put(src, new HashSet<>());
+            sourceToPropagatedNodes.get(src).add(src);
+        }
 
-                    if (!success) {
-                        Logging.warn("TypeRelationPathManager", String.format("Evil nodes found: %s", node));
-                        evilNodes.add(node);
-                        evilFunction.add(((NMAE)node).function);
+        // Process sources in deterministic order
+        List<T> sortedSources = new ArrayList<>(srcToMergedSkeleton.keySet());
+        sortedSources.sort(Comparator.comparing(Object::hashCode));
 
-                        /* Start debugging */
-                        for (var layout: layoutToConstraints.keySet()) {
-                            Logging.debug("TypeRelationPathManager", String.format("Layout count: %d", layoutToConstraints.get(layout).size()));
-                            Logging.debug("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
+        boolean hasNewBorderNode = true;
+        while (hasNewBorderNode) {
+            hasNewBorderNode = false;
+
+            for (var source : sortedSources) {
+                var currentBorderNodes = sourceToBorderNodes.get(source);
+                var newBorderNodes = new HashSet<T>();
+
+                List<T> sortedBorderNodes = new ArrayList<>(currentBorderNodes);
+                sortedBorderNodes.sort(Comparator.comparing(Object::hashCode));
+
+                for (var borderNode : sortedBorderNodes) {
+                    // IMPORTANT: These nodes should not be seen as border nodes, so layout information
+                    // will not be propagated from them
+                    if (conflictNonSourceNodes.contains(borderNode)) continue;
+
+                    var borderSkt = nodeToMergedSkeleton.get(borderNode);
+
+                    Set<T> neighbors = new HashSet<>(graph.getForwardNeighbors(borderNode));
+                    List<T> sortedNeighbors = new ArrayList<>(neighbors);
+                    sortedNeighbors.sort(Comparator.comparing(Object::hashCode));
+
+                    for (var neighbor: sortedNeighbors) {
+                        if (sourceToPropagatedNodes.get(source).contains(neighbor)) continue;
+
+                        var neighborSkts = nodeToMergedSkeleton.get(neighbor);
+                        // Not propagated yet
+                        if (neighborSkts == null) {
+                            nodeToMergedSkeleton.put(neighbor, nodeToMergedSkeleton.get(borderNode));
+                            newBorderNodes.add(neighbor);
+                            sourceToPropagatedNodes.get(source).add(neighbor);
                         }
+                        // If Already propagated with a Skeleton
+                        else {
+                            var neighborSkt = nodeToMergedSkeleton.get(neighbor);
+                            boolean success = neighborSkt.tryMergeLayout(borderSkt);
+                            if (success) {
+                                nodeToMergedSkeleton.put(neighbor, neighborSkt);
+                                newBorderNodes.add(neighbor);
+                                sourceToPropagatedNodes.get(source).add(neighbor);
+                            } else {
+                                Logging.debug("TypeFlowPathManager",
+                                        String.format("Layout conflict when propagating from %s -> %s",
+                                                borderNode, neighbor));
+                                Logging.debug("TypeFlowPathManager",
+                                        String.format("Border Skeleton: \n%s", borderSkt.dumpLayout(2)));
+                                Logging.debug("TypeFlowPathManager",
+                                        String.format("Neighbor Skeleton: \n%s", neighborSkt.dumpLayout(2)));
 
-//                        for (var path: nodeToPathsMap.get(node)) {
-//                            if (path.conflict || path.noComposite) {
-//                                continue;
-//                            }
-//                            Logging.debug("TypeRelationPathManager", path.toString());
-//                        }
-//                        /* End Debugging */
-//
-//                        evilNodeEdges.put(node, new HashSet<>(graph.getGraph().edgesOf(node)));
-//                        /* If there has LCS in node's paths, we should keep edges in LCS */
-//                        var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
-//                        for (var lcs: LCSs) {
-//                            var lcsEdges = getEdgesInLCS(lcs, nodeToPathsMap.get(node));
-//                            keepEdges.addAll(lcsEdges);
-//                        }
+                                conflictNonSourceNodes.add(neighbor);
+                                sourceToPropagatedNodes.get(source).add(neighbor);
+                            }
+                        }
                     }
                 }
-                else if (layoutToConstraints.size() == 1) {
-                    Logging.warn("TypeRelationPathManager", "Only one layout found in node's constraints, no conflict confirmed");
-                }
-                else {
-                    Logging.warn("TypeRelationPathManager", "No layout found in node's constraints");
+
+                // Update frontier if new nodes were found
+                if (!newBorderNodes.isEmpty()) {
+                    sourceToBorderNodes.get(source).addAll(newBorderNodes);
+                    hasNewBorderNode = true;
                 }
             }
-            else {
-                Logging.debug("TypeRelationPathManager", String.format("Node has single TypeConstraints: %s: %d", node, constraints.size()));
-            }
+        }
+
+        if (!conflictNonSourceNodes.isEmpty()) {
+            Logging.info("TypeFlowPathManager",
+                    String.format("Found %d conflict Non-Source nodes during Layout Information Propagation: %s", conflictNonSourceNodes.size(), conflictNonSourceNodes));
         }
     }
 
     /**
      * Removed edges are mustRemove + (mayRemove - keepEdges)
      */
-    public Set<TypeFlowGraph.TypeFlowEdge> getEdgesToRemove() {
-        /* Add all edges of current conflict node to mustRemove */
-        for (var node: evilNodes) {
-            mayRemove.addAll(graph.getGraph().edgesOf(node));
-        }
-
-        var removedEdges = new HashSet<>(evilEdgesInSourceAggregate);
-        for (var edge: mayRemove) {
-            if (!keepEdges.contains(edge)) {
-                removedEdges.add(edge);
-                Logging.debug("TypeRelationPathManager", String.format("Mark Edge to remove: %s", edge));
-            }
-        }
-        return removedEdges;
-    }
+//    public Set<TypeFlowGraph.TypeFlowEdge> getEdgesToRemove() {
+//        /* Add all edges of current conflict node to mustRemove */
+//        for (var node: evilNodes) {
+//            mayRemove.addAll(graph.getGraph().edgesOf(node));
+//        }
+//
+//        var removedEdges = new HashSet<>(evilEdgesInSourceAggregate);
+//        for (var edge: mayRemove) {
+//            if (!keepEdges.contains(edge)) {
+//                removedEdges.add(edge);
+//                Logging.debug("TypeRelationPathManager", String.format("Mark Edge to remove: %s", edge));
+//            }
+//        }
+//        return removedEdges;
+//    }
 
     /**
      * This method is actually very similar to tryMergeOnPath
@@ -680,12 +712,6 @@ public class TypeFlowPathManager<T> {
             result.add(path);
         }
         return result;
-    }
-
-    public void propagateSkeletonsOnPath(Skeleton constraint, TypeFlowPath<T> path) {
-        for (var node: path.nodes) {
-            nodeToSkeletons.computeIfAbsent(node, k -> new HashSet<>()).add(constraint);
-        }
     }
 
     public void dump(FileWriter writer) throws Exception {

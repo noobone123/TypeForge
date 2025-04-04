@@ -611,7 +611,7 @@ public class ConstPropagator {
                     // Propagate to each neighbor of current border node
                     List<NMAE> sortedNeighbors = new ArrayList<>(neighbors);
                     sortedNeighbors.sort(Comparator.comparing(NMAE::hashCode));
-                    for (var neighbor: neighbors) {
+                    for (var neighbor: sortedNeighbors) {
                         // If the neighbor is already propagated from the source, just continue
                         if (sourceToPropagatedNodes.get(source).contains(neighbor)) continue;
 
