@@ -16,7 +16,6 @@ public class TypeFlowPath<T> {
     public List<TypeFlowGraph.TypeFlowEdge> edges;
     public Skeleton finalSkeletonOnPath = null;
     public boolean conflict = false;
-    public boolean noComposite = false;
     public TypeFlowGraph.TypeFlowEdge conflictEdge = null;
     public T start;
     public T end;
@@ -164,7 +163,7 @@ public class TypeFlowPath<T> {
 
     @Override
     public int hashCode() {
-        return edges.hashCode() + nodes.hashCode();
+        return graph.hashCode() + edges.hashCode() + nodes.hashCode();
     }
 
     @Override

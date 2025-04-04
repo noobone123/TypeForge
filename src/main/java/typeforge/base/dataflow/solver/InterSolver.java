@@ -37,6 +37,9 @@ public class InterSolver {
     public AccessPoints APs;
     public TFGManager graphManager;
     public NMAEManager exprManager;
+
+    public ConstPropagator constPropagator;
+    public LayoutPropagator layoutPropagator;
     public TypeHintCollector typeHintCollector;
 
     /** Recording malloc/calloc function's callsites */
@@ -58,7 +61,10 @@ public class InterSolver {
 
         this.graphManager = new TFGManager();
         this.exprManager = new NMAEManager(this.graphManager);
-        this.typeHintCollector = new TypeHintCollector(exprManager);
+
+        this.constPropagator = new ConstPropagator(this);
+        this.layoutPropagator = new LayoutPropagator(this);
+        this.typeHintCollector = new TypeHintCollector(this);
 
         // These CallSite is useful for Constant Propagation
         this.mallocCs = new HashSet<>();
@@ -220,7 +226,6 @@ public class InterSolver {
         Logging.debug("InterSolver", "Size of callSiteToCallee: " + callSiteToCallee.size());
 
         // Run the ConstPropagator to propagate the constant information in the TFG
-        var constPropagator = new ConstPropagator(this);
         constPropagator.run();
 
         // Since some edges are removed during the Const Propagate, so we need to re-organize the whole-program TFG
@@ -232,8 +237,11 @@ public class InterSolver {
             collectFieldAccessHints(expr, null, 0);
         }
 
-        var layoutPropagator = new LayoutPropagator(this);
         layoutPropagator.run();
+
+        graphManager.reOrganize();
+
+        typeHintCollector.run();
 
         // buildSkeletons(typeHintCollector);
 //
@@ -259,54 +267,14 @@ public class InterSolver {
 
         Set<Function> evilFunctions = new HashSet<>();
 
-        // Remove some redundant edges in the graph
+        // TODO: above already finished in layout propagater
         for (var graph: graphManager.getGraphs()) {
-            if (graph.pathManager.hasSrcSink) {
-
-                // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
-                graph.pathManager.tryMergeLayoutFormSamePaths(exprManager);
-                graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
-                // graph.pathManager.tryHandleConflictNodes();
-//                var removeEdges = graph.pathManager.getEdgesToRemove();
-//                for (var edge: removeEdges) {
-//                    graph.getGraph().removeEdge(edge);
-//                }
-
-//                collector.updateEvilSource(graph.pathManager.evilSources,
-//                        graph.pathManager.evilSourceLCSEdges, graph.pathManager.evilSourceEndEdges);
-//                collector.updateEvilNodes(graph.pathManager.evilNodes,
-//                        graph.pathManager.evilNodeEdges);
-//                evilFunctions.addAll(graph.pathManager.evilFunction);
-            }
-        }
-
-        for (var graph: graphManager.getGraphs()) {
-            for (var node: graph.getGraph().vertexSet()) {
-                if (evilFunctions.contains(node.function)) {
-                    /* We don't remove edges of expressions that indicate parameters and local variables */
-                    if (node.getRootSymExpr().isParameter || node.getRootSymExpr().isReturnVal || node.isRootSymExpr()) {
-                        continue;
-                    }
-                    else {
-                        Logging.debug("InterContext", String.format("Found injured node in function %s: %s", node.function, node));
-                        collector.injuredNode.add(node);
-                        for (var edge: graph.getGraph().edgesOf(node)) {
-                            graph.getGraph().removeEdge(edge);
-                        }
-                    }
-                }
-            }
-        }
-
-        for (var graph: graphManager.getGraphs()) {
-            if (!graph.rebuildPathManager() || !graph.pathManager.hasSrcSink) {
+            if (!graph.rebuildPathManager()) {
                 continue;
             }
             graph.pathManager.mergeOnPath(exprManager);
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
-
-            collector.updateEvilPaths(graph.pathManager.pathsHasConflict);
         }
     }
 

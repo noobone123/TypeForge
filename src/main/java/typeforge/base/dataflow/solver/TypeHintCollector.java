@@ -1,13 +1,13 @@
 package typeforge.base.dataflow.solver;
 
+import typeforge.base.dataflow.TFG.TFGManager;
+import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.expression.ParsedExpr;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
-import typeforge.base.dataflow.TFG.TypeFlowGraph;
-import typeforge.base.dataflow.TFG.TypeFlowPath;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import typeforge.utils.TCHelper;
@@ -15,34 +15,65 @@ import typeforge.utils.TCHelper;
 import java.util.*;
 
 public class TypeHintCollector {
-    private final Set<TypeConstraint> typeConstraints;
+
+    private final InterSolver interSolver;
+    private final NMAEManager exprManager;
+    private final TFGManager graphManager;
+
     /* Map[SymbolExpr, Set[Skeleton]]: this is temp data structure before handling skeletons */
     private final Map<NMAE, Set<TypeConstraint>> exprToSkeletons_T;
     /* Map[SymbolExpr, Skeleton]: this is final data structure, very important */
-    public final Map<NMAE, TypeConstraint> exprToSkeletonMap;
+    public final Map<NMAE, TypeConstraint> exprToConstraintMap;
+    private final Set<TypeConstraint> typeConstraints;
 
     /* SymbolExprs that have multiple skeletons */
     private final Set<NMAE> multiSkeletonExprs;
 
-    private final NMAEManager exprManager;
-
-    /** fields for handle conflict paths and nodes */
-    public final Set<TypeFlowPath<NMAE>> evilPaths = new HashSet<>();
-    public final Set<NMAE> evilNodes = new HashSet<>();
-    public final Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
-    public final Set<NMAE> evilSource = new HashSet<>();
-    public final Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceLCSEdges = new HashMap<>();
-    public final Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceEndEdges = new HashMap<>();
-    public final Set<NMAE> injuredNode = new HashSet<>();
-
-    public TypeHintCollector(NMAEManager exprManager) {
+    public TypeHintCollector(InterSolver interSolver) {
         this.typeConstraints = new HashSet<>();
         this.exprToSkeletons_T = new HashMap<>();
-        this.exprToSkeletonMap = new HashMap<>();
+        this.exprToConstraintMap = new HashMap<>();
         this.multiSkeletonExprs = new HashSet<>();
 
-        this.exprManager = exprManager;
+        this.interSolver = interSolver;
+        this.exprManager = this.interSolver.exprManager;
+        this.graphManager = this.interSolver.graphManager;
     }
+
+
+    public void run() {
+        // Since EvilEdges has been removed during aforementioned const propagation and layout propagation,
+        // Now we need to aggregate the type hints from connected components in the whole-program TFG.
+        buildTypeConstraintsBasedOnSkeletons();
+        return;
+    }
+
+    public void buildTypeConstraintsBasedOnSkeletons() {
+        for (var graph: graphManager.getGraphs()) {
+            if (!graph.isValid()) {
+                Logging.error("TypeHintCollector", String.format("Unexpected Invalid Graph %s, skip it.", graph));
+                continue;
+            }
+
+            for (var connects: graph.getConnectedComponents()) {
+                var mergedSkeleton = new Skeleton();
+                for (var node: connects) {
+                    var nodeSkt = exprManager.getSkeleton(node);
+                    if (nodeSkt == null) continue;
+
+                    var success = mergedSkeleton.tryMergeLayoutRelax(nodeSkt);
+                    if (!success) {
+                        Logging.error("TypeHintCollector",
+                                String.format("This Behavior is not expected! %s", nodeSkt));
+                        Logging.error("TypeHintCollector",
+                                String.format("Graph: %s -> %d", graph, graph.getNodes().size()));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
 
     /**
      * Some SymbolExprs may hold multiple Skeletons, we need to
@@ -60,7 +91,7 @@ public class TypeHintCollector {
             var expr = entry.getKey();
             var skeletons = entry.getValue();
             if (skeletons.size() == 1) {
-                exprToSkeletonMap.put(expr, skeletons.iterator().next());
+                exprToConstraintMap.put(expr, skeletons.iterator().next());
                 Logging.debug("SkeletonCollector", String.format("%s: S = 1", expr));
             }
             else if (skeletons.size() > 1) {
@@ -73,14 +104,14 @@ public class TypeHintCollector {
                 }
                 var newSkeleton = new TypeConstraint(constraints, expr);
                 newSkeleton.hasMultiSkeleton = true;
-                exprToSkeletonMap.put(expr, newSkeleton);
+                exprToConstraintMap.put(expr, newSkeleton);
                 skeletons.add(newSkeleton);
             }
         }
 
         // Remove multiSkeletonExprs from old skeletons
         for (var expr: multiSkeletonExprs) {
-            for (var skt: exprToSkeletonMap.values()) {
+            for (var skt: exprToConstraintMap.values()) {
                 if (skt.hasMultiSkeleton) continue;
                 var removed = skt.exprs.remove(expr);
                 if (removed) {
@@ -92,7 +123,7 @@ public class TypeHintCollector {
         // Merge Skeletons with multiConstraints by constraints' hashID
         var hashToSkeletons = new HashMap<Integer, Set<TypeConstraint>>();
         for (var expr: multiSkeletonExprs) {
-            var skt = exprToSkeletonMap.get(expr);
+            var skt = exprToConstraintMap.get(expr);
             var hash = skt.getSkeletonsHash();
             hashToSkeletons.computeIfAbsent(hash, k -> new HashSet<>()).add(skt);
         }
@@ -104,16 +135,16 @@ public class TypeHintCollector {
                     newSkeleton.mergeConstraintFrom(skt);
                 }
                 for (var expr: newSkeleton.exprs) {
-                    exprToSkeletonMap.put(expr, newSkeleton);
+                    exprToConstraintMap.put(expr, newSkeleton);
                 }
             }
         }
 
         var SkeletonsToRemove = new HashSet<TypeConstraint>();
         // Checking Consistency
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             for (var e: skt.exprs) {
-                if (exprToSkeletonMap.get(e) != skt) {
+                if (exprToConstraintMap.get(e) != skt) {
                     Logging.error("SkeletonCollector", String.format("Inconsistent Detected! %s", e));
                     System.exit(1);
                 }
@@ -148,7 +179,7 @@ public class TypeHintCollector {
         for (var skt: SkeletonsToRemove) {
             typeConstraints.remove(skt);
             for (var expr: skt.exprs) {
-                exprToSkeletonMap.remove(expr);
+                exprToConstraintMap.remove(expr);
             }
         }
     }
@@ -157,7 +188,7 @@ public class TypeHintCollector {
      * For Skeletons with multiple constraints, we choose the most visited one as the final constraint.
      */
     public void handleFinalConstraint() {
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             if (!skt.hasMultiSkeleton) {
                 skt.finalSkeleton = skt.skeletons.iterator().next();
             };
@@ -187,7 +218,7 @@ public class TypeHintCollector {
      */
     public void handlePtrReference() {
         /* Build basic Reference Relationship */
-        for (var expr: exprToSkeletonMap.keySet()) {
+        for (var expr: exprToConstraintMap.keySet()) {
             if (!expr.isDereference()) {
                 continue;
             }
@@ -198,9 +229,9 @@ public class TypeHintCollector {
             var base = parsedExpr.base;
             var offset = parsedExpr.offsetValue;
 
-            if (exprToSkeletonMap.containsKey(base)) {
-                var baseSkt = exprToSkeletonMap.get(base);
-                baseSkt.addPtrReference(offset, exprToSkeletonMap.get(expr));
+            if (exprToConstraintMap.containsKey(base)) {
+                var baseSkt = exprToConstraintMap.get(base);
+                baseSkt.addPtrReference(offset, exprToConstraintMap.get(expr));
                 baseSkt.ptrLevel.put(offset, 1);
             }
         }
@@ -209,7 +240,7 @@ public class TypeHintCollector {
         handleMultiPtrReferenceTo();
 
         /* Handle MultiLevel Ptr Reference */
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             for (var offset: skt.finalPtrReference.keySet()) {
                 var ptrEESkt = skt.finalPtrReference.get(offset);
                 var ptrLevel = 1;
@@ -240,7 +271,7 @@ public class TypeHintCollector {
         }
 
         /* Remove Ptr Reference which points to a multiLevelMidPtr */
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             if (skt.hasPtrReference()) {
                 for (var offset: skt.finalPtrReference.keySet()) {
                     var ptrEE = skt.finalPtrReference.get(offset);
@@ -259,7 +290,7 @@ public class TypeHintCollector {
      */
     public void handleMemberConflict() {
         var ptrSize = Global.currentProgram.getDefaultPointerSize();
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             List<Long> offsets = new ArrayList<>(skt.finalSkeleton.fieldAccess.keySet());
             Collections.sort(offsets);
             List<Long> removeCandidate = new ArrayList<>();
@@ -302,11 +333,11 @@ public class TypeHintCollector {
     public void handleTypeAlias() {
         /* initialize aliasMap using Skeleton's expressions */
         var aliasMap = new UnionFind<NMAE>();
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             aliasMap.initializeWithCluster(skt.exprs);
         }
 
-        for (var expr: exprToSkeletonMap.keySet()) {
+        for (var expr: exprToConstraintMap.keySet()) {
             if (expr.isDereference()) {
                 parseAndSetTypeAlias(expr, aliasMap);
             }
@@ -320,21 +351,21 @@ public class TypeHintCollector {
     public void handleNesting(Set<NMAE> exprsAsArgument) {
         /* Add MayNestedSkeleton */
         for (var expr: exprsAsArgument) {
-            if (!exprToSkeletonMap.containsKey(expr)) continue;
+            if (!exprToConstraintMap.containsKey(expr)) continue;
             /* If expr is a SymbolExpr like `base + offset`, we seem it as a may nested expr */
             if (expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
                 var base = expr.getBase();
                 var offset = expr.getOffset().getConstant();
-                if (exprToSkeletonMap.containsKey(base)) {
-                    var baseSkt = exprToSkeletonMap.get(base);
+                if (exprToConstraintMap.containsKey(base)) {
+                    var baseSkt = exprToConstraintMap.get(base);
                     baseSkt.mayNestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
-                            .add(exprToSkeletonMap.get(expr));
+                            .add(exprToConstraintMap.get(expr));
                 }
             }
         }
 
         /* Remove skeletons that should not be nested */
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             if (skt.hasNestedConstraint()) {
                 var iterator = skt.mayNestedConstraint.keySet().iterator();
                 while (iterator.hasNext()) {
@@ -362,7 +393,7 @@ public class TypeHintCollector {
         }
 
         /* Handling mayNested Skeleton and build the finalNestedSkeleton */
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             for (var entry: skt.mayNestedConstraint.entrySet()) {
                 var offset = entry.getKey();
                 var nestedSkts = entry.getValue();
@@ -385,7 +416,7 @@ public class TypeHintCollector {
 
     public void handleMultiPtrReferenceTo() {
         /* Choose the most visited one as the final ReferenceTo constraint */
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             if (skt.hasMultiPtrReferenceTo()) {
                 Logging.warn("SkeletonCollector", String.format("Multi Ptr Reference To Detected: \n%s", skt));
                 for (var offset: skt.ptrReference.keySet()) {
@@ -421,7 +452,7 @@ public class TypeHintCollector {
      * This method should be called after all skeletons are successfully handled.
      */
     public void handleDecompilerInferredTypes() {
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             for (var expr: skt.exprs) {
                 if (expr.isVariable()) {
                     // var inferredType = exprManager.getInferredType(expr);
@@ -435,7 +466,7 @@ public class TypeHintCollector {
      * Mark MayPrimitiveType for Skeletons and handle reference and nested mayPrimitiveType skeletons.
      */
     public void handleUnreasonableSkeleton() {
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             if (skt.isMultiLevelMidPtr()) {
                 Logging.debug("SkeletonCollector", "Multi Level Mid Ptr Skeleton: " + skt);
                 skt.isMultiLevelMidPtr = true;
@@ -452,7 +483,7 @@ public class TypeHintCollector {
 
 
     public void handleAPSets() {
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             for (var offset: skt.finalSkeleton.fieldAccess.keySet()) {
                 var APSet = skt.finalSkeleton.fieldAccess.get(offset);
                 APSet.postHandle();
@@ -508,8 +539,8 @@ public class TypeHintCollector {
                 if (aliasMap.contains(e) && aliasMap.contains(expr)) {
                     if (aliasMap.connected(e, expr)) continue;
 
-                    var skt1 = exprToSkeletonMap.get(e);
-                    var skt2 = exprToSkeletonMap.get(expr);
+                    var skt1 = exprToConstraintMap.get(e);
+                    var skt2 = exprToConstraintMap.get(expr);
                     if (skt1 != skt2) {
                         // TODO: also checking polyTypes.
                         if (twoSkeletonsConflict(skt1, skt2)) {
@@ -539,7 +570,7 @@ public class TypeHintCollector {
                             Logging.debug("SkeletonCollector", newTypeConstraint.exprs.toString());
                             /* update exprToSkeletonMap */
                             for (var e1: newTypeConstraint.exprs) {
-                                exprToSkeletonMap.put(e1, newTypeConstraint);
+                                exprToConstraintMap.put(e1, newTypeConstraint);
                             }
                         } else {
                             Logging.warn("SkeletonCollector", String.format("Failed to merge skeletons of %s and %s", e, expr));
@@ -561,23 +592,5 @@ public class TypeHintCollector {
 
     public void addSkeleton(TypeConstraint skt) {
         typeConstraints.add(skt);
-    }
-
-    public void updateEvilPaths(Set<TypeFlowPath<NMAE>> evilPaths) {
-        this.evilPaths.addAll(evilPaths);
-    }
-
-    public void updateEvilSource(Set<NMAE> evilSource,
-                                  Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceLCSEdges,
-                                  Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceEndEdges) {
-        this.evilSource.addAll(evilSource);
-        this.evilSourceLCSEdges.putAll(evilSourceLCSEdges);
-        this.evilSourceEndEdges.putAll(evilSourceEndEdges);
-    }
-
-    public void updateEvilNodes(Set<NMAE> evilNodes,
-                                Map<NMAE, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges) {
-        this.evilNodes.addAll(evilNodes);
-        this.evilNodeEdges.putAll(evilNodeEdges);
     }
 }

@@ -2,11 +2,12 @@ package typeforge.base.dataflow.TFG;
 
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.ConnectivityInspector;
+import org.jgrapht.alg.connectivity.KosarajuStrongConnectivityInspector;
+import org.jgrapht.alg.interfaces.StrongConnectivityAlgorithm;
 import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.Graphs;
 
-import typeforge.base.dataflow.expression.NMAE;
 import typeforge.utils.Logging;
 
 import java.util.*;
@@ -16,7 +17,6 @@ public class TypeFlowGraph<T> {
         CALL,
         RETURN,
         DATAFLOW,
-        REFERENCE,
         ALIAS,
     }
 
@@ -29,23 +29,6 @@ public class TypeFlowGraph<T> {
 
         public EdgeType getType() {
             return type;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(this.getSource(), this.getTarget(), type);
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (obj == null || getClass() != obj.getClass()) {
-                return false;
-            }
-            TypeFlowEdge other = (TypeFlowEdge) obj;
-            return this.getSource().equals(other.getSource()) && this.getTarget().equals(other.getTarget()) && this.type == other.type;
         }
 
         @Override
@@ -93,6 +76,30 @@ public class TypeFlowGraph<T> {
         Logging.trace("TypeFlowGraph", String.format("TypeFlowGraph_%s Remove node: %s", shortUUID, node));
     }
 
+    /**
+     * If a graph has individual single nodes, it is invalid
+     */
+    public boolean isValid() {
+        // If there is only one node, it is valid
+        if (graph.vertexSet().size() == 1) {
+            return true;
+        } else if (graph.vertexSet().isEmpty()) {
+            Logging.error("TypeFlowGraph",
+                    String.format("Unexpected empty graph: %s", this));
+            return false;
+        } else {
+            boolean isValid = true;
+            for (var node: getNodes()) {
+                if (graph.inDegreeOf(node) == 0 && graph.outDegreeOf(node) == 0) {
+                    isValid = false;
+                    break;
+                }
+            }
+
+            return isValid;
+        }
+    }
+
     public int getNumNodes() {
         return graph.vertexSet().size();
     }
@@ -101,22 +108,20 @@ public class TypeFlowGraph<T> {
         return graph.vertexSet();
     }
 
+    public Set<TypeFlowEdge> getEdges() {
+        return graph.edgeSet();
+    }
+
     public Graph<T, TypeFlowEdge> getGraph() {
         return graph;
     }
 
     public Set<T> getForwardNeighbors(T node) {
         var result = new HashSet<T>();
-
         for (var edge: graph.outgoingEdgesOf(node)) {
-            if (edge.getType() == TypeFlowGraph.EdgeType.DATAFLOW ||
-                    edge.getType() == TypeFlowGraph.EdgeType.CALL ||
-                    edge.getType() == TypeFlowGraph.EdgeType.RETURN) {
-                var target = graph.getEdgeTarget(edge);
-                result.add(target);
-            }
+            var target = graph.getEdgeTarget(edge);
+            result.add(target);
         }
-
         return result;
     }
 
@@ -148,6 +153,10 @@ public class TypeFlowGraph<T> {
     public List<Set<T>> getConnectedComponents() {
         ConnectivityInspector<T, TypeFlowEdge> inspector = new ConnectivityInspector<>(graph);
         return inspector.connectedSets();
+    }
+
+    public StrongConnectivityAlgorithm<T, TypeFlowEdge> getStrongConnectedComponentsAlg() {
+        return new KosarajuStrongConnectivityInspector<>(graph);
     }
 
     public boolean rebuildPathManager() {

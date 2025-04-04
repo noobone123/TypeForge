@@ -21,29 +21,42 @@ public class LayoutPropagator {
     }
 
     public void run() {
-        graphManager.initAllPathManagers();
         for (var graph: graphManager.getGraphs()) {
-            if (graph.pathManager.hasSrcSink) {
-                Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
-                graph.pathManager.tryMergeLayoutFormSamePaths(exprManager);
-                graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
+            Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
 
-                // Removing Evil Edges in layout information aggregate
-                // These edges including alias edges.
-                var evilEdgesInPerPath = graph.pathManager.evilEdgesInPerPath;
-                var evilEdgesInSourceAggregate = graph.pathManager.evilEdgesInSourceAggregate;
-                for (var edge: evilEdgesInPerPath) {
-                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
-                }
-                for (var edge: evilEdgesInSourceAggregate) {
-                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
-                }
+            if (!graph.isValid()) {
+                Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
+                continue;
+            }
 
-                // Propagate the aggregated layout information to the whole-program TFG by BFS
-                graph.pathManager.propagateLayoutFromSourcesBFS();
-                for (var edge: graph.pathManager.evilEdgesInConflictNodes) {
-                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
-                }
+            if (graph.getNodes().size() == 1) {
+                Logging.debug("LayoutPropagator", String.format("Graph %s has only one node, skip it.", graph));
+                continue;
+            }
+
+            graph.pathManager.initialize();
+            graph.pathManager.tryMergeLayoutFormSamePathsForward(exprManager);
+            graph.pathManager.tryMergeLayoutFromSameSourceForward(exprManager);
+
+            // Removing Evil Edges in layout information aggregate
+            // These edges including alias edges.
+            for (var edge: graph.pathManager.evilEdgesInPerPath) {
+                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+            }
+            for (var edge: graph.pathManager.evilEdgesInSourceAggregate) {
+                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+            }
+            for (var edge: graph.pathManager.backwardEdges) {
+                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+            }
+
+            // graph.pathManager.checkSourceSkeletonCorrectness(exprManager);
+
+            // Propagate the aggregated layout information to the whole-program TFG by BFS
+            graph.pathManager.propagateLayoutFromSourcesBFS();
+
+            for (var edge: graph.pathManager.evilEdgesInConflictNodes) {
+                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
             }
         }
     }

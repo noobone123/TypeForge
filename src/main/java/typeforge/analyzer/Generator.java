@@ -49,7 +49,7 @@ public class Generator {
 
     public Map<NMAE, TypeConstraint> getExprToSkeletonMap() {
         var exprToSkeletonMap = new HashMap<NMAE, TypeConstraint>();
-        for (var entry: typeHintCollector.exprToSkeletonMap.entrySet()) {
+        for (var entry: typeHintCollector.exprToConstraintMap.entrySet()) {
             var expr = entry.getKey();
             var skt = entry.getValue();
             if (finalTypeConstraints.contains(skt)) {
@@ -94,7 +94,7 @@ public class Generator {
     }
 
     private void generation() {
-        var exprToSkeletonMap = typeHintCollector.exprToSkeletonMap;
+        var exprToSkeletonMap = typeHintCollector.exprToConstraintMap;
 
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isPointerToPrimitive) {
@@ -442,7 +442,7 @@ public class Generator {
     }
 
     public void explore() {
-        var exprToSkeletonMap = typeHintCollector.exprToSkeletonMap;
+        var exprToSkeletonMap = typeHintCollector.exprToConstraintMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
             if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
@@ -451,17 +451,17 @@ public class Generator {
             skt.dumpInfo();
         }
 
-        Logging.debug("Generator", String.format("Evil Sources (%d):", typeHintCollector.evilSource.size()));
-        for (var source: typeHintCollector.evilSource) {
-            Logging.debug("Generator", source.toString());
-        }
-        Logging.debug("Generator", String.format("Evil Nodes (%d):", typeHintCollector.evilNodes.size()));
-        for (var node: typeHintCollector.evilNodes) {
-            Logging.debug("Generator", node.toString());
-        }
-        Logging.debug("Generator", String.format("Evil Paths (%d):", typeHintCollector.evilPaths.size()));
-        for (var path: typeHintCollector.evilPaths) {
-            Logging.debug("Generator", path.toString());
-        }
+//        Logging.debug("Generator", String.format("Evil Sources (%d):", typeHintCollector.evilSource.size()));
+//        for (var source: typeHintCollector.evilSource) {
+//            Logging.debug("Generator", source.toString());
+//        }
+//        Logging.debug("Generator", String.format("Evil Nodes (%d):", typeHintCollector.evilNodes.size()));
+//        for (var node: typeHintCollector.evilNodes) {
+//            Logging.debug("Generator", node.toString());
+//        }
+//        Logging.debug("Generator", String.format("Evil Paths (%d):", typeHintCollector.evilPaths.size()));
+//        for (var path: typeHintCollector.evilPaths) {
+//            Logging.debug("Generator", path.toString());
+//        }
     }
 }

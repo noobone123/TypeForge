@@ -1,6 +1,7 @@
 package typeforge.base.dataflow.TFG;
 
 import generic.stl.Pair;
+import org.jgrapht.GraphPath;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
@@ -16,7 +17,6 @@ import java.util.*;
 
 public class TypeFlowPathManager<T> {
     public TypeFlowGraph<T> graph;
-    public boolean hasSrcSink = true;
 
     /** Import metadata for TypeFlowPathManager, should be updated when graph changed */
     public final Set<T> source;
@@ -38,6 +38,9 @@ public class TypeFlowPathManager<T> {
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInConflictNodes = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> keepEdges = new HashSet<>();
 
+    /** We do forward propagation which is enough, so we need to remove backward edges to avoid interference */
+    public final Set<TypeFlowGraph.TypeFlowEdge> backwardEdges = new HashSet<>();
+
     /** Fields for build skeletons, not used for conflict checking
      * If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
     public UnionFind<T> sourceGroups = new UnionFind<>();
@@ -56,31 +59,27 @@ public class TypeFlowPathManager<T> {
     public void initialize() {
         Logging.debug("TypeFlowPathManager",
                 String.format("Initialize TypeFlowPathManager for graph: %s", graph));
-
         this.source.clear();
         this.sink.clear();
         this.srcToPathsMap.clear();
         this.srcToMergedSkeleton.clear();
         this.nodeToMergedSkeleton.clear();
 
-        findSources();
-        findSinks();
-        if (source.isEmpty() || sink.isEmpty()) {
-            hasSrcSink = false;
-            return;
-        }
+        findSourcesAndSinks();
 
-        if (hasSrcSink) {
-            findAllPathFromSrcToSink();
-        }
+        findAllPathFromSrcToSink();
+
+        markAllBackwardEdges();
     }
 
     /**
      * Try merge Skeletons from each node along the same path
      * IMPORTANT: This Function should be called after all Graph's pathManager built
      */
-    public void tryMergeLayoutFormSamePaths(NMAEManager exprManager) {
+    public void tryMergeLayoutFormSamePathsForward(NMAEManager exprManager) {
         Queue<TypeFlowPath<T>> workList = new LinkedList<>();
+
+        Logging.info("TypeFlowPathManager", String.format("Try merge layout from same paths: %s", srcToPathsMap));
 
         // First phase: check all paths for conflicts
         for (var src: srcToPathsMap.keySet()) {
@@ -91,10 +90,6 @@ public class TypeFlowPathManager<T> {
                     evilEdgesInPerPath.add(path.conflictEdge);
                     path.conflict = true;
                     workList.add(path);
-                } else {
-                    if (path.finalSkeletonOnPath.isEmpty()) {
-                        path.noComposite = true;
-                    }
                 }
             }
         }
@@ -118,10 +113,6 @@ public class TypeFlowPathManager<T> {
                 pathPrefix.conflict = true;
                 evilEdgesInPerPath.add(pathPrefix.conflictEdge);
                 workList.add(pathPrefix); // Add back to workList for further processing
-            } else {
-                if (pathPrefix.finalSkeletonOnPath.isEmpty()) {
-                    pathPrefix.noComposite = true;
-                }
             }
 
             // Process suffix path
@@ -131,10 +122,6 @@ public class TypeFlowPathManager<T> {
                 pathSuffix.conflict = true;
                 evilEdgesInPerPath.add(pathSuffix.conflictEdge);
                 workList.add(pathSuffix); // Add back to workList for further processing
-            } else {
-                if (pathSuffix.finalSkeletonOnPath.isEmpty()) {
-                    pathSuffix.noComposite = true;
-                }
             }
         }
     }
@@ -146,7 +133,7 @@ public class TypeFlowPathManager<T> {
      *              Now all paths get from `srcToPathsMap` has no conflicts.
      * @param exprManager NMAE Manager
      */
-    public void tryMergeLayoutFromSameSource(NMAEManager exprManager) {
+    public void tryMergeLayoutFromSameSourceForward(NMAEManager exprManager) {
         var workList = new LinkedList<>(source);
 
         while (!workList.isEmpty()) {
@@ -196,12 +183,6 @@ public class TypeFlowPathManager<T> {
                     if (!pathPrefixSuccess || !pathSuffixSuccess) {
                         Logging.error("TypeFlowPathManager", "These should not happen ....");
                     }
-                    if (pathPrefix.finalSkeletonOnPath.isEmpty()) {
-                        pathPrefix.noComposite = true;
-                    }
-                    if (pathSuffix.finalSkeletonOnPath.isEmpty()) {
-                        pathSuffix.noComposite = true;
-                    }
 
                     workList.add(pathPrefix.start);
                     workList.add(pathSuffix.start);
@@ -214,8 +195,10 @@ public class TypeFlowPathManager<T> {
      * This method should be call after `tryMergeLayoutFromSameSource`.
      * In theory, all merged skeletons from the source nodes should not have conflicts at this point.
      * When we detect conflict nodes during following propagation process, we remove all edges connected to them.
-     * At this stage, the remaining connected components in the graph should theoretically also be free of conflicts.
+     * At this stage, the remaining connected components in the graph should theoretically also be free of conflicts
      */
+    // TODO:
+    //  1. 如果 Source 之间的路径没有任何节点的交集，那么它们之间实际上无法相互传播，因此也就无法检查到冲突。
     public void propagateLayoutFromSourcesBFS() {
         if (srcToMergedSkeleton.isEmpty()) {
             Logging.debug("TypeFlowPathManager", "No merged skeletons to propagate");
@@ -261,6 +244,7 @@ public class TypeFlowPathManager<T> {
 
                     var borderSkt = nodeToMergedSkeleton.get(borderNode);
 
+                    // TODO: check if there are any
                     Set<T> neighbors = new HashSet<>(graph.getForwardNeighbors(borderNode));
                     List<T> sortedNeighbors = new ArrayList<>(neighbors);
                     sortedNeighbors.sort(Comparator.comparing(Object::hashCode));
@@ -311,7 +295,24 @@ public class TypeFlowPathManager<T> {
             }
         }
 
-        // Post-processing, updating
+        // Post-processing, marking nodes that are not propagated to.
+        var propagatedNodes = nodeToMergedSkeleton.keySet();
+        var allNodes = graph.getGraph().vertexSet();
+        var notPropagatedNodes = new HashSet<T>(allNodes);
+        notPropagatedNodes.removeAll(propagatedNodes);
+        if (!notPropagatedNodes.isEmpty()) {
+            Logging.info("TypeFlowPathManager",
+                    String.format("%s: Found %d nodes that are not propagated to: %s",
+                            graph, notPropagatedNodes.size(), notPropagatedNodes));
+            Logging.info("TypeFlowPathManager",
+                    String.format("Sources size: %d, Sinks size: %d", source.size(), sink.size()));
+            Logging.info("TypeFlowPathManager",
+                    String.format("Sources are: %s", source));
+            Logging.info("TypeFlowPathManager",
+                    String.format("Sinks are: %s", sink));
+        }
+
+        // Post-processing, updating conflict Nodes
         if (!conflictNonSourceNodes.isEmpty()) {
             Logging.info("TypeFlowPathManager",
                     String.format("Found %d conflict Non-Source nodes during Layout Information Propagation: %s", conflictNonSourceNodes.size(), conflictNonSourceNodes));
@@ -334,6 +335,38 @@ public class TypeFlowPathManager<T> {
     }
 
     /**
+     * Check if there are any conflicts when merging all skeletons from the source nodes.
+     */
+    public void checkSourceSkeletonCorrectness(NMAEManager exprManager) {
+        // Re-initialize ...
+        initialize();
+
+        // First phase: check all paths for conflicts
+        for (var src: srcToPathsMap.keySet()) {
+            for (var path: srcToPathsMap.get(src)) {
+                var success = path.tryMergeLayoutForwardOnPath(exprManager);
+                if (!success) {
+                    Logging.error("TypeFlowPathManager", "Unexpected error in checking paths conflicts.");
+                    break;
+                }
+            }
+        }
+
+        // Second phase: check all merged sources for conflicts.
+        for (var src: srcToPathsMap.keySet()) {
+            var mergedSkt = new Skeleton();
+            for (var path: srcToPathsMap.get(src)) {
+                var success = mergedSkt.tryMergeLayoutStrict(path.finalSkeletonOnPath);
+                if (!success) {
+                    Logging.error("TypeFlowPathManager", "Unexpected error in merging source's skeletons.");
+                    break;
+                }
+            }
+            srcToMergedSkeleton.put(src, mergedSkt);
+        }
+    }
+
+    /**
      * This method is actually very similar to tryMergeOnPath
      * @param exprManager SymbolExprManager
      */
@@ -345,12 +378,6 @@ public class TypeFlowPathManager<T> {
                     pathsHasConflict.add(path);
                     path.conflict = true;
                     Logging.debug("TypeRelationPathManager", String.format("Evil in path: \n%s", path));
-                } else {
-                    if (path.finalSkeletonOnPath.isEmpty()) {
-                        path.noComposite = true;
-                        continue;
-                    }
-                    Logging.debug("TypeRelationPathManager", String.format("Expected path: \n%s", path));
                 }
             }
         }
@@ -477,40 +504,163 @@ public class TypeFlowPathManager<T> {
     /**
      * Find Source nodes in the TFG
      */
-    public void findSources() {
+    public void findSourcesAndSinks() {
         for (T vertex : graph.getGraph().vertexSet()) {
             if (graph.getGraph().inDegreeOf(vertex) == 0 && graph.getGraph().outDegreeOf(vertex) > 0) {
                 source.add(vertex);
             }
-        }
-    }
-
-    /**
-     * Find Sink nodes in the TFG
-     */
-    public void findSinks() {
-        for (T vertex : graph.getGraph().vertexSet()) {
-            if (graph.getGraph().inDegreeOf(vertex) > 0 && graph.getGraph().outDegreeOf(vertex) == 0) {
+            else if (graph.getGraph().inDegreeOf(vertex) > 0 && graph.getGraph().outDegreeOf(vertex) == 0) {
                 sink.add(vertex);
             }
         }
     }
 
     /**
-     * Be aware that alias edges are also considered as valid edges
+     * Find all Paths from Source to Sink.
+     * However, be careful that in some TFG, there has no explicit sink node or source node.
+     * So our algorithm is:
+     *  1. build path from sources to sinks (if they exist)
+     *  2. mark all nodes in the paths
+     *  3. for nodes that are not marked, start from any node and build path to any other node, record visited to avoid recursion
+     *  4. Iterate using workList.
+     * Be aware that alias edges are also considered as valid edges.
+     *
      */
     public void findAllPathFromSrcToSink() {
-        for (T src: source) {
-            for (T sk: sink) {
-                var allPaths = new AllDirectedPaths<>(graph.getGraph()).getAllPaths(src, sk, true, Integer.MAX_VALUE);
-                for (var path: allPaths) {
-                    TypeFlowPath<T> typeFlowPath = new TypeFlowPath<>(graph, path);
-                    srcToPathsMap.computeIfAbsent(src, k -> new HashSet<>()).add(typeFlowPath);
+        AllDirectedPaths<T, TypeFlowGraph.TypeFlowEdge> allPathsFinder = new AllDirectedPaths<>(graph.getGraph());
+
+        for (T src : source) {
+            for (T snk : sink) {
+                List<GraphPath<T, TypeFlowGraph.TypeFlowEdge>> paths =
+                        allPathsFinder.getAllPaths(src, snk, true, Integer.MAX_VALUE);
+                for (GraphPath<T, TypeFlowGraph.TypeFlowEdge> path : paths) {
+                    TypeFlowPath<T> TFPath = new TypeFlowPath<>(graph, path);
+                    srcToPathsMap.computeIfAbsent(src, k -> new HashSet<>()).add(TFPath);
                 }
             }
         }
+
+        Set<T> coveredNodes = getCoveredNodes();
+        Set<T> unCoveredNodes = new HashSet<>(graph.getNodes());
+        unCoveredNodes.removeAll(coveredNodes);
+
+        if (!unCoveredNodes.isEmpty()) {
+            Logging.info("TypeFlowPathManager",
+                    String.format("Found %d / %d nodes are uncovered by paths",
+                            unCoveredNodes.size(), graph.getGraph().vertexSet().size()));
+
+            // Find virtual sources (nodes with in-degree 0 or only connected from covered nodes)
+            Set<T> virtualSources = new HashSet<>();
+            // Find virtual sinks (nodes with out-degree 0 or only connected to covered nodes)
+            Set<T> virtualSinks = new HashSet<>();
+
+            for (T node : unCoveredNodes) {
+                boolean isVirtualSource = true;
+                boolean isVirtualSink = true;
+
+                // Check in-edges to determine if virtual source
+                for (TypeFlowGraph.TypeFlowEdge edge : graph.getGraph().incomingEdgesOf(node)) {
+                    T sourceNode = graph.getGraph().getEdgeSource(edge);
+                    if (unCoveredNodes.contains(sourceNode)) {
+                        isVirtualSource = false;
+                        break;
+                    }
+                }
+
+                // Check out-edges to determine if virtual sink
+                for (TypeFlowGraph.TypeFlowEdge edge : graph.getGraph().outgoingEdgesOf(node)) {
+                    T targetNode = graph.getGraph().getEdgeTarget(edge);
+                    if (unCoveredNodes.contains(targetNode)) {
+                        isVirtualSink = false;
+                        break;
+                    }
+                }
+
+                if (isVirtualSource) {
+                    virtualSources.add(node);
+                }
+                if (isVirtualSink) {
+                    virtualSinks.add(node);
+                }
+            }
+
+            // If no virtual sources/sinks found, pick nodes with minimum in/out degree
+            if (virtualSources.isEmpty() || virtualSinks.isEmpty()) {
+                T bestSource = findNodeWithMinInDegreeInSet(unCoveredNodes);
+                T bestSink = findNodeWithMinOutDegreeInSet(unCoveredNodes);
+
+                if (!virtualSources.isEmpty()) {
+                    virtualSinks.add(bestSink);
+                } else if (!virtualSinks.isEmpty()) {
+                    virtualSources.add(bestSource);
+                } else {
+                    virtualSources.add(bestSource);
+                    virtualSinks.add(bestSink);
+                }
+            }
+
+            // Create paths between virtual sources and sinks
+            for (T src : virtualSources) {
+                source.add(src); // Add to global sources
+                for (T snk : virtualSinks) {
+                    List<GraphPath<T, TypeFlowGraph.TypeFlowEdge>> paths =
+                            allPathsFinder.getAllPaths(src, snk, true, Integer.MAX_VALUE);
+                    for (GraphPath<T, TypeFlowGraph.TypeFlowEdge> path : paths) {
+                        TypeFlowPath<T> TFPath = new TypeFlowPath<>(graph, path);
+                        srcToPathsMap.computeIfAbsent(src, k -> new HashSet<>()).add(TFPath);
+                    }
+                }
+            }
+
+            sink.addAll(virtualSinks);
+        }
     }
 
+    /**
+     * Remove all backward edges from the graph.
+     * Backward edges are defined as edges that are not part of any constructed path.
+     * Anyway, these backward edges are rare.
+     * from source to sink.
+     */
+    private void markAllBackwardEdges() {
+        // Step 1: Collect all edges that are part of forward paths
+        Set<TypeFlowGraph.TypeFlowEdge> forwardEdges = new HashSet<>();
+        for (Set<TypeFlowPath<T>> paths : srcToPathsMap.values()) {
+            for (TypeFlowPath<T> path : paths) {
+                forwardEdges.addAll(path.edges);
+            }
+        }
+
+        // Step 2: Get all edges from the graph
+        Set<TypeFlowGraph.TypeFlowEdge> allEdges = new HashSet<>(graph.getGraph().edgeSet());
+
+        // Step 3: Find backward edges (edges in graph but not in forward paths)
+        Set<TypeFlowGraph.TypeFlowEdge> backwardEdges = new HashSet<>(allEdges);
+        backwardEdges.removeAll(forwardEdges);
+
+        // Step 4: Remove all backward edges
+        if (!backwardEdges.isEmpty()) {
+            Logging.info("TypeFlowPathManager",
+                    String.format("Removing %d backward edges out of %d total edges",
+                            backwardEdges.size(), allEdges.size()));
+
+            // Use a new list to avoid concurrent modification
+            this.backwardEdges.addAll(backwardEdges);
+        }
+    }
+
+    /**
+     * Get Covered nodes in the paths
+     */
+    private Set<T> getCoveredNodes() {
+        Set<T> coveredNodes = new HashSet<>();
+        for (var paths: srcToPathsMap.values()) {
+            for (var path: paths) {
+                coveredNodes.addAll(path.nodes);
+            }
+        }
+        return coveredNodes;
+    }
 
     /**
      * Find the longest common path starting from the beginning of each path
@@ -700,14 +850,17 @@ public class TypeFlowPathManager<T> {
         return layoutToConstraints;
     }
 
-
     public Set<TypeFlowPath<T>> getAllValidPathsFromSource(T source) {
         var result = new HashSet<TypeFlowPath<T>>();
         if (!srcToPathsMap.containsKey(source)) {
+            Logging.warn("TypeFlowPathManager",
+                    String.format("Unexpected Source node: %s, no paths found", source));
             return result;
         }
         for (var path: srcToPathsMap.get(source)) {
-            if (path.conflict || path.noComposite) {
+            if (path.conflict) {
+                Logging.warn("TypeFlowPathManager",
+                        String.format("Path has conflict, not valid: %s", path));
                 continue;
             }
             result.add(path);
@@ -715,10 +868,37 @@ public class TypeFlowPathManager<T> {
         return result;
     }
 
-    public void dump(FileWriter writer) throws Exception {
-        if (!hasSrcSink) {
-            return;
+    private T findNodeWithMinInDegreeInSet(Set<T> nodeSet) {
+        T result = null;
+        int minDegree = Integer.MAX_VALUE;
+
+        for (T node : nodeSet) {
+            int inDegree = graph.getGraph().inDegreeOf(node);
+            if (inDegree < minDegree) {
+                minDegree = inDegree;
+                result = node;
+            }
         }
+
+        return result;
+    }
+
+    private T findNodeWithMinOutDegreeInSet(Set<T> nodeSet) {
+        T result = null;
+        int minDegree = Integer.MAX_VALUE;
+
+        for (T node : nodeSet) {
+            int outDegree = graph.getGraph().outDegreeOf(node);
+            if (outDegree < minDegree) {
+                minDegree = outDegree;
+                result = node;
+            }
+        }
+
+        return result;
+    }
+
+    public void dump(FileWriter writer) throws Exception {
         writer.write(String.format("Graph: %s\n", graph));
         for (var src: source) {
             writer.write(String.format("\tSource: %s\n", src));
@@ -730,8 +910,6 @@ public class TypeFlowPathManager<T> {
                 writer.write(String.format("\t\t\tPath: %s\n", path));
                 if (path.conflict) {
                     writer.write("\t\t\t\tConflict\n");
-                } else if (path.noComposite) {
-                    writer.write("\t\t\t\tNo Composite\n");
                 } else {
                     writer.write(path.finalSkeletonOnPath.dumpLayout(4));
                 }

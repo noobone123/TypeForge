@@ -53,15 +53,7 @@ public class TFGManager {
         TypeFlowGraph<NMAE> fromGraph = exprToGraph.get(from);
         TypeFlowGraph<NMAE> toGraph = exprToGraph.get(to);
         if (fromGraph != null && fromGraph == toGraph) {
-            Logging.debug("TFGManager",
-                    String.format("Removing Evil Edge %s -> %s", from, to));
             fromGraph.removeEdge(from, to);
-            if (fromGraph.getNumNodes() == 0) {
-                graphs.remove(fromGraph);
-                for (var node: fromGraph.getNodes()) {
-                    exprToGraph.remove(node);
-                }
-            }
         }
     }
 
@@ -137,8 +129,6 @@ public class TFGManager {
      * Since some edges are removed during analysis, we need to re-organize the graphs by connected nodes.
      */
     public void reOrganize() {
-        simpleTFGStatistics();
-
         // A set to hold the new reorganized graphs
         Set<TypeFlowGraph<NMAE>> newGraphs = new HashSet<>();
         // A map to track node assignments to new graphs
@@ -149,21 +139,17 @@ public class TFGManager {
             // Get connected components
             List<Set<NMAE>> components = originalGraph.getConnectedComponents();
 
-            // Skip processing if graph is already fully connected
-            if (components.size() == 1) {
-                newGraphs.add(originalGraph);
-                for (NMAE node : originalGraph.getNodes()) {
-                    newExprToGraph.put(node, originalGraph);
-                }
-                continue;
-            }
-
             // Process each disconnected component
             for (Set<NMAE> component : components) {
                 if (component.isEmpty()) continue;
 
                 // Create a new graph for this component
                 TypeFlowGraph<NMAE> newGraph = new TypeFlowGraph<>();
+
+                if (component.size() == 1) {
+                    Logging.debug("TFGManager",
+                            String.format("Found a single node graph %s", component));
+                }
 
                 // Add nodes from this component
                 for (NMAE node : component) {
@@ -172,12 +158,11 @@ public class TFGManager {
                 }
 
                 // Add edges that connect nodes within this component
-                for (NMAE node : component) {
-                    for (TypeFlowGraph.TypeFlowEdge edge : originalGraph.getGraph().outgoingEdgesOf(node)) {
-                        NMAE target = originalGraph.getGraph().getEdgeTarget(edge);
-                        if (component.contains(target)) {
-                            newGraph.addEdge(node, target, edge.getType());
-                        }
+                for (TypeFlowGraph.TypeFlowEdge edge : originalGraph.getGraph().edgeSet()) {
+                    NMAE source = originalGraph.getGraph().getEdgeSource(edge);
+                    NMAE target = originalGraph.getGraph().getEdgeTarget(edge);
+                    if (component.contains(source) && component.contains(target)) {
+                        newGraph.addEdge(source, target, edge.getType());
                     }
                 }
 
