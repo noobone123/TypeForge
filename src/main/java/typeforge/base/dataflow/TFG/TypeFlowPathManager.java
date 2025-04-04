@@ -36,7 +36,6 @@ public class TypeFlowPathManager<T> {
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInPerPath = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInSourceAggregate = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInConflictNodes = new HashSet<>();
-    public final Set<TypeFlowGraph.TypeFlowEdge> mayRemove = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> keepEdges = new HashSet<>();
 
     /** Fields for build skeletons, not used for conflict checking

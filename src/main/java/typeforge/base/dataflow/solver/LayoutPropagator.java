@@ -41,6 +41,9 @@ public class LayoutPropagator {
 
                 // Propagate the aggregated layout information to the whole-program TFG by BFS
                 graph.pathManager.propagateLayoutFromSourcesBFS();
+                for (var edge: graph.pathManager.evilEdgesInConflictNodes) {
+                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+                }
             }
         }
     }
