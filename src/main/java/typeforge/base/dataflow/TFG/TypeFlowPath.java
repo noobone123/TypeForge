@@ -53,6 +53,7 @@ public class TypeFlowPath<T> {
      * @return true if no conflict, false if conflict
      */
     public boolean tryMergeLayoutForwardOnPath(NMAEManager exprManager) {
+        Logging.debug("TypeFlowPath", String.format("Try merge by path: %s", this));
         Skeleton mergedSkt = new Skeleton();
         for (var i = 0; i < nodes.size(); i++) {
             var curNode = nodes.get(i);

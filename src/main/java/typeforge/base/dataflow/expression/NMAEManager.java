@@ -140,57 +140,57 @@ public class NMAEManager {
      * @param expr the expression to get mayMemAliases for
      * @return the mayMemAliases of the given expression
      */
-    public Set<NMAE> fastGetMayMemAliases(NMAE expr) {
-        // get from cache first
-        if (fastMayMemAliasCache.containsKey(expr)) {
-            Logging.trace("NMAEManager", String.format("Get MayMemAliases from cache: %s", expr));
-            return fastMayMemAliasCache.get(expr);
-        }
-
-        var parseResult = ParsedExpr.parseFieldAccessExpr(expr);
-        if (parseResult.isEmpty()) { return new HashSet<>(); }
-        var parsedExpr = parseResult.get();
-        var baseExpr = parsedExpr.base;
-        var indexExpr = parsedExpr.index;
-        var scaleExpr = parsedExpr.scale;
-        var offset = parsedExpr.offsetValue;
-
-        var mayAliasExpr = new HashSet<NMAE>();
-
-        var taG = graphManager.getTFG(baseExpr);
-        if (taG == null) {
-            return mayAliasExpr;
-        }
-
-        var paths = taG.pathManager.getAllPathContainsNode(baseExpr);
-        if (paths == null) {
-            Logging.warn("NMAEManager", String.format("No paths found for baseExpr %s in %s", baseExpr, taG));
-            return mayAliasExpr;
-        }
-        if (paths.isEmpty()) {
-            return mayAliasExpr;
-        }
-
-        Logging.debug("NMAEManager",
-                String.format("Found %d base expr %s 's paths for finding mayMemAlias for %s", paths.size(), baseExpr, expr));
-
-        for (var path: paths) {
-            for (var node: path.nodes) {
-                var result = getFieldExprsByOffset((NMAE) node, offset);
-                if (result.isPresent()) {
-                    mayAliasExpr.addAll(result.get());
-                }
-            }
-        }
-
-        // update cache
-        for (var alias: mayAliasExpr) {
-            fastMayMemAliasCache.put(alias, mayAliasExpr);
-        }
-
-        Logging.debug("NMAEManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
-        return mayAliasExpr;
-    }
+//    public Set<NMAE> fastGetMayMemAliases(NMAE expr) {
+//        // get from cache first
+//        if (fastMayMemAliasCache.containsKey(expr)) {
+//            Logging.trace("NMAEManager", String.format("Get MayMemAliases from cache: %s", expr));
+//            return fastMayMemAliasCache.get(expr);
+//        }
+//
+//        var parseResult = ParsedExpr.parseFieldAccessExpr(expr);
+//        if (parseResult.isEmpty()) { return new HashSet<>(); }
+//        var parsedExpr = parseResult.get();
+//        var baseExpr = parsedExpr.base;
+//        var indexExpr = parsedExpr.index;
+//        var scaleExpr = parsedExpr.scale;
+//        var offset = parsedExpr.offsetValue;
+//
+//        var mayAliasExpr = new HashSet<NMAE>();
+//
+//        var taG = graphManager.getTFG(baseExpr);
+//        if (taG == null) {
+//            return mayAliasExpr;
+//        }
+//
+//        var paths = taG.pathManager.getAllPathContainsNode(baseExpr);
+//        if (paths == null) {
+//            Logging.warn("NMAEManager", String.format("No paths found for baseExpr %s in %s", baseExpr, taG));
+//            return mayAliasExpr;
+//        }
+//        if (paths.isEmpty()) {
+//            return mayAliasExpr;
+//        }
+//
+//        Logging.debug("NMAEManager",
+//                String.format("Found %d base expr %s 's paths for finding mayMemAlias for %s", paths.size(), baseExpr, expr));
+//
+//        for (var path: paths) {
+//            for (var node: path.nodes) {
+//                var result = getFieldExprsByOffset((NMAE) node, offset);
+//                if (result.isPresent()) {
+//                    mayAliasExpr.addAll(result.get());
+//                }
+//            }
+//        }
+//
+//        // update cache
+//        for (var alias: mayAliasExpr) {
+//            fastMayMemAliasCache.put(alias, mayAliasExpr);
+//        }
+//
+//        Logging.debug("NMAEManager", String.format("Found MayMemAliases of %s: %s", expr, mayAliasExpr));
+//        return mayAliasExpr;
+//    }
 
 
     /**

@@ -264,15 +264,15 @@ public class InterSolver {
             if (graph.pathManager.hasSrcSink) {
 
                 // Round1: used to find and mark the evil nodes (Introduced by type ambiguity) and remove the evil edges
-                graph.pathManager.tryMergeLayoutOnPaths(exprManager);
-                graph.pathManager.tryMergePathsFromSameSource(exprManager);
+                graph.pathManager.tryMergeLayoutFormSamePaths(exprManager);
+                graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
                 graph.pathManager.tryHandleConflictNodes();
                 var removeEdges = graph.pathManager.getEdgesToRemove();
                 for (var edge: removeEdges) {
                     graph.getGraph().removeEdge(edge);
                 }
 
-                collector.updateEvilSource(graph.pathManager.evilSource,
+                collector.updateEvilSource(graph.pathManager.conflictSources,
                         graph.pathManager.evilSourceLCSEdges, graph.pathManager.evilSourceEndEdges);
                 collector.updateEvilNodes(graph.pathManager.evilNodes,
                         graph.pathManager.evilNodeEdges);
@@ -306,7 +306,7 @@ public class InterSolver {
             graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
 
-            collector.updateEvilPaths(graph.pathManager.conflictPaths);
+            collector.updateEvilPaths(graph.pathManager.pathsHasConflict);
         }
     }
 

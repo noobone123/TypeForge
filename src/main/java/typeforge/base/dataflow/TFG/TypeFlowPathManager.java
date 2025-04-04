@@ -1,5 +1,7 @@
 package typeforge.base.dataflow.TFG;
 
+import com.nqzero.permit.Permit;
+import generic.stl.Pair;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
@@ -17,24 +19,27 @@ import java.util.*;
 public class TypeFlowPathManager<T> {
     public TypeFlowGraph<T> graph;
     public boolean hasSrcSink = true;
+
+    /** Import metadata for TypeFlowPathManager, should be updated when graph changed */
     public final Set<T> source;
     public final Set<T> sink;
-
-    public final Map<T, Set<TypeFlowPath<T>>> nodeToPathsMap;
     public final Map<T, Set<TypeFlowPath<T>>> srcToPathsMap;
+    public final Map<T, Skeleton> srcToMergedSkeleton;
 
+    /** node to Skeletons when propagating layout information BFS */
     public final Map<T, Set<Skeleton>> nodeToSkeletons;
 
     /** fields for handle conflict paths and nodes */
-    public final Set<TypeFlowPath<T>> conflictPaths = new HashSet<>();
-    public final Set<T> evilNodes = new HashSet<>();  /* EvilNodes are nodes that may cause type ambiguity */
+    public final Set<TypeFlowPath<T>> pathsHasConflict = new HashSet<>();
+    public final Set<T> evilNodes = new HashSet<>();
     public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilNodeEdges = new HashMap<>();
-    public final Set<T> evilSource = new HashSet<>();
+    public final Set<T> conflictSources = new HashSet<>();
     public final Set<Function> evilFunction = new HashSet<>();
     public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceLCSEdges = new HashMap<>();
     public final Map<T, Set<TypeFlowGraph.TypeFlowEdge>> evilSourceEndEdges = new HashMap<>();
 
     /** fields for handle edges that introduce conflicts */
+    public final Set<Pair<T, T>> evilEdgesInPerPath = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> mustRemove = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> mayRemove = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> keepEdges = new HashSet<>();
@@ -49,8 +54,8 @@ public class TypeFlowPathManager<T> {
         this.graph = graph;
         this.source = new HashSet<>();
         this.sink = new HashSet<>();
-        this.nodeToPathsMap = new HashMap<>();
         this.srcToPathsMap = new HashMap<>();
+        this.srcToMergedSkeleton = new HashMap<>();
         this.nodeToSkeletons = new HashMap<>();
     }
 
@@ -60,8 +65,8 @@ public class TypeFlowPathManager<T> {
 
         this.source.clear();
         this.sink.clear();
-        this.nodeToPathsMap.clear();
         this.srcToPathsMap.clear();
+        this.srcToMergedSkeleton.clear();
         this.nodeToSkeletons.clear();
 
         findSources();
@@ -74,27 +79,24 @@ public class TypeFlowPathManager<T> {
         if (hasSrcSink) {
             findAllPathFromSrcToSink();
         }
-
-        for (var src: srcToPathsMap.keySet()) {
-            for (var path: srcToPathsMap.get(src)) {
-                updateNodeToPathsMap(path);
-            }
-        }
     }
 
     /**
      * Try merge Skeletons from each node along the same path
      * IMPORTANT: This Function should be called after all Graph's pathManager built
      */
-    public void tryMergeLayoutOnPaths(NMAEManager exprManager) {
+    public void tryMergeLayoutFormSamePaths(NMAEManager exprManager) {
+        Queue<TypeFlowPath<T>> workList = new LinkedList<>();
+
+        // First phase: check all paths for conflicts
         for (var src: srcToPathsMap.keySet()) {
             for (var path: srcToPathsMap.get(src)) {
-                Logging.debug("TypeFlowPathManager", String.format("Try merge by path: %s", path));
                 var success = path.tryMergeLayoutForwardOnPath(exprManager);
                 if (!success) {
-                    conflictPaths.add(path);
+                    pathsHasConflict.add(path);
+                    evilEdgesInPerPath.add(path.conflictEdge);
                     path.conflict = true;
-                    Logging.debug("TypeFlowPathManager", String.format("Conflict found in path: \n%s", path));
+                    workList.add(path);
                 } else {
                     if (path.finalSkeletonOnPath.isEmpty()) {
                         path.noComposite = true;
@@ -102,92 +104,111 @@ public class TypeFlowPathManager<T> {
                 }
             }
         }
+
+        // Second phase: recursively process conflict paths using workList
+        while (!workList.isEmpty()) {
+            var path = workList.poll();
+            if (!path.conflict || path.conflictEdge == null) continue;
+
+            var conflictEdge = graph.getGraph().getEdge(path.conflictEdge.first, path.conflictEdge.second);
+            // Metadata will be updated in splitPathByEdge
+            var newPaths = splitPathByEdge(path, conflictEdge);
+            if (newPaths == null) continue;
+
+            var pathPrefix = newPaths.first;
+            var pathSuffix = newPaths.second;
+
+            // Process prefix path
+            var prefixSuccess = pathPrefix.tryMergeLayoutForwardOnPath(exprManager);
+            if (!prefixSuccess) {
+                pathsHasConflict.add(pathPrefix);
+                pathPrefix.conflict = true;
+                evilEdgesInPerPath.add(pathPrefix.conflictEdge);
+                workList.add(pathPrefix); // Add back to workList for further processing
+            }
+
+            // Process suffix path
+            var suffixSuccess = pathSuffix.tryMergeLayoutForwardOnPath(exprManager);
+            if (!suffixSuccess) {
+                pathsHasConflict.add(pathSuffix);
+                pathSuffix.conflict = true;
+                evilEdgesInPerPath.add(pathSuffix.conflictEdge);
+                workList.add(pathSuffix); // Add back to workList for further processing
+            }
+        }
     }
 
-    // Try merge paths from same source, them propagate TypeConstraints to each node start from this source
-    // Because there may have some node with paths from different source, we then handle them in next step
-    public void tryMergePathsFromSameSource(NMAEManager exprManager) {
-        var workList = new LinkedList<T>(source);
+    /**
+     * Since a Source node in whole-program TFG may have multiple paths,
+     * We should try to merge Skeletons from each path to build layout information of each source.
+     * @param exprManager NMAE Manager
+     */
+    public void tryMergeLayoutFromSameSource(NMAEManager exprManager) {
+        var workList = new LinkedList<>(source);
 
         while (!workList.isEmpty()) {
             var src = workList.poll();
-            var mergedCon = new Skeleton();
-            var pathsFromSrc = getAllValidPathsFromSource(src);
-            if (pathsFromSrc.isEmpty()) {
-                Logging.warn("TypeRelationPathManager", String.format("No valid paths from source %s", src));
+            var mergedSkt = new Skeleton();
+            // These valid edges does not contain paths with conflicts or noComposite
+            var validPathsFromSrc = getAllValidPathsFromSource(src);
+            if (validPathsFromSrc.isEmpty()) {
                 continue;
             }
 
             var success = true;
-            for (var path: pathsFromSrc) {
-                success = mergedCon.tryMergeLayout(path.finalSkeletonOnPath);
+            for (var path: validPathsFromSrc) {
+                success = mergedSkt.tryMergeLayout(path.finalSkeletonOnPath);
                 if (!success) {
                     break;
                 }
             }
 
-            // If there has conflict when merging different paths from same source, means there maybe wrapper function or some other reasons
-            // For soundness, we need to find the longest common subpath in these paths and remove edges
-            if (!success) {
-                /* Mark all exprs connect to this source in current function as evil */
-                evilSource.add(src);
-                evilFunction.add(((NMAE)src).function);
-                Logging.debug("TypeRelationPathManager", String.format("Evil source nodes found: %s", src));
-                Logging.warn("TypeRelationPathManager", String.format("Evil function found: %s", ((NMAE)src).function));
-                for (var path: pathsFromSrc) {
-                    Logging.debug("TypeRelationPathManager", path.toString());
+            if (success) {
+                Logging.debug("TypeFlowPathManager", String.format("No Conflict when merging paths from same source: %s", src));
+                // TODO: do we need to propagate these now ?
+                /*
+                for (var path: validPathsFromSrc) {
+                    propagateSkeletonsOnPath(mergedSkt, path);
+                }
+                */
+                srcToMergedSkeleton.put(src, mergedSkt);
+            } else {
+                Logging.debug("TypeFlowPathManager",
+                        String.format("Found Conflict when merging paths from same source: %s, total paths: %d", src, validPathsFromSrc.size()));
+                conflictSources.add(src);
+                for (var path: validPathsFromSrc) {
+                    Logging.debug("TypeFlowPathManager", path.toString());
                 }
 
-                var LCSs = getLongestCommonSubpath(pathsFromSrc);
-                List<T> wrapperPath = new ArrayList<>();
-                for (var lcs: LCSs) {
-                    if (lcs.contains(src)) {
-                        wrapperPath = lcs;
-                    }
-                }
-                Logging.debug("TypeRelationPathManager", String.format("Wrapper Path: %s", wrapperPath));
-                var endEdges = getEndEdgesOfLCS(wrapperPath, pathsFromSrc);
-                var lcsEdges = getEdgesInLCS(wrapperPath, pathsFromSrc);
-                evilSourceEndEdges.put(src, endEdges);
-                evilSourceLCSEdges.put(src, lcsEdges);
+                var LCP = getLongestCommonPrefixPath(validPathsFromSrc);
+                var intraLCPEdges = getEdgesInLCS(LCP, validPathsFromSrc);
+                var LCPEndEdges = getEndEdgesOfLCS(LCP, validPathsFromSrc);
+                // We keep the edges intra LCP, and remove the edges between LCP and end edges
+                // So the new paths and source will derive.
+                keepEdges.addAll(intraLCPEdges);
+                mustRemove.addAll(LCPEndEdges);
 
-                /* wrapperPath's end edges mark must remove */
-                mustRemove.addAll(endEdges);
-                keepEdges.addAll(lcsEdges);
                 /* Split Paths from Source by end Edges, And Created New Paths */
-                var newPaths = splitPathsByLCS(pathsFromSrc, endEdges, exprManager);
+                var newSplitPaths = splitPathsByLCS(validPathsFromSrc, LCPEndEdges, exprManager);
 
-                /* update metadata using newPaths */
-                for (var path: pathsFromSrc) {
+                /* update metadata using newSplitPaths */
+                for (var path: validPathsFromSrc) {
                     source.remove(path.start);
                     srcToPathsMap.remove(path.start);
-                    for (var node: path.nodes) {
-                        nodeToPathsMap.get(node).remove(path);
-                    }
+//                    for (var node: path.nodes) {
+//                        nodeToPathsMap.get(node).remove(path);
+//                    }
                 }
-
                 var newSources = new HashSet<T>();
-                for (var path: newPaths) {
+                for (var path: newSplitPaths) {
                     newSources.add(path.start);
                     source.add(path.start);
                     srcToPathsMap.computeIfAbsent(path.start, k -> new HashSet<>()).add(path);
-                    for (var node: path.nodes) {
-                        nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
-                    }
+//                    for (var node: path.nodes) {
+//                        nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
+//                    }
                 }
                 workList.addAll(newSources);
-            }
-
-            // If there has no conflict when merging different paths from same source, we propagate the merged Constraints
-            // to each node start from this source
-            else {
-                Logging.debug("TypeRelationPathManager", String.format("No Conflict when merging paths from same source: %s", src));
-                for (var path: pathsFromSrc) {
-                    if (path.conflict || path.noComposite) {
-                        continue;
-                    }
-                    propagateConstraintOnPath(mergedCon, path);
-                }
             }
         }
     }
@@ -226,21 +247,22 @@ public class TypeFlowPathManager<T> {
                             Logging.debug("TypeRelationPathManager", String.format("Layout count: %d", layoutToConstraints.get(layout).size()));
                             Logging.debug("TypeRelationPathManager", layoutToConstraints.get(layout).iterator().next().dumpLayout(0));
                         }
-                        for (var path: nodeToPathsMap.get(node)) {
-                            if (path.conflict || path.noComposite) {
-                                continue;
-                            }
-                            Logging.debug("TypeRelationPathManager", path.toString());
-                        }
-                        /* End Debugging */
 
-                        evilNodeEdges.put(node, new HashSet<>(graph.getGraph().edgesOf(node)));
-                        /* If there has LCS in node's paths, we should keep edges in LCS */
-                        var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
-                        for (var lcs: LCSs) {
-                            var lcsEdges = getEdgesInLCS(lcs, nodeToPathsMap.get(node));
-                            keepEdges.addAll(lcsEdges);
-                        }
+//                        for (var path: nodeToPathsMap.get(node)) {
+//                            if (path.conflict || path.noComposite) {
+//                                continue;
+//                            }
+//                            Logging.debug("TypeRelationPathManager", path.toString());
+//                        }
+//                        /* End Debugging */
+//
+//                        evilNodeEdges.put(node, new HashSet<>(graph.getGraph().edgesOf(node)));
+//                        /* If there has LCS in node's paths, we should keep edges in LCS */
+//                        var LCSs = getLongestCommonSubpath(nodeToPathsMap.get(node));
+//                        for (var lcs: LCSs) {
+//                            var lcsEdges = getEdgesInLCS(lcs, nodeToPathsMap.get(node));
+//                            keepEdges.addAll(lcsEdges);
+//                        }
                     }
                 }
                 else if (layoutToConstraints.size() == 1) {
@@ -284,7 +306,7 @@ public class TypeFlowPathManager<T> {
             for (var path: srcToPathsMap.get(src)) {
                 var success = path.tryMergeLayoutForwardOnPath(exprManager);
                 if (!success) {
-                    conflictPaths.add(path);
+                    pathsHasConflict.add(path);
                     path.conflict = true;
                     Logging.debug("TypeRelationPathManager", String.format("Evil in path: \n%s", path));
                 } else {
@@ -450,67 +472,63 @@ public class TypeFlowPathManager<T> {
         }
     }
 
+
     /**
-     * Get the longest common path in given paths using binary search and sub-path's hash ...
+     * Find the longest common path starting from the beginning of each path
      * @param paths Set of given paths
-     * @return Set of sub-paths
+     * @return The longest common prefix path, or an empty list if no common prefix exists
      */
-    public Set<List<T>> getLongestCommonSubpath(Set<TypeFlowPath<T>> paths) {
-        int lowBound = 1;
-        int highBound = Integer.MAX_VALUE;
-        Map<Integer, Set<Integer>> lengthToPathHash = new HashMap<>();
-        for (var path: paths) {
-            highBound = Math.min(highBound, path.nodes.size());
+    public List<T> getLongestCommonPrefixPath(Set<TypeFlowPath<T>> paths) {
+        if (paths == null || paths.isEmpty()) {
+            return new ArrayList<>();
         }
 
-        while (lowBound <= highBound) {
-            int length = (lowBound + highBound) / 2;
+        // If there's only one path, the entire path is common
+        if (paths.size() == 1) {
+            return new ArrayList<>(paths.iterator().next().nodes);
+        }
 
-            // get all sub-paths with length
-            for (var path: paths) {
-                path.createSubPathsOfLength(length);
+        // Get the first path as reference
+        List<T> firstPath = paths.iterator().next().nodes;
+        if (firstPath.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        // Find minimum length among all paths
+        int minLength = Integer.MAX_VALUE;
+        for (TypeFlowPath<T> path : paths) {
+            minLength = Math.min(minLength, path.nodes.size());
+        }
+
+        // Compare nodes at each position across all paths
+        int commonLength = 0;
+        for (int i = 0; i < minLength; i++) {
+            T currentNode = firstPath.get(i);
+            boolean allMatch = true;
+
+            // Check if this node matches across all paths
+            for (TypeFlowPath<T> path : paths) {
+                if (!path.nodes.get(i).equals(currentNode)) {
+                    allMatch = false;
+                    break;
+                }
             }
 
-            // check all paths if there has common sub-path by intersecting their sub-paths hash
-            var firstPath = paths.iterator().next();
-            var firstPathHashes = firstPath.subPathsOfLengthWithHash.get(length).keySet();
-            for (var p: paths) {
-                var pathHashes = p.subPathsOfLengthWithHash.get(length).keySet();
-                firstPathHashes.retainAll(pathHashes);
-            }
-
-            if (firstPathHashes.isEmpty()) {
-                highBound = length - 1;
+            if (allMatch) {
+                commonLength++;
             } else {
-                lowBound = length + 1;
-                lengthToPathHash.put(length, firstPathHashes);
+                break;
             }
         }
 
-        // get the longest common path in lengthToPathHash
-        int maxLength = 0;
-        for (var length: lengthToPathHash.keySet()) {
-            if (length > maxLength) {
-                maxLength = length;
-            }
+        // Extract the common prefix if any
+        if (commonLength > 0) {
+            List<T> commonPath = new ArrayList<>(firstPath.subList(0, commonLength));
+            Logging.debug("TypeFlowPathManager", String.format("Found common prefix path: %s", commonPath));
+            return commonPath;
         }
-
-        var maxLengthsHashes = lengthToPathHash.get(maxLength);
-        var firstPath = paths.iterator().next();
-
-
-        var result = new HashSet<List<T>>();
-        for (var hash: maxLengthsHashes) {
-            var subPathNodes = firstPath.subPathsOfLengthWithHash.get(maxLength).get(hash);
-            if (subPathNodes != null) {
-                result.add(subPathNodes);
-                Logging.debug("TypeRelationPathManager", String.format("Found common path: %s", subPathNodes));
-            }
-        }
-
-        return result;
+        return new ArrayList<>();
     }
-
 
     /**
      * Obtain the edges located at ends of the given LCS (Longest Common Subpath) in the set of paths.
@@ -543,7 +561,7 @@ public class TypeFlowPathManager<T> {
         }
 
         for (var edge: endEdges) {
-            Logging.debug("TypeRelationPathManager", String.format("End Edge of LCS: %s", edge));
+            Logging.debug("TypeFlowPathManager", String.format("End Edge of LCS: %s", edge));
         }
 
         return endEdges;
@@ -576,12 +594,78 @@ public class TypeFlowPathManager<T> {
         }
 
         for (var edge: lcsEdges) {
-            Logging.debug("TypeRelationPathManager", String.format("Edges in LCS: %s", edge));
+            Logging.debug("TypeFlowPathManager", String.format("Edges in LCS: %s", edge));
         }
 
         return lcsEdges;
     }
 
+    /**
+     * Split the path into 2 paths by the specified edge in the path.
+     * For example:
+     *  A -> B -> C -> D
+     *  removedEdge : B -> C
+     *  Then the path will be split into:
+     *  A -> B
+     *  C -> D
+     */
+    private Pair<TypeFlowPath<T>, TypeFlowPath<T>>
+    splitPathByEdge(TypeFlowPath<T> originPath,
+                    TypeFlowGraph.TypeFlowEdge removedEdge) {
+        List<T> nodes = originPath.nodes;
+        List<TypeFlowGraph.TypeFlowEdge> edges = originPath.edges;
+
+        int splitIndex = -1;
+        for (int i = 0; i < edges.size(); i++) {
+            if (edges.get(i).equals(removedEdge)) {
+                splitIndex = i;
+                break;
+            }
+        }
+
+        if (splitIndex == -1) {
+            Logging.warn("TypeFlowPathManager", "Edge not found in path: " + removedEdge);
+            return null;
+        }
+
+        List<T> prefixNodes = new ArrayList<>(nodes.subList(0, splitIndex + 1));
+        List<TypeFlowGraph.TypeFlowEdge> prefixEdges = new ArrayList<>(edges.subList(0, splitIndex));
+        TypeFlowPath<T> pathPrefix = new TypeFlowPath<>(prefixNodes, prefixEdges);
+
+        List<T> suffixNodes = new ArrayList<>(nodes.subList(splitIndex + 1, nodes.size()));
+        List<TypeFlowGraph.TypeFlowEdge> suffixEdges = new ArrayList<>(edges.subList(splitIndex + 1, edges.size()));
+        TypeFlowPath<T> pathSuffix = new TypeFlowPath<>(suffixNodes, suffixEdges);
+
+        T pathPrefixSource = pathPrefix.start;
+        T pathPrefixSink = pathPrefix.end;
+        T pathSuffixSource = pathSuffix.start;
+
+        sink.add(pathPrefixSink);
+
+        Set<TypeFlowPath<T>> paths = srcToPathsMap.get(pathPrefixSource);
+        if (paths != null) {
+            paths.remove(originPath);
+            paths.add(pathPrefix);
+        }
+
+        source.add(pathSuffixSource);
+        srcToPathsMap.computeIfAbsent(pathSuffixSource, k -> new HashSet<>()).add(pathSuffix);
+
+        Logging.debug("TypeFlowPathManager", "Split path at edge: " + removedEdge);
+        Logging.debug("TypeFlowPathManager", "Created prefix path: " + pathPrefix);
+        Logging.debug("TypeFlowPathManager", "Created suffix path: " + pathSuffix);
+
+        return new Pair<>(pathPrefix, pathSuffix);
+    }
+
+    /**
+     * If paths from the same source node can not merge due to conflicts,
+     * We first find LCP of the source node, and then split these paths into new paths by the end Edges of LCP,
+     * Finally new sources and paths will be created and returned.
+     *
+     *
+     * @return generated new paths.
+     */
     private Set<TypeFlowPath<T>> splitPathsByLCS(Set<TypeFlowPath<T>> candidatePaths,
                                                  Set<TypeFlowGraph.TypeFlowEdge> endEdgesOfLCS,
                                                  NMAEManager exprManager) {
@@ -627,19 +711,11 @@ public class TypeFlowPathManager<T> {
             if (path.finalSkeletonOnPath.isEmpty()) {
                 path.noComposite = true;
             }
-            Logging.debug("TypeRelationPathManager", String.format("New Path split by LCS:\n%s", path));
+            Logging.debug("TypeFlowPathManager", String.format("New Path split by LCS:\n%s", path));
         }
 
         return newPaths;
     }
-
-
-    public void updateNodeToPathsMap(TypeFlowPath<T> path) {
-        for (var node: path.nodes) {
-            nodeToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(path);
-        }
-    }
-
 
     public LinkedHashMap<Layout, Set<Skeleton>> buildLayoutToConstraints(Set<Skeleton> constraints) {
         var layoutToConstraints = new LinkedHashMap<Layout, Set<Skeleton>>();
@@ -669,14 +745,10 @@ public class TypeFlowPathManager<T> {
         return result;
     }
 
-    public void propagateConstraintOnPath(Skeleton constraint, TypeFlowPath<T> path) {
+    public void propagateSkeletonsOnPath(Skeleton constraint, TypeFlowPath<T> path) {
         for (var node: path.nodes) {
             nodeToSkeletons.computeIfAbsent(node, k -> new HashSet<>()).add(constraint);
         }
-    }
-
-    public Set<TypeFlowPath<T>> getAllPathContainsNode(T node) {
-        return nodeToPathsMap.get(node);
     }
 
     public void dump(FileWriter writer) throws Exception {
