@@ -1,5 +1,6 @@
 package typeforge.utils;
 
+import ghidra.program.model.data.DataType;
 import typeforge.base.dataflow.constraint.Skeleton;
 
 import java.util.*;
@@ -40,6 +41,31 @@ public class TCHelper {
     public static boolean checkFieldOverlapStrict(Skeleton a, Skeleton b) {
         var aIntervals = buildIntervals(a);
         var bIntervals = buildIntervals(b);
+        for (var aI: aIntervals) {
+            for (var bI: bIntervals) {
+                if (aI.inInterval(bI.start) || bI.inInterval(aI.start)) {
+                    return true;
+                }
+
+                if (aI.start == bI.start) {
+                    var aNI = getNextLargerInterval(aI, aIntervals);
+                    if (aNI != null && bI.end > aNI.start) {
+                        return true;
+                    }
+
+                    var bNI = getNextLargerInterval(bI, bIntervals);
+                    if (bNI != null && aI.end > bNI.start) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    public static boolean checkFieldOverlapRelax(Skeleton a, Skeleton b) {
+        var aIntervals = buildIntervalWithMostAccessed(a);
+        var bIntervals = buildIntervalWithMostAccessed(b);
         for (var aI: aIntervals) {
             for (var bI: bIntervals) {
                 if (aI.inInterval(bI.start) || bI.inInterval(aI.start)) {
@@ -109,6 +135,36 @@ public class TCHelper {
                 intervals.add(new Interval(offset, endOffset));
             }
         }
+        return intervals;
+    }
+
+    public static ArrayList<Interval> buildIntervalWithMostAccessed(Skeleton a) {
+        ArrayList<Interval> intervals = new ArrayList<>();
+
+        for (var offset : a.fieldAccess.keySet()) {
+            var aps = a.fieldAccess.get(offset);
+            if (aps == null || aps.getApSet().isEmpty()) {
+                continue;
+            }
+
+            // 找到访问频率最高的数据类型
+            var typeFreq = aps.getTypeFreq();
+            DataType mostAccessedType = null;
+            int maxAccess = 0;
+
+            for (var entry : typeFreq.entrySet()) {
+                if (entry.getValue() > maxAccess) {
+                    maxAccess = entry.getValue();
+                    mostAccessedType = entry.getKey();
+                }
+            }
+
+            if (mostAccessedType != null) {
+                long endOffset = offset + mostAccessedType.getLength();
+                intervals.add(new Interval(offset, endOffset));
+            }
+        }
+
         return intervals;
     }
 

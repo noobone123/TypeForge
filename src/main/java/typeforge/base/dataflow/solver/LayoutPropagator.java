@@ -29,17 +29,18 @@ public class LayoutPropagator {
                 graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
 
                 // Removing Evil Edges in layout information aggregate
+                // These edges including alias edges.
                 var evilEdgesInPerPath = graph.pathManager.evilEdgesInPerPath;
                 var evilEdgesInSourceAggregate = graph.pathManager.evilEdgesInSourceAggregate;
                 for (var edge: evilEdgesInPerPath) {
-                    graph.removeEdge(edge.first, edge.second);
+                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
                 }
                 for (var edge: evilEdgesInSourceAggregate) {
                     graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
                 }
 
                 // Propagate the aggregated layout information to the whole-program TFG by BFS
-                graph.pathManager.propagateLayoutFromSources();
+                graph.pathManager.propagateLayoutFromSourcesBFS();
             }
         }
     }

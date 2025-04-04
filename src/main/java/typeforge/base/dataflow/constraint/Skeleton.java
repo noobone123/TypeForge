@@ -203,7 +203,7 @@ public class Skeleton {
      * @param other the other Skeleton to merge
      * @return false if there is a conflict, true otherwise
      */
-    public boolean tryMergeLayout(Skeleton other) {
+    public boolean tryMergeLayoutStrict(Skeleton other) {
         if (TCHelper.checkFieldOverlapStrict(this, other)) {
             return false;
         }
@@ -211,8 +211,12 @@ public class Skeleton {
         return true;
     }
 
-    public boolean checkLayoutConflict(Skeleton other) {
-        return TCHelper.checkFieldOverlapStrict(this, other);
+    public boolean tryMergeLayoutRelax(Skeleton other) {
+        if (TCHelper.checkFieldOverlapRelax(this, other)) {
+            return false;
+        }
+        mergeOther(other);
+        return true;
     }
 
     /**

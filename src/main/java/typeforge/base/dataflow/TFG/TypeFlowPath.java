@@ -9,6 +9,7 @@ import org.jgrapht.GraphPath;
 import java.util.*;
 
 public class TypeFlowPath<T> {
+    TypeFlowGraph<T> graph;
     public final UUID uuid = UUID.randomUUID();
     public final String shortUUID = uuid.toString().substring(0, 8);
     public List<T> nodes;
@@ -16,7 +17,7 @@ public class TypeFlowPath<T> {
     public Skeleton finalSkeletonOnPath = null;
     public boolean conflict = false;
     public boolean noComposite = false;
-    public Pair<T, T> conflictEdge = null;
+    public TypeFlowGraph.TypeFlowEdge conflictEdge = null;
     public T start;
     public T end;
     public Set<TypeFlowGraph.TypeFlowEdge> evilEdges;
@@ -26,7 +27,8 @@ public class TypeFlowPath<T> {
      */
     public Map<Integer, Map<Integer, List<T>>> subPathsOfLengthWithHash = new HashMap<>();
 
-    public TypeFlowPath(GraphPath<T, TypeFlowGraph.TypeFlowEdge> path) {
+    public TypeFlowPath(TypeFlowGraph<T> graph, GraphPath<T, TypeFlowGraph.TypeFlowEdge> path) {
+        this.graph = graph;
         // update nodes;
         this.nodes = path.getVertexList();
         this.edges = path.getEdgeList();
@@ -36,7 +38,8 @@ public class TypeFlowPath<T> {
         this.evilEdges = new HashSet<>();
     }
 
-    public TypeFlowPath(List<T> nodes, List<TypeFlowGraph.TypeFlowEdge> edges) {
+    public TypeFlowPath(TypeFlowGraph<T> graph, List<T> nodes, List<TypeFlowGraph.TypeFlowEdge> edges) {
+        this.graph = graph;
         this.nodes = nodes;
         this.edges = edges;
 
@@ -63,7 +66,7 @@ public class TypeFlowPath<T> {
             if (curExprSkt == null) {
                 continue;
             }
-            var success = mergedSkt.tryMergeLayout(curExprSkt);
+            var success = mergedSkt.tryMergeLayoutStrict(curExprSkt);
             if (!success) {
                 Logging.warn("TypeFlowPath",
                         String.format("Layout Conflict when forward merging Skeletons on path for %s", curExpr));
@@ -74,9 +77,12 @@ public class TypeFlowPath<T> {
                 conflict = true;
                 if (i > 0) {
                     var prevNode = nodes.get(i - 1);
-                    conflictEdge = new Pair<>(prevNode, curNode);
+                    conflictEdge = this.graph.getGraph().getEdge(
+                            prevNode,
+                            curNode
+                    );
                     Logging.warn("TypeFlowPath",
-                            String.format("Marked Layout Conflict Edge: %s ---> %s", prevNode, curNode));
+                            String.format("Marked Layout Conflict Edge: %s", conflictEdge));
                 }
                 return false;
             }
@@ -85,7 +91,7 @@ public class TypeFlowPath<T> {
         return true;
     }
 
-    // TODO: Evil Edges is hard to find accurately, need to be improved
+
     public void findEvilEdges(int rightBoundIndex, int leftBoundIndex) {
         if (leftBoundIndex == -1) {
             Logging.warn("TypeAliasPath", "Cannot find leftBoundIndex when finding evil edges");
