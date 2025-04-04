@@ -27,6 +27,18 @@ public class LayoutPropagator {
                 Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
                 graph.pathManager.tryMergeLayoutFormSamePaths(exprManager);
                 graph.pathManager.tryMergeLayoutFromSameSource(exprManager);
+
+                // Removing Evil Edges in layout information aggregate
+                var evilEdgesInPerPath = graph.pathManager.evilEdgesInPerPath;
+                var evilEdgesInSourceAggregate = graph.pathManager.evilEdgesInSourceAggregate;
+                for (var edge: evilEdgesInPerPath) {
+                    graph.removeEdge(edge.first, edge.second);
+                }
+                for (var edge: evilEdgesInSourceAggregate) {
+                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+                }
+
+                // Propagate the aggregated layout information to the whole-program TFG by BFS
             }
         }
     }

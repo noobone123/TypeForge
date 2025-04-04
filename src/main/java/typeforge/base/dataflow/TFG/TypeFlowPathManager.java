@@ -1,6 +1,5 @@
 package typeforge.base.dataflow.TFG;
 
-import com.nqzero.permit.Permit;
 import generic.stl.Pair;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
@@ -40,7 +39,7 @@ public class TypeFlowPathManager<T> {
 
     /** fields for handle edges that introduce conflicts */
     public final Set<Pair<T, T>> evilEdgesInPerPath = new HashSet<>();
-    public final Set<TypeFlowGraph.TypeFlowEdge> mustRemove = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInSourceAggregate = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> mayRemove = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> keepEdges = new HashSet<>();
 
@@ -191,7 +190,7 @@ public class TypeFlowPathManager<T> {
                     Logging.debug("TypeFlowPathManager", String.format("Split path: %s", path));
                     var LCPEndEdge = getEndEdgeOfLCP(LCP, path);
                     if (LCPEndEdge == null) continue;
-                    mustRemove.add(LCPEndEdge);
+                    evilEdgesInSourceAggregate.add(LCPEndEdge);
                     var newPaths = splitPathByEdge(path, LCPEndEdge);
                     if (newPaths == null) continue;
                     var pathPrefix = newPaths.first;
@@ -291,7 +290,7 @@ public class TypeFlowPathManager<T> {
             mayRemove.addAll(graph.getGraph().edgesOf(node));
         }
 
-        var removedEdges = new HashSet<>(mustRemove);
+        var removedEdges = new HashSet<>(evilEdgesInSourceAggregate);
         for (var edge: mayRemove) {
             if (!keepEdges.contains(edge)) {
                 removedEdges.add(edge);
@@ -653,65 +652,6 @@ public class TypeFlowPathManager<T> {
         Logging.debug("TypeFlowPathManager", "Created suffix path: " + pathSuffix);
 
         return new Pair<>(pathPrefix, pathSuffix);
-    }
-
-    /**
-     * If paths from the same source node can not merge due to conflicts,
-     * We first find LCP of the source node, and then split these paths into new paths by the end Edges of LCP,
-     * Finally new sources and paths will be created and returned.
-     *
-     *
-     * @return generated new paths.
-     */
-    private Set<TypeFlowPath<T>> splitPathsByLCS(Set<TypeFlowPath<T>> candidatePaths,
-                                                 Set<TypeFlowGraph.TypeFlowEdge> endEdgesOfLCS,
-                                                 NMAEManager exprManager) {
-        Set<TypeFlowPath<T>> newPaths = new HashSet<>();
-
-        for (TypeFlowPath<T> path : candidatePaths) {
-            List<T> nodes = path.nodes;
-            List<TypeFlowGraph.TypeFlowEdge> edges = path.edges;
-
-            var splitIndex = 0;
-            for (int i = 0; i < edges.size(); i++) {
-                if (endEdgesOfLCS.contains(edges.get(i))) {
-                    List<T> subPathNodes = new ArrayList<>(nodes.subList(0, i + 1));
-                    List<TypeFlowGraph.TypeFlowEdge> subPathEdges = new ArrayList<>(edges.subList(0, i));
-
-                    if (!subPathNodes.isEmpty()) {
-                        TypeFlowPath<T> newPath = new TypeFlowPath<>(subPathNodes, subPathEdges);
-                        newPaths.add(newPath);
-                    }
-
-                    splitIndex = i + 1;
-                    break;
-                }
-            }
-
-            // Add the remaining part of the path as a new path if any
-            if (splitIndex < nodes.size()) {
-                List<T> remainingNodes = new ArrayList<>(nodes.subList(splitIndex, nodes.size()));
-                List<TypeFlowGraph.TypeFlowEdge> remainingEdges = new ArrayList<>(edges.subList(splitIndex, edges.size()));
-
-                if (!remainingNodes.isEmpty()) {
-                    TypeFlowPath<T> newPath = new TypeFlowPath<>(remainingNodes, remainingEdges);
-                    newPaths.add(newPath);
-                }
-            }
-        }
-
-        for (var path: newPaths) {
-            var success = path.tryMergeLayoutForwardOnPath(exprManager);
-            if (!success) {
-                path.conflict = true;
-            }
-            if (path.finalSkeletonOnPath.isEmpty()) {
-                path.noComposite = true;
-            }
-            Logging.debug("TypeFlowPathManager", String.format("New Path split by LCS:\n%s", path));
-        }
-
-        return newPaths;
     }
 
     public LinkedHashMap<Layout, Set<Skeleton>> buildLayoutToConstraints(Set<Skeleton> constraints) {
