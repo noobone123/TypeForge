@@ -164,6 +164,10 @@ public class ConstPropagator {
             Logging.info("ConstPropagator",
                     String.format("Size Conflict Node: %s", node));
         }
+
+        // Since some edges are removed during the Const Propagate, so we need to re-organize the whole-program TFG
+        // Maybe not necessary, but it's elegance to do so. (however, it may cause some performance issue)
+        graphManager.reOrganize();
     }
 
     /**

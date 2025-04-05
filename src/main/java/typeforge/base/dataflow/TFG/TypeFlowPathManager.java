@@ -11,6 +11,7 @@ import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.Layout;
 import typeforge.utils.Logging;
 import org.jgrapht.alg.shortestpath.AllDirectedPaths;
+import typeforge.utils.TCHelper;
 
 import java.io.FileWriter;
 import java.util.*;
@@ -27,6 +28,8 @@ public class TypeFlowPathManager<T> {
 
     /** node to Skeletons when propagating layout information BFS */
     public final Map<T, Skeleton> nodeToMergedSkeleton;
+
+    public final Map<T, Set<T>> srcChildren = new HashMap<>();
 
     /** fields for handle conflict paths and nodes */
     public final Set<TypeFlowPath<T>> pathsHasConflict = new HashSet<>();
@@ -45,7 +48,6 @@ public class TypeFlowPathManager<T> {
     /** Fields for build skeletons, not used for conflict checking
      * If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
     public UnionFind<T> sourceGroups = new UnionFind<>();
-    public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
     public final Map<T, Skeleton> sourceToConstraints = new HashMap<>();
 
     public TypeFlowPathManager(TypeFlowGraph<T> graph) {
@@ -154,7 +156,7 @@ public class TypeFlowPathManager<T> {
             var mergedSkt = new Skeleton();
 
             // These valid edges does not contain paths with conflicts or noComposite
-            var pathsFromSrc = srcToPathsMap.get(src);
+            var pathsFromSrc = new HashSet<>(srcToPathsMap.get(src));
             if (pathsFromSrc.isEmpty()) {
                 continue;
             }
@@ -207,25 +209,12 @@ public class TypeFlowPathManager<T> {
     }
 
     /**
-     * This method is based on conflict graph.
-     * 1. Perform pairwise conflict detection on the merged skeleton corresponding to the source.
-     * 2. If a conflict exists and there is an intersection in srcChildren, locate the conflicting node via BFS propagation and remove the evil edges.
-     * 3. If a conflict exists but there is no intersection in srcChildren (meaning we cannot detect conflicting nodes through BFS propagation), then utilize the conflict graph.
-     * 4. Process the conflict graph, extract the sourceChildren nodes of conflict source, and mark the evil edges that need to be deleted.
-     */
-    public void resolveLayoutConflicts() {
-        if (source.size() != srcToMergedSkeleton.size()) {
-            Logging.error("TypeFlowPathManager", "Source size does not match srcToMergedSkeleton size");
-            System.exit(1);
-            return;
-        }
-    }
-
-    /**
      * This method should be call after `tryMergeLayoutFromSameSource`.
      * In theory, all merged skeletons from the source nodes should not have conflicts at this point.
-     * When we detect conflict nodes during following propagation process, we remove all edges connected to them.
-     * At this stage, the remaining connected components in the graph should theoretically also be free of conflicts
+     * When we detect conflict nodes during following propagation process, we remove in edges to these nodes, and then there should be no conflicts.
+     *
+     * However, be careful that if 2 sources has no intersection in srcChildren, their conflicts may not be detected in this step.
+     * We will handle these in `resolveLayoutConflicts`.
      */
     public void propagateLayoutFromSourcesBFS() {
         if (srcToMergedSkeleton.isEmpty()) {
@@ -345,20 +334,69 @@ public class TypeFlowPathManager<T> {
             Logging.info("TypeFlowPathManager",
                     String.format("Found %d conflict Non-Source nodes during Layout Information Propagation: %s", conflictNonSourceNodes.size(), conflictNonSourceNodes));
 
-            // Remove all edges connected to conflict nodes
+            // We should remove inEdges of conflictNonSourceNodes in theory.
             for (var node: conflictNonSourceNodes) {
                 var inEdges = graph.getGraph().incomingEdgesOf(node);
-                var outEdges = graph.getGraph().outgoingEdgesOf(node);
                 for (var edge: inEdges) {
                     if (keepEdges.contains(edge)) continue;
                     evilEdgesInConflictNodes.add(edge);
                 }
+            }
+        }
+    }
 
-                for (var edge: outEdges) {
-                    if (keepEdges.contains(edge)) continue;
-                    evilEdgesInConflictNodes.add(edge);
+    /**
+     * This method is based on conflict graph.
+     * 1. Perform pairwise conflict detection on the merged skeleton corresponding to the source.
+     * 2. If a conflict exists and there is an intersection in srcChildren, locate the conflicting node via BFS propagation and remove the evil edges.
+     * 3. If a conflict exists but there is no intersection in srcChildren (meaning we cannot detect conflicting nodes through BFS propagation), then utilize the conflict graph.
+     * 4. Process the conflict graph, extract the sourceChildren nodes of conflict source, and mark the evil edges that need to be deleted.
+     */
+    public void resolveLayoutConflicts() {
+        int srcSktConflictCount = 0;
+        int intersectionCount = 0;
+
+        // 1. Build srcToChildren map
+        for (var src: srcToMergedSkeleton.keySet()) {
+            var paths = srcToPathsMap.get(src);
+            for (var path: paths) {
+                for (var node: path.nodes) {
+                    srcChildren.computeIfAbsent(src, k -> new HashSet<>()).add(node);
                 }
             }
+        }
+
+        // 2. pairwise conflict detection
+        List<T> sources = new ArrayList<>(srcToMergedSkeleton.keySet());
+        sources.sort(Comparator.comparing(Object::hashCode));
+
+        for (int i = 0; i < sources.size(); i++) {
+            T src1 = sources.get(i);
+            var skt1 = srcToMergedSkeleton.get(src1);
+            for (int j = i + 1; j < sources.size(); j++) {
+                T src2 = sources.get(j);
+                var skt2 = srcToMergedSkeleton.get(src2);
+                // Check conflicts with relaxation
+                var hasConflicts = TCHelper.checkFieldOverlapRelax(skt1, skt2);
+                if (hasConflicts) {
+                    srcSktConflictCount++;
+
+                    var intersection = !Collections.disjoint(srcChildren.get(src1), srcChildren.get(src2));
+                    if (intersection) {
+                        intersectionCount ++;
+                    }
+                }
+            }
+        }
+
+        if (srcSktConflictCount > 0) {
+            Logging.info("TypeFlowPathManager",
+                    String.format("Found %d conflicts in merged skeletons", srcSktConflictCount));
+            Logging.info("TypeFlowPathManager",
+                    String.format("Found %d conflict intersections in merged skeletons", intersectionCount));
+            Logging.info("TypeFlowPathManager",
+                    String.format("Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
+            return;
         }
     }
 
@@ -419,13 +457,13 @@ public class TypeFlowPathManager<T> {
 
         /* merge sources if they have common children nodes */
         for (var src1: source) {
-            Set<T> children1 = sourceToChildren.get(src1);
+            Set<T> children1 = srcChildren.get(src1);
             if (children1 == null) continue;
 
             for (T src2: source) {
                 if (src1.equals(src2)) continue;
 
-                Set<T> children2 = sourceToChildren.get(src2);
+                Set<T> children2 = srcChildren.get(src2);
                 if (children2 == null) continue;
 
                 // if children1 and children2 has common nodes, union their sources
@@ -481,7 +519,7 @@ public class TypeFlowPathManager<T> {
 
         var exprs = new HashSet<NMAE>();
         for (var src: sources) {
-            var children = sourceToChildren.get(src);
+            var children = srcChildren.get(src);
             if (children == null) {
                 Logging.warn("TypeRelationPathManager", String.format("Source %s has no children", src));
                 continue;

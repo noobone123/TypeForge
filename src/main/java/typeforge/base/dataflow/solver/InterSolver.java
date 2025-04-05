@@ -228,10 +228,6 @@ public class InterSolver {
         // Run the ConstPropagator to propagate the constant information in the TFG
         constPropagator.run();
 
-        // Since some edges are removed during the Const Propagate, so we need to re-organize the whole-program TFG
-        // Maybe not necessary, but it's elegance to do so. (however, it may cause some performance issue)
-        graphManager.reOrganize();
-
         // Parsing all fieldAccess Expressions collected in intra-procedural analysis
         for (var expr : exprManager.getFieldAccessExprSet()) {
             collectFieldAccessHints(expr, null, 0);
@@ -239,9 +235,8 @@ public class InterSolver {
 
         layoutPropagator.run();
 
-        // graphManager.reOrganize();
 
-        // typeHintCollector.run();
+        typeHintCollector.run();
 
         // buildSkeletons(typeHintCollector);
 //
@@ -273,7 +268,7 @@ public class InterSolver {
                 continue;
             }
             graph.pathManager.mergeOnPath(exprManager);
-            graph.pathManager.mergePathsFromSameSource();
+            // graph.pathManager.mergePathsFromSameSource();
             graph.pathManager.buildSkeletons(collector);
         }
     }
