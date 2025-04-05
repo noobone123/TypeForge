@@ -102,12 +102,6 @@ public class LayoutPropagator {
                             "Should not have any merge conflict after the first pass in theory, please check the code.");
                 }
 
-                var hasPropagatedConflict = graph.pathManager.propagateLayoutFromSourcesBFS();
-                if (hasPropagatedConflict) {
-                    Logging.error("LayoutPropagator",
-                            "Should not have any propagate merging after the first pass in theory, please check the code.");
-                }
-
                 graph.pathManager.resolveLayoutConflicts();
             }
 

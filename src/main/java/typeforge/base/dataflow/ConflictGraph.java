@@ -72,16 +72,33 @@ public class ConflictGraph<T> {
     }
 
     // Find the node with the most connections (highest degree)
-    public T findNodeWithMostConnections() {
+    public T findNodeWithMostNoIntersecConnections() {
         Set<T> vertices = graph.vertexSet();
-
-        if (vertices.isEmpty()) {
-            throw new NoSuchElementException("Graph is empty");
-        }
-
         return vertices.stream()
-                .max(Comparator.comparingInt(graph::degreeOf))
-                .orElseThrow();
+                .max(Comparator.comparingInt(vertex -> {
+                    // Count only NOINTERSEC edges for this vertex
+                    return (int) graph.edgesOf(vertex).stream()
+                            .filter(edge -> edge.getType() == EdgeType.NOINTERSEC)
+                            .count();
+                }))
+                .orElseThrow(() -> new NoSuchElementException("No vertex found with NOINTERSEC connections"));
+    }
+
+    public boolean hasIntersecConnections() {
+        return graph.edgeSet().stream()
+                .anyMatch(edge -> edge.getType() == EdgeType.INTERSEC);
+    }
+
+    public void removeAllNoIntersecEdgesOfNode(T vertex) {
+        // Create a copy to avoid concurrent modification
+        Set<ConflictEdge> edgesToRemove = graph.edgesOf(vertex).stream()
+                .filter(edge -> edge.getType() == EdgeType.NOINTERSEC)
+                .collect(java.util.stream.Collectors.toSet());
+
+        // Remove each edge
+        for (ConflictEdge edge : edgesToRemove) {
+            graph.removeEdge(edge);
+        }
     }
 
     // Get the number of edges for a specific vertex
@@ -99,6 +116,12 @@ public class ConflictGraph<T> {
         return graph.edgeSet().stream()
                 .filter(edge -> edge.getType() == type)
                 .collect(java.util.stream.Collectors.toSet());
+    }
+
+    public int getEdgesCountOfType(EdgeType type) {
+        return (int) graph.edgeSet().stream()
+                .filter(edge -> edge.getType() == type)
+                .count();
     }
 
     @Override

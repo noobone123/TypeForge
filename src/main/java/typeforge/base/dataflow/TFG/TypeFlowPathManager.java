@@ -28,14 +28,14 @@ public class TypeFlowPathManager<T> {
     public final Map<T, Skeleton> srcToMergedSkeleton;
 
     /** node to Skeletons when propagating layout information BFS */
-    public final Map<T, Skeleton> nodeToMergedSkeleton;
+    public final Map<T, Skeleton> nodeToBFSMergedSkeleton;
 
     /** fields for handle conflict paths and nodes */
     public final Set<TypeFlowPath<T>> pathsHasConflict = new HashSet<>();
 
     /** fields for handle edges that introduce conflicts */
-    public final Set<T> conflictSources = new HashSet<>();
-    public final Set<T> conflictNonSourceNodes = new HashSet<>();
+    public final Set<T> evilSources = new HashSet<>();
+    public final Set<T> evilNonSourceNodes = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInPerPath = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInSourceAggregate = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInConflictNodes = new HashSet<>();
@@ -50,6 +50,7 @@ public class TypeFlowPathManager<T> {
     public final Map<T, Skeleton> sourceToConstraints = new HashMap<>();
 
     public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
+    public final Map<T, Set<T>> sourceToOnlyReachableChildren = new HashMap<>();
     public final Map<T, Set<T>> nodeToReachableSources = new HashMap<>();
     public final Map<T, Set<T>> intersectionSourcePair = new HashMap<>();
     /** Graph used for resolving conflicts */
@@ -61,7 +62,7 @@ public class TypeFlowPathManager<T> {
         this.sink = new HashSet<>();
         this.srcToPathsMap = new HashMap<>();
         this.srcToMergedSkeleton = new HashMap<>();
-        this.nodeToMergedSkeleton = new HashMap<>();
+        this.nodeToBFSMergedSkeleton = new HashMap<>();
     }
 
     public void initialize() {
@@ -71,7 +72,7 @@ public class TypeFlowPathManager<T> {
         this.sink.clear();
         this.srcToPathsMap.clear();
         this.srcToMergedSkeleton.clear();
-        this.nodeToMergedSkeleton.clear();
+        this.nodeToBFSMergedSkeleton.clear();
         this.sourceToChildren.clear();
         this.nodeToReachableSources.clear();
 
@@ -193,7 +194,7 @@ public class TypeFlowPathManager<T> {
             } else {
                 Logging.debug("TypeFlowPathManager",
                         String.format("Found Conflict when merging paths from same source: %s, total paths: %d", src, pathsFromSrc.size()));
-                conflictSources.add(src);
+                evilSources.add(src);
 
                 var LCP = getLongestCommonPrefixPath(pathsFromSrc);
                 Logging.debug("TypeFlowPathManager", String.format("Found common prefix path: %s", LCP));
@@ -249,7 +250,8 @@ public class TypeFlowPathManager<T> {
         // Initialize border nodes as source nodes themselves
         for (var src : srcToMergedSkeleton.keySet()) {
             var borderNodes = new HashSet<T>();
-            nodeToMergedSkeleton.put(src, srcToMergedSkeleton.get(src));
+            // ! Be careful, nodes used to propagate BFS should be different from those in the srcToMergedSkeleton
+            nodeToBFSMergedSkeleton.put(src, new Skeleton(srcToMergedSkeleton.get(src)));
             borderNodes.add(src);
             sourceToBorderNodes.put(src, borderNodes);
         }
@@ -279,9 +281,9 @@ public class TypeFlowPathManager<T> {
                 for (var borderNode : sortedBorderNodes) {
                     // IMPORTANT: These nodes should not be seen as border nodes, so layout information
                     // will not be propagated from them
-                    if (conflictNonSourceNodes.contains(borderNode)) continue;
+                    if (evilNonSourceNodes.contains(borderNode)) continue;
 
-                    var borderSkt = nodeToMergedSkeleton.get(borderNode);
+                    var borderSkt = nodeToBFSMergedSkeleton.get(borderNode);
 
                     // TODO: check if there are any
                     Set<T> neighbors = new HashSet<>(graph.getForwardNeighbors(borderNode));
@@ -291,23 +293,22 @@ public class TypeFlowPathManager<T> {
                     for (var neighbor: sortedNeighbors) {
                         if (sourceToPropagatedNodes.get(source).contains(neighbor)) continue;
 
-                        var neighborSkts = nodeToMergedSkeleton.get(neighbor);
+                        var neighborSkts = nodeToBFSMergedSkeleton.get(neighbor);
                         // Not propagated yet
                         if (neighborSkts == null) {
-                            nodeToMergedSkeleton.put(neighbor, nodeToMergedSkeleton.get(borderNode));
+                            nodeToBFSMergedSkeleton.put(neighbor, nodeToBFSMergedSkeleton.get(borderNode));
                             newBorderNodes.add(neighbor);
                             sourceToPropagatedNodes.get(source).add(neighbor);
                         }
                         // If Already propagated with a Skeleton
                         else {
-                            var neighborSkt = nodeToMergedSkeleton.get(neighbor);
-
+                            var neighborSkt = nodeToBFSMergedSkeleton.get(neighbor);
                             // IMPORTANT: Since skeletons current propagated are already merged from paths.
                             //  So merging operation should not be too strict.
                             //  Anyway, changing it into `tryMergeLayoutStrict` is also ok.
                             boolean success = neighborSkt.tryMergeLayoutStrict(borderSkt);
                             if (success) {
-                                nodeToMergedSkeleton.put(neighbor, neighborSkt);
+                                nodeToBFSMergedSkeleton.put(neighbor, neighborSkt);
                                 newBorderNodes.add(neighbor);
                                 sourceToPropagatedNodes.get(source).add(neighbor);
                             } else {
@@ -320,7 +321,7 @@ public class TypeFlowPathManager<T> {
                                         String.format("Neighbor Skeleton: \n%s", neighborSkt.dumpLayout(2)));
 
                                 hasConflict = true;
-                                conflictNonSourceNodes.add(neighbor);
+                                evilNonSourceNodes.add(neighbor);
                                 sourceToPropagatedNodes.get(source).add(neighbor);
                             }
                         }
@@ -336,7 +337,7 @@ public class TypeFlowPathManager<T> {
         }
 
         // Post-processing, marking nodes that are not propagated to.
-        var propagatedNodes = nodeToMergedSkeleton.keySet();
+        var propagatedNodes = nodeToBFSMergedSkeleton.keySet();
         var allNodes = graph.getGraph().vertexSet();
         var notPropagatedNodes = new HashSet<T>(allNodes);
         notPropagatedNodes.removeAll(propagatedNodes);
@@ -353,12 +354,12 @@ public class TypeFlowPathManager<T> {
         }
 
         // Post-processing, updating conflict Nodes
-        if (!conflictNonSourceNodes.isEmpty()) {
+        if (!evilNonSourceNodes.isEmpty()) {
             Logging.info("TypeFlowPathManager",
-                    String.format("Found %d conflict Non-Source nodes during Layout Information Propagation: %s", conflictNonSourceNodes.size(), conflictNonSourceNodes));
+                    String.format("Found %d conflict Non-Source nodes during Layout Information Propagation: %s", evilNonSourceNodes.size(), evilNonSourceNodes));
 
             // We should remove inEdges of conflictNonSourceNodes in theory.
-            for (var node: conflictNonSourceNodes) {
+            for (var node: evilNonSourceNodes) {
                 var inEdges = graph.getGraph().incomingEdgesOf(node);
                 for (var edge: inEdges) {
                     if (keepEdges.contains(edge)) continue;
@@ -407,15 +408,51 @@ public class TypeFlowPathManager<T> {
             }
         }
 
+        int totalEvilEdges = 0;
         // 3. process the conflict graph
+        while (conflictGraph.hasIntersecConnections()) {
+            int currentRoundEvilEdges = 0;
+            var filterSrc = conflictGraph.findNodeWithMostNoIntersecConnections();
+            // we only save nodes and edges can only be reached current filterSrc to Minimize the impact of deletion
+            // edges to other sources will be marked and removed.
+            var onlyReachableNodes = sourceToOnlyReachableChildren.get(filterSrc);
+            for (var node: onlyReachableNodes) {
+                for (var edge: graph.getGraph().incomingEdgesOf(node)) {
+                    var edgeSrc = graph.getGraph().getEdgeSource(edge);
+                    if (!onlyReachableNodes.contains(edgeSrc)) {
+                        evilEdgesInConflictNodes.add(edge);
+                        currentRoundEvilEdges++;
+                    }
+                }
 
+                for (var edge: graph.getGraph().outgoingEdgesOf(node)) {
+                    var edgeTarget = graph.getGraph().getEdgeTarget(edge);
+                    if (!onlyReachableNodes.contains(edgeTarget)) {
+                        evilEdgesInConflictNodes.add(edge);
+                        currentRoundEvilEdges++;
+                    }
+                }
+            }
+
+            var beforeRemove = conflictGraph.getEdgesCountOfType(ConflictGraph.EdgeType.NOINTERSEC);
+            conflictGraph.removeAllNoIntersecEdgesOfNode(filterSrc);
+            var afterRemove = conflictGraph.getEdgesCountOfType(ConflictGraph.EdgeType.NOINTERSEC);
+
+            Logging.debug("TypeFlowPathManager",
+                    String.format("Remove NOINTERSEC edges from conflict graph, %d -> %d", beforeRemove - afterRemove, beforeRemove, afterRemove));
+            Logging.debug("TypeFlowPathManager",
+                    String.format("Current Round marked evil edges: %d", currentRoundEvilEdges));
+
+            totalEvilEdges += currentRoundEvilEdges;
+        }
 
         if (srcSktConflictCount > 0) {
             Logging.info("TypeFlowPathManager",
-                    String.format("Found %d conflicts in merged skeletons", srcSktConflictCount));
+                    String.format("Resolving Layout Conflicts: Found %d conflicts in merged skeletons", srcSktConflictCount));
             Logging.info("TypeFlowPathManager",
-                    String.format("Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
-            return;
+                    String.format("Resolving Layout Conflicts: Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
+            Logging.info("TypeFlowPathManager",
+                    String.format("Resolving Layout Conflicts: Found %d of %d evil edges in conflict nodes", totalEvilEdges, graph.getEdges().size()));
         }
     }
 
@@ -448,6 +485,9 @@ public class TypeFlowPathManager<T> {
                         intersectionSourcePair.computeIfAbsent(src2, k -> new HashSet<>()).add(src1);
                     }
                 }
+            } else if (reachableSources.size() == 1) {
+                var src = reachableSources.iterator().next();
+                sourceToOnlyReachableChildren.computeIfAbsent(src, k -> new HashSet<>()).add(node);
             }
         }
     }
