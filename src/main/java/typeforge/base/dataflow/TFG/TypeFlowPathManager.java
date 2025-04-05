@@ -14,6 +14,7 @@ import org.jgrapht.alg.shortestpath.AllDirectedPaths;
 
 import java.io.FileWriter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class TypeFlowPathManager<T> {
     public TypeFlowGraph<T> graph;
@@ -69,7 +70,17 @@ public class TypeFlowPathManager<T> {
 
         findAllPathFromSrcToSink();
 
-        markAllBackwardEdges();
+        // Confirm that all nodes are covered by paths
+        Set<T> coveredNodes = getCoveredNodes();
+        Set<T> allNodes = graph.getNodes();
+        if (!coveredNodes.containsAll(allNodes)) {
+            Logging.error("TypeFlowPathManager", String.format("Not all nodes are covered by forward path: %s", allNodes.stream()
+                    .filter(node -> !coveredNodes.contains(node)).collect(Collectors.toSet())));
+            System.exit(1);
+        } else {
+            Logging.debug("TypeFlowPathManager", String.format("All nodes are covered by forward path: %s", allNodes));
+            markAllBackwardEdges();
+        }
     }
 
     /**
@@ -197,8 +208,6 @@ public class TypeFlowPathManager<T> {
      * When we detect conflict nodes during following propagation process, we remove all edges connected to them.
      * At this stage, the remaining connected components in the graph should theoretically also be free of conflicts
      */
-    // TODO:
-    //  1. 如果 Source 之间的路径没有任何节点的交集，那么它们之间实际上无法相互传播，因此也就无法检查到冲突。
     public void propagateLayoutFromSourcesBFS() {
         if (srcToMergedSkeleton.isEmpty()) {
             Logging.debug("TypeFlowPathManager", "No merged skeletons to propagate");
@@ -540,18 +549,11 @@ public class TypeFlowPathManager<T> {
             }
         }
 
-        Set<T> coveredNodes = getCoveredNodes();
         Set<T> unCoveredNodes = new HashSet<>(graph.getNodes());
-        unCoveredNodes.removeAll(coveredNodes);
+        unCoveredNodes.removeAll(getCoveredNodes());
 
-        if (!unCoveredNodes.isEmpty()) {
-            Logging.info("TypeFlowPathManager",
-                    String.format("Found %d / %d nodes are uncovered by paths",
-                            unCoveredNodes.size(), graph.getGraph().vertexSet().size()));
-
-            // Find virtual sources (nodes with in-degree 0 or only connected from covered nodes)
+        while (!unCoveredNodes.isEmpty()) {
             Set<T> virtualSources = new HashSet<>();
-            // Find virtual sinks (nodes with out-degree 0 or only connected to covered nodes)
             Set<T> virtualSinks = new HashSet<>();
 
             for (T node : unCoveredNodes) {
@@ -576,32 +578,21 @@ public class TypeFlowPathManager<T> {
                     }
                 }
 
-                if (isVirtualSource) {
-                    virtualSources.add(node);
-                }
-                if (isVirtualSink) {
-                    virtualSinks.add(node);
-                }
+                if (isVirtualSource) virtualSources.add(node);
+                if (isVirtualSink) virtualSinks.add(node);
             }
 
-            // If no virtual sources/sinks found, pick nodes with minimum in/out degree
-            if (virtualSources.isEmpty() || virtualSinks.isEmpty()) {
+            if (virtualSources.isEmpty()) {
                 T bestSource = findNodeWithMinInDegreeInSet(unCoveredNodes);
+                virtualSources.add(bestSource);
+            }
+            if (virtualSinks.isEmpty()) {
                 T bestSink = findNodeWithMinOutDegreeInSet(unCoveredNodes);
-
-                if (!virtualSources.isEmpty()) {
-                    virtualSinks.add(bestSink);
-                } else if (!virtualSinks.isEmpty()) {
-                    virtualSources.add(bestSource);
-                } else {
-                    virtualSources.add(bestSource);
-                    virtualSinks.add(bestSink);
-                }
+                virtualSinks.add(bestSink);
             }
 
-            // Create paths between virtual sources and sinks
             for (T src : virtualSources) {
-                source.add(src); // Add to global sources
+                source.add(src);
                 for (T snk : virtualSinks) {
                     List<GraphPath<T, TypeFlowGraph.TypeFlowEdge>> paths =
                             allPathsFinder.getAllPaths(src, snk, true, Integer.MAX_VALUE);
@@ -611,8 +602,9 @@ public class TypeFlowPathManager<T> {
                     }
                 }
             }
-
             sink.addAll(virtualSinks);
+
+            unCoveredNodes.removeAll(getCoveredNodes());
         }
     }
 
@@ -653,13 +645,10 @@ public class TypeFlowPathManager<T> {
      * Get Covered nodes in the paths
      */
     private Set<T> getCoveredNodes() {
-        Set<T> coveredNodes = new HashSet<>();
-        for (var paths: srcToPathsMap.values()) {
-            for (var path: paths) {
-                coveredNodes.addAll(path.nodes);
-            }
-        }
-        return coveredNodes;
+        return srcToPathsMap.values().stream()
+                .flatMap(Collection::stream)
+                .flatMap(path -> path.nodes.stream())
+                .collect(Collectors.toSet());
     }
 
     /**
