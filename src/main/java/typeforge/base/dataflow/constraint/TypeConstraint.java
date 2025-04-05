@@ -42,7 +42,7 @@ public class TypeConstraint {
     public Set<DataType> globalMorphingTypes = new HashSet<>();
     public Map<Range, Set<DataType>> rangeMorphingTypes = new HashMap<>();
     public Set<Range> nestedRange = new HashSet<>();
-    public Set<DataType> decompilerInferredTypes;
+    public Set<DataType> decompilerInferredTypes = new HashSet<>();
     public DataType finalType = null;
 
     public int size = -1;
@@ -207,9 +207,6 @@ public class TypeConstraint {
     }
 
     public boolean decompilerInferredTypesHasComposite() {
-        if (decompilerInferredTypes == null) {
-            return false;
-        }
         for (var dt: decompilerInferredTypes) {
             if (DataTypeHelper.isPointerToCompositeDataType(dt) || DataTypeHelper.isCompositeOrArray(dt)) {
                 return true;
@@ -218,7 +215,7 @@ public class TypeConstraint {
         return false;
     }
 
-    public void setPrimitiveType(DataType dt) {
+    public void setPointerToPrimitiveType(DataType dt) {
         isPointerToPrimitive = true;
         finalType = dt;
         singleDerivedType = true;

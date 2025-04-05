@@ -390,7 +390,8 @@ public class TypeFlowPathManager<T> {
                 var hasConflicts = TCHelper.checkFieldOverlapStrict(skt1, skt2);
                 if (hasConflicts) {
                     srcSktConflictCount++;
-                    var hasInterSection = intersectionSourcePair.get(src1).contains(src2);
+                    var hasInterSection = intersectionSourcePair.get(src1) != null &&
+                            intersectionSourcePair.get(src1).contains(src2);
                     // Anyway, there should be no intersecEdges in theory
                     if (hasInterSection) {
                         conflictGraph.addIntersecEdge(src1, src2);

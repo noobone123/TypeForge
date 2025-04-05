@@ -39,6 +39,9 @@ public class TypeHintCollector {
         confirmFinalConstraint();
         handleAPSets();
         addDecompilerInferredTypes();
+
+        handlePtrReference();
+        handleMustPrimitiveSkeleton();
         return;
     }
 
@@ -228,40 +231,40 @@ public class TypeHintCollector {
             var offset = parsedExpr.offsetValue;
 
             if (exprToConstraintMap.containsKey(base)) {
-                var baseSkt = exprToConstraintMap.get(base);
-                baseSkt.addPtrReference(offset, exprToConstraintMap.get(expr));
-                baseSkt.ptrLevel.put(offset, 1);
+                var baseConstraint = exprToConstraintMap.get(base);
+                baseConstraint.addPtrReference(offset, exprToConstraintMap.get(expr));
+                baseConstraint.ptrLevel.put(offset, 1);
             }
         }
 
-        /* In rare cases, for some reason, there may be some multi-ple ptr reference or nested skeletons */
+        /* There may multiple ptr reference to the same offset, we need to handle it */
         handleMultiPtrReferenceTo();
 
-        /* Handle MultiLevel Ptr Reference */
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            for (var offset: skt.finalPtrReference.keySet()) {
-                var ptrEESkt = skt.finalPtrReference.get(offset);
+        /* Handle Multi-Level Ptr Reference */
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            for (var offset: constraint.finalPtrReference.keySet()) {
+                var ptrEEConstraint = constraint.finalPtrReference.get(offset);
                 var ptrLevel = 1;
-                while (ptrEESkt.isMultiLevelMidPtr()) {
+                while (ptrEEConstraint.isMultiLevelMidPtr()) {
                     ptrLevel++;
-                    if (ptrEESkt == ptrEESkt.finalPtrReference.get(0L)) {
+                    if (ptrEEConstraint == ptrEEConstraint.finalPtrReference.get(0L)) {
                         Logging.warn("TypeHintCollector", "Ptr Reference Loop Detected!");
                         break;
                     }
-                    ptrEESkt = ptrEESkt.finalPtrReference.get(0L);
+                    ptrEEConstraint = ptrEEConstraint.finalPtrReference.get(0L);
                 }
 
                 if (ptrLevel > 1) {
                     Logging.debug("TypeHintCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
-                    skt.ptrLevel.put(offset, ptrLevel);
-                    skt.finalPtrReference.put(offset, ptrEESkt);
+                    constraint.ptrLevel.put(offset, ptrLevel);
+                    constraint.finalPtrReference.put(offset, ptrEEConstraint);
 
                     /* For debug */
-                    Logging.debug("TypeHintCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
-                    Logging.debug("TypeHintCollector", skt.exprs.toString());
-                    Logging.debug("TypeHintCollector", skt.finalSkeleton.dumpLayout(0));
-                    Logging.debug("TypeHintCollector", ptrEESkt.exprs.toString());
-                    Logging.debug("TypeHintCollector", ptrEESkt.finalSkeleton.dumpLayout(0));
+                    Logging.debug("TypeHintCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEEConstraint));
+                    Logging.debug("TypeHintCollector", constraint.exprs.toString());
+                    Logging.debug("TypeHintCollector", constraint.finalSkeleton.dumpLayout(0));
+                    Logging.debug("TypeHintCollector", ptrEEConstraint.exprs.toString());
+                    Logging.debug("TypeHintCollector", ptrEEConstraint.finalSkeleton.dumpLayout(0));
                 } else {
                     Logging.debug("TypeHintCollector", "Ptr Level = 1");
                 }
@@ -269,13 +272,13 @@ public class TypeHintCollector {
         }
 
         /* Remove Ptr Reference which points to a multiLevelMidPtr */
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            if (skt.hasPtrReference()) {
-                for (var offset: skt.finalPtrReference.keySet()) {
-                    var ptrEE = skt.finalPtrReference.get(offset);
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            if (constraint.hasPtrReference()) {
+                for (var offset: constraint.finalPtrReference.keySet()) {
+                    var ptrEE = constraint.finalPtrReference.get(offset);
                     if (ptrEE.isMultiLevelMidPtr) {
-                        skt.finalPtrReference.remove(offset);
-                        skt.ptrLevel.remove(offset);
+                        constraint.finalPtrReference.remove(offset);
+                        constraint.ptrLevel.remove(offset);
                         Logging.debug("TypeHintCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
                     }
                 }
@@ -393,35 +396,29 @@ public class TypeHintCollector {
         }
     }
 
+
     public void handleMultiPtrReferenceTo() {
         /* Choose the most visited one as the final ReferenceTo constraint */
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            if (skt.hasMultiPtrReferenceTo()) {
-                Logging.warn("TypeHintCollector", String.format("Multi Ptr Reference To Detected: \n%s", skt));
-                for (var offset: skt.ptrReference.keySet()) {
-                    var ptrEEs = skt.ptrReference.get(offset);
-                    if (ptrEEs.size() > 1) {
-                        Logging.warn("TypeHintCollector", String.format("At 0x%s: %s", Long.toHexString(offset), ptrEEs));
-                        TypeConstraint chosenSkt = null;
-                        for (var ptrEE: ptrEEs) {
-                            if (chosenSkt == null) {
-                                chosenSkt = ptrEE;
-                            } else {
-                                if (ptrEE.exprs.size() > chosenSkt.exprs.size()) {
-                                    chosenSkt = ptrEE;
-                                }
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            for (var offset: constraint.ptrReference.keySet()) {
+                var ptrEEs = constraint.ptrReference.get(offset);
+                if (ptrEEs.size() == 1) {
+                    var ptrEE = ptrEEs.iterator().next();
+                    constraint.finalPtrReference.put(offset, ptrEE);
+                } else {
+                    Logging.warn("TypeHintCollector", String.format("Multi Ptr Reference To Detected: \n%s", constraint));
+                    // TODO: Try to merge them into a new constraint?
+                    TypeConstraint chooseConstraint = null;
+                    for (var ptrEE: ptrEEs) {
+                        if (chooseConstraint == null) {
+                            chooseConstraint = ptrEE;
+                        } else {
+                            if (ptrEE.exprs.size() > chooseConstraint.exprs.size()) {
+                                chooseConstraint = ptrEE;
                             }
                         }
-                        skt.finalPtrReference.put(offset, chosenSkt);
-                    } else {
-                        skt.finalPtrReference.put(offset, ptrEEs.iterator().next());
                     }
-                }
-            }
-            else {
-                for (var offset: skt.ptrReference.keySet()) {
-                    var ptrEE = skt.ptrReference.get(offset).iterator().next();
-                    skt.finalPtrReference.put(offset, ptrEE);
+                    constraint.finalPtrReference.put(offset, chooseConstraint);
                 }
             }
         }
@@ -438,18 +435,17 @@ public class TypeHintCollector {
     /**
      * Mark MayPrimitiveType for TypeConstraints and handle reference and nested mayPrimitiveType skeletons.
      */
-    public void handleUnreasonableSkeleton() {
+    public void handleMustPrimitiveSkeleton() {
         for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (constraint.isMultiLevelMidPtr()) {
-                Logging.debug("TypeHintCollector", "Multi Level Mid Ptr Skeleton: " + constraint);
-                constraint.isMultiLevelMidPtr = true;
-            } else if (constraint.isIndependent() && constraint.hasOneField() &&
+            if (constraint.isMultiLevelMidPtr) continue;
+            if (!constraint.hasPtrReference() && constraint.hasOneField() &&
                     !constraint.decompilerInferredTypesHasComposite() &&
                     (constraint.finalSkeleton.fieldAccess.get(0L) != null)) {
                 /* These types are considered as pointers to primitive types and no need to assess and ranking */
                 Logging.debug("TypeHintCollector", "Pointer to Primitive Detected: " + constraint);
+                constraint.dumpInfo();
                 var aps = constraint.finalSkeleton.fieldAccess.get(0L);
-                constraint.setPrimitiveType(aps.mostAccessedDT);
+                constraint.setPointerToPrimitiveType(aps.mostAccessedDT);
             }
         }
     }
