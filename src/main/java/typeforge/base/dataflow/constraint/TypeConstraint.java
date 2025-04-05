@@ -51,7 +51,7 @@ public class TypeConstraint {
         this.skeletons.add(skeleton);
         this.finalSkeleton = skeleton;
         this.exprs.addAll(exprs);
-        getSize();
+        getMaxSize();
     }
 
     public TypeConstraint(Skeleton skeleton, Set<NMAE> exprs) {
@@ -119,7 +119,7 @@ public class TypeConstraint {
      * max of (finalConstraint.fieldAccess.size(), finalConstraint.fieldAccess.size() + nestedSkeleton.size())
      * @return the size of current skeleton
      */
-    public int getSize() {
+    public int getMaxSize() {
         /* Get the last element of fieldAccess */
         var maxSize = 0L;
         for (var entry: finalSkeleton.fieldAccess.entrySet()) {
@@ -131,7 +131,7 @@ public class TypeConstraint {
         }
 
         /* Get the size from sizeSource */
-        var sizeFromSource = finalSkeleton.getMaxSize();
+        var sizeFromSource = finalSkeleton.getMaxSizeFromSource();
         if (sizeFromSource.isPresent()) {
             var sizeSource = sizeFromSource.get();
             size = (sizeSource > maxSize ? sizeSource : maxSize);
@@ -540,4 +540,29 @@ public class TypeConstraint {
         }
     }
 
+    public static boolean checkNestConflict(TypeConstraint nester, TypeConstraint nestee,
+                                            long offset, boolean isRelax) {
+        var nesterSkt = nester.finalSkeleton;
+        var nesteeSkt = nestee.finalSkeleton;
+        var nestedSkt = new Skeleton();
+        for (var f: nesteeSkt.fieldAccess.entrySet()) {
+            var offsetInSkt = f.getKey();
+            var apSet = f.getValue();
+            var newOffset = offset + offsetInSkt;
+            nestedSkt.addFieldAccessForNestChecking(newOffset, apSet);
+        }
+
+        var nestCandidate = nestedSkt.getMaxSizeFromFieldAccess();
+        if (nestCandidate > nester.getMaxSize()) {
+            Logging.debug("TypeConstraint", String.format("Nester %s has smaller size than nested %s, skip checking",
+                    nester, nestee));
+            return false;
+        }
+
+        if (isRelax) {
+            return !TCHelper.checkFieldOverlapRelax(nesterSkt, nestedSkt);
+        } else {
+            return !TCHelper.checkFieldOverlapStrict(nesterSkt, nestedSkt);
+        }
+    }
 }

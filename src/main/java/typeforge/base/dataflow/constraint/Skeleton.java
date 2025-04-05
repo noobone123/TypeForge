@@ -121,6 +121,11 @@ public class Skeleton {
         }
     }
 
+    public void addFieldAccessForNestChecking(long offset, AccessPoints.APSet apSet) {
+        // update fieldAccess
+        fieldAccess.putIfAbsent(offset, apSet);
+    }
+
     public void addFieldExpr(long offset, NMAE fieldAccessExpr) {
         fieldExprMap.putIfAbsent(offset, new HashSet<>());
         fieldExprMap.get(offset).add(fieldAccessExpr);
@@ -167,12 +172,27 @@ public class Skeleton {
         return sizeSources;
     }
 
-    public Optional<Long> getMaxSize() {
+    public Optional<Long> getMaxSizeFromSource() {
         if (sizeSources.isEmpty()) {
             return Optional.empty();
         } else {
             return sizeSources.stream().map(SizeSource::getSize).max(Long::compareTo);
         }
+    }
+
+    public Long getMaxSizeFromFieldAccess() {
+        if (fieldAccess.isEmpty()) return 0L;
+
+        var maxSize = 0L;
+        for (var entry: fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var maxSizeAtOffset = entry.getValue().maxDTSize;
+            if (offset + maxSizeAtOffset > maxSize) {
+                maxSize = offset + maxSizeAtOffset;
+            }
+        }
+
+        return maxSize;
     }
 
     public void strongUpdateSizeSources(SizeSource newSizeSource) {

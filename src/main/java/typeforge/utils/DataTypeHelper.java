@@ -132,9 +132,9 @@ public class DataTypeHelper {
      * @return the new Structure
      */
     public static Structure createUniqueStructure(TypeConstraint skt, Map<Integer, DataType> componentMap) {
-        Logging.debug("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(skt.getSize()));
+        Logging.debug("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(skt.getMaxSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_STRUCT_BASENAME);
-        var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, skt.getSize(), dtM);
+        var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, skt.getMaxSize(), dtM);
         populateStructure(structDT, componentMap, skt);
         return structDT;
     }
