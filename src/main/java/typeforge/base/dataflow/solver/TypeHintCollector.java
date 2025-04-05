@@ -1,5 +1,6 @@
 package typeforge.base.dataflow.solver;
 
+import org.python.antlr.ast.Str;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.constraint.TypeConstraint;
@@ -9,7 +10,6 @@ import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
-import typeforge.utils.TCHelper;
 
 import java.util.*;
 
@@ -37,6 +37,7 @@ public class TypeHintCollector {
         // Now we need to aggregate the type hints from connected components in the whole-program TFG.
         buildTypeConstraintsBySkeletons();
         handleTypeAlias();
+        confirmFinalConstraint();
         return;
     }
 
@@ -180,15 +181,20 @@ public class TypeHintCollector {
     /**
      * For Skeletons with multiple constraints, we choose the most visited one as the final constraint.
      */
-    public void handleFinalConstraint() {
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            if (!skt.hasMultiSkeleton) {
-                skt.finalSkeleton = skt.skeletons.iterator().next();
-            };
+    public void confirmFinalConstraint() {
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            if (constraint.finalSkeleton != null) {
+                continue;
+            } else if (!constraint.hasMultiSkeleton) {
+                Logging.warn("TypeHintCollector",
+                        String.format("TypeConstraint %s has no final skeleton, but it is not multi skeleton", constraint));
+                constraint.finalSkeleton = constraint.skeletons.iterator().next();
+            }
 
+            // Following Should not happen in theory
             int maxVisit = 0;
             Skeleton maxVisitConstraint = null;
-            for (var con: skt.skeletons) {
+            for (var con: constraint.skeletons) {
                 var curVisit = con.getAllFieldsAccessCount();
                 if (curVisit > maxVisit) {
                     maxVisit = curVisit;
@@ -196,12 +202,10 @@ public class TypeHintCollector {
                 }
             }
 
-            // TODO: should we merge Skeletons with same finalConstraint ?
             if (maxVisitConstraint != null) {
-                skt.hasMultiSkeleton = false;
-                skt.finalSkeleton = maxVisitConstraint;
-                Logging.debug("SkeletonCollector", String.format("%s:\n%s", skt, skt.exprs));
-                Logging.debug("SkeletonCollector", String.format("Choose the most visited constraint:\n%s", maxVisitConstraint.dumpLayout(0)));
+                constraint.hasMultiSkeleton = false;
+                constraint.finalSkeleton = maxVisitConstraint;
+                Logging.debug("TypeHintCollector", String.format("Choose the most visited constraint:\n%s", maxVisitConstraint));
             }
         }
     }
