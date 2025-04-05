@@ -40,9 +40,11 @@ public class TypeHintCollector {
         handleAPSets();
         addDecompilerInferredTypes();
 
+        // Following handlers' order should not be changed.
         handlePtrReference();
         handleMustPrimitiveSkeleton();
-        return;
+        handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
+        handleMemberConflict();
     }
 
     public void buildTypeConstraintsBySkeletons() {
@@ -304,12 +306,16 @@ public class TypeHintCollector {
                     nextOffset = offsets.get(i + 1);
                 }
 
+                // If there is a pointer reference at this offset, but the size between this offset and the next offset is less than the pointer size,
+                // we consider it as a conflict and remove the pointer reference.
                 if (skt.finalPtrReference.containsKey(offset)) {
                     if (nextOffset != -1 && (nextOffset - offset) < ptrSize) {
                         skt.finalPtrReference.remove(offset);
                         Logging.debug("TypeHintCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
                     }
                 } else {
+                    // Use mostAccessedDT to check if the size between this offset and the next offset is
+                    // less than the size of the most accessed data type.
                     var size = aps.mostAccessedDT.getLength();
                     if (nextOffset != -1 && (nextOffset - offset) < size) {
                         removeCandidate.add(offset);
@@ -339,32 +345,32 @@ public class TypeHintCollector {
                 var base = expr.getBase();
                 var offset = expr.getOffset().getConstant();
                 if (exprToConstraintMap.containsKey(base)) {
-                    var baseSkt = exprToConstraintMap.get(base);
-                    baseSkt.mayNestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
+                    var baseConstraint = exprToConstraintMap.get(base);
+                    baseConstraint.mayNestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
                             .add(exprToConstraintMap.get(expr));
                 }
             }
         }
 
         /* Remove skeletons that should not be nested */
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            if (skt.hasNestedConstraint()) {
-                var iterator = skt.mayNestedConstraint.keySet().iterator();
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            if (constraint.hasNestedConstraint()) {
+                var iterator = constraint.mayNestedConstraint.keySet().iterator();
                 while (iterator.hasNext()) {
                     var offset = iterator.next();
-                    if (offset > skt.getSize()) {
+                    if (offset > constraint.getSize()) {
                         iterator.remove();
                         Logging.debug("TypeHintCollector", "Offset larger than the size of the nester!");
                     } else {
                         var removeCandidates = new HashSet<TypeConstraint>();
-                        for (var s: skt.mayNestedConstraint.get(offset)) {
-                            if (s.isMultiLevelMidPtr || s.isPointerToPrimitive || skt == s) {
+                        for (var s: constraint.mayNestedConstraint.get(offset)) {
+                            if (s.isMultiLevelMidPtr || s.isPointerToPrimitive || constraint == s) {
                                 removeCandidates.add(s);
                             }
                         }
                         if (!removeCandidates.isEmpty()) {
-                            skt.mayNestedConstraint.get(offset).removeAll(removeCandidates);
-                            if (skt.mayNestedConstraint.get(offset).isEmpty()) {
+                            constraint.mayNestedConstraint.get(offset).removeAll(removeCandidates);
+                            if (constraint.mayNestedConstraint.get(offset).isEmpty()) {
                                 iterator.remove();
                             }
                             Logging.debug("TypeHintCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
@@ -375,23 +381,24 @@ public class TypeHintCollector {
         }
 
         /* Handling mayNested Skeleton and build the finalNestedSkeleton */
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            for (var entry: skt.mayNestedConstraint.entrySet()) {
+        for (var nester: new HashSet<>(exprToConstraintMap.values())) {
+            for (var entry: nester.mayNestedConstraint.entrySet()) {
+                // TODO: consider try merging constraints of nestedConstraints ?
                 var offset = entry.getKey();
-                var nestedSkts = entry.getValue();
+                var nestedConstraints = entry.getValue();
                 TypeConstraint finalNestedCandidate = null;
-                for (var nestedSkt: nestedSkts) {
-                    tryPopulateNester(skt, offset, nestedSkt);
+                for (var nestee: nestedConstraints) {
+                    tryPopulateNester(nester, offset, nestee);
                     if (finalNestedCandidate == null) {
-                        finalNestedCandidate = nestedSkt;
+                        finalNestedCandidate = nestee;
                     } else {
-                        if (nestedSkt.variables.size() >= finalNestedCandidate.variables.size()) {
-                            finalNestedCandidate = nestedSkt;
+                        if (nestee.variables.size() >= finalNestedCandidate.variables.size()) {
+                            finalNestedCandidate = nestee;
                         }
                     }
                 }
-                skt.finalNestedConstraint.put(offset, finalNestedCandidate);
-                skt.updateNestedRange(offset, offset + (long) finalNestedCandidate.getSize());
+                nester.finalNestedConstraint.put(offset, finalNestedCandidate);
+                nester.updateNestedRange(offset, offset + finalNestedCandidate.getSize());
             }
         }
     }
@@ -443,7 +450,6 @@ public class TypeHintCollector {
                     (constraint.finalSkeleton.fieldAccess.get(0L) != null)) {
                 /* These types are considered as pointers to primitive types and no need to assess and ranking */
                 Logging.debug("TypeHintCollector", "Pointer to Primitive Detected: " + constraint);
-                constraint.dumpInfo();
                 var aps = constraint.finalSkeleton.fieldAccess.get(0L);
                 constraint.setPointerToPrimitiveType(aps.mostAccessedDT);
             }

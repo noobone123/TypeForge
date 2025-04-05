@@ -167,6 +167,14 @@ public class Skeleton {
         return sizeSources;
     }
 
+    public Optional<Long> getMaxSize() {
+        if (sizeSources.isEmpty()) {
+            return Optional.empty();
+        } else {
+            return sizeSources.stream().map(SizeSource::getSize).max(Long::compareTo);
+        }
+    }
+
     public void strongUpdateSizeSources(SizeSource newSizeSource) {
         this.sizeSources.clear();
         this.sizeSources.add(newSizeSource);

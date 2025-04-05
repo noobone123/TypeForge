@@ -235,10 +235,6 @@ public class InterSolver {
 
         layoutPropagator.run();
         typeHintCollector.run();
-
-//        typeHintCollector.handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
-//        typeHintCollector.handleMemberConflict();
-//        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
     }
 
     /**

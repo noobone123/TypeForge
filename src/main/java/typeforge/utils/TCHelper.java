@@ -63,6 +63,7 @@ public class TCHelper {
         return false;
     }
 
+    // TODO: not very expected ... since (0,4) maybe (0,2) + (2,4), and this is still overlap
     public static boolean checkFieldOverlapRelax(Skeleton a, Skeleton b) {
         var aIntervals = buildIntervalWithMostAccessed(a);
         var bIntervals = buildIntervalWithMostAccessed(b);
@@ -147,7 +148,6 @@ public class TCHelper {
                 continue;
             }
 
-            // 找到访问频率最高的数据类型
             var typeFreq = aps.getTypeFreq();
             DataType mostAccessedType = null;
             int maxAccess = 0;

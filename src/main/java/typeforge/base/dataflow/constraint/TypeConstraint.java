@@ -45,12 +45,13 @@ public class TypeConstraint {
     public Set<DataType> decompilerInferredTypes = new HashSet<>();
     public DataType finalType = null;
 
-    public int size = -1;
+    public long size = -1;
 
     public TypeConstraint(Skeleton skeleton, Set<NMAE> exprs, boolean isFinal) {
         this.skeletons.add(skeleton);
         this.finalSkeleton = skeleton;
         this.exprs.addAll(exprs);
+        getSize();
     }
 
     public TypeConstraint(Skeleton skeleton, Set<NMAE> exprs) {
@@ -129,8 +130,16 @@ public class TypeConstraint {
             }
         }
 
-        size = (int) maxSize;
-        return size;
+        /* Get the size from sizeSource */
+        var sizeFromSource = finalSkeleton.getMaxSize();
+        if (sizeFromSource.isPresent()) {
+            var sizeSource = sizeFromSource.get();
+            size = (sizeSource > maxSize ? sizeSource : maxSize);
+        } else {
+            size = maxSize;
+        }
+
+        return (int) size;
     }
 
     /**
