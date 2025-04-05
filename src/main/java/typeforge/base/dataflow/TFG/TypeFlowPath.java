@@ -163,7 +163,7 @@ public class TypeFlowPath<T> {
 
     @Override
     public int hashCode() {
-        return graph.hashCode() + edges.hashCode() + nodes.hashCode();
+        return edges.hashCode() + nodes.hashCode();
     }
 
     @Override

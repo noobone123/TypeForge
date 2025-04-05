@@ -29,8 +29,6 @@ public class TypeFlowPathManager<T> {
     /** node to Skeletons when propagating layout information BFS */
     public final Map<T, Skeleton> nodeToMergedSkeleton;
 
-    public final Map<T, Set<T>> srcChildren = new HashMap<>();
-
     /** fields for handle conflict paths and nodes */
     public final Set<TypeFlowPath<T>> pathsHasConflict = new HashSet<>();
 
@@ -50,6 +48,9 @@ public class TypeFlowPathManager<T> {
     public UnionFind<T> sourceGroups = new UnionFind<>();
     public final Map<T, Skeleton> sourceToConstraints = new HashMap<>();
 
+    public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
+    public final Map<T, Set<T>> nodeToReachableSource = new HashMap<>();
+
     public TypeFlowPathManager(TypeFlowGraph<T> graph) {
         this.graph = graph;
         this.source = new HashSet<>();
@@ -67,6 +68,8 @@ public class TypeFlowPathManager<T> {
         this.srcToPathsMap.clear();
         this.srcToMergedSkeleton.clear();
         this.nodeToMergedSkeleton.clear();
+        this.sourceToChildren.clear();
+        this.nodeToReachableSource.clear();
 
         findSourcesAndSinks();
 
@@ -89,8 +92,12 @@ public class TypeFlowPathManager<T> {
      * Try merge Skeletons from each node along the same path.
      * After the merge is completed, theoretically, there should no longer be any conflicts on each path stored in srcToPathsMap.
      * IMPORTANT: This Function should be called after all Graph's pathManager built
+     *
+     * @return if conflicts are found during merging, return false
      */
-    public void tryMergeLayoutFormSamePathsForward(NMAEManager exprManager) {
+    public boolean tryMergeLayoutFormSamePathsForward(NMAEManager exprManager) {
+        boolean hasConflict = false;
+
         Queue<TypeFlowPath<T>> workList = new LinkedList<>();
 
         Logging.info("TypeFlowPathManager", String.format("Try merge layout from same paths: %s", srcToPathsMap));
@@ -100,6 +107,7 @@ public class TypeFlowPathManager<T> {
             for (var path: srcToPathsMap.get(src)) {
                 var success = path.tryMergeLayoutForwardOnPath(exprManager);
                 if (!success) {
+                    hasConflict = true;
                     pathsHasConflict.add(path);
                     evilEdgesInPerPath.add(path.conflictEdge);
                     path.conflict = true;
@@ -138,6 +146,8 @@ public class TypeFlowPathManager<T> {
                 workList.add(pathSuffix); // Add back to workList for further processing
             }
         }
+
+        return hasConflict;
     }
 
     /**
@@ -147,8 +157,11 @@ public class TypeFlowPathManager<T> {
      * IMPORTANT: This Function should be called after `tryMergeLayoutFormSamePaths`,
      *              Now all paths get from `srcToPathsMap` has no conflicts.
      * @param exprManager NMAE Manager
+     * @return if conflicts are found during merging, return false
      */
-    public void tryMergeLayoutFromSameSourceForward(NMAEManager exprManager) {
+    public boolean tryMergeLayoutFromSameSourceForward(NMAEManager exprManager) {
+        var hasConflict = false;
+
         var workList = new LinkedList<>(source);
 
         while (!workList.isEmpty()) {
@@ -165,6 +178,7 @@ public class TypeFlowPathManager<T> {
             for (var path: pathsFromSrc) {
                 success = mergedSkt.tryMergeLayoutStrict(path.finalSkeletonOnPath);
                 if (!success) {
+                    hasConflict = true;
                     break;
                 }
             }
@@ -206,6 +220,8 @@ public class TypeFlowPathManager<T> {
                 }
             }
         }
+
+        return hasConflict;
     }
 
     /**
@@ -216,10 +232,12 @@ public class TypeFlowPathManager<T> {
      * However, be careful that if 2 sources has no intersection in srcChildren, their conflicts may not be detected in this step.
      * We will handle these in `resolveLayoutConflicts`.
      */
-    public void propagateLayoutFromSourcesBFS() {
+    public boolean propagateLayoutFromSourcesBFS() {
+        boolean hasConflict = false;
+
         if (srcToMergedSkeleton.isEmpty()) {
             Logging.debug("TypeFlowPathManager", "No merged skeletons to propagate");
-            return;
+            return hasConflict;
         }
 
         // Track source nodes and their border nodes
@@ -283,7 +301,7 @@ public class TypeFlowPathManager<T> {
                             // IMPORTANT: Since skeletons current propagated are already merged from paths.
                             //  So merging operation should not be too strict.
                             //  Anyway, changing it into `tryMergeLayoutStrict` is also ok.
-                            boolean success = neighborSkt.tryMergeLayoutRelax(borderSkt);
+                            boolean success = neighborSkt.tryMergeLayoutStrict(borderSkt);
                             if (success) {
                                 nodeToMergedSkeleton.put(neighbor, neighborSkt);
                                 newBorderNodes.add(neighbor);
@@ -297,6 +315,7 @@ public class TypeFlowPathManager<T> {
                                 Logging.debug("TypeFlowPathManager",
                                         String.format("Neighbor Skeleton: \n%s", neighborSkt.dumpLayout(2)));
 
+                                hasConflict = true;
                                 conflictNonSourceNodes.add(neighbor);
                                 sourceToPropagatedNodes.get(source).add(neighbor);
                             }
@@ -343,6 +362,8 @@ public class TypeFlowPathManager<T> {
                 }
             }
         }
+
+        return hasConflict;
     }
 
     /**
@@ -354,14 +375,13 @@ public class TypeFlowPathManager<T> {
      */
     public void resolveLayoutConflicts() {
         int srcSktConflictCount = 0;
-        int intersectionCount = 0;
 
         // 1. Build srcToChildren map
         for (var src: srcToMergedSkeleton.keySet()) {
             var paths = srcToPathsMap.get(src);
             for (var path: paths) {
                 for (var node: path.nodes) {
-                    srcChildren.computeIfAbsent(src, k -> new HashSet<>()).add(node);
+                    sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).add(node);
                 }
             }
         }
@@ -377,14 +397,9 @@ public class TypeFlowPathManager<T> {
                 T src2 = sources.get(j);
                 var skt2 = srcToMergedSkeleton.get(src2);
                 // Check conflicts with relaxation
-                var hasConflicts = TCHelper.checkFieldOverlapRelax(skt1, skt2);
+                var hasConflicts = TCHelper.checkFieldOverlapStrict(skt1, skt2);
                 if (hasConflicts) {
                     srcSktConflictCount++;
-
-                    var intersection = !Collections.disjoint(srcChildren.get(src1), srcChildren.get(src2));
-                    if (intersection) {
-                        intersectionCount ++;
-                    }
                 }
             }
         }
@@ -393,42 +408,8 @@ public class TypeFlowPathManager<T> {
             Logging.info("TypeFlowPathManager",
                     String.format("Found %d conflicts in merged skeletons", srcSktConflictCount));
             Logging.info("TypeFlowPathManager",
-                    String.format("Found %d conflict intersections in merged skeletons", intersectionCount));
-            Logging.info("TypeFlowPathManager",
                     String.format("Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
             return;
-        }
-    }
-
-    /**
-     * Check if there are any conflicts when merging all skeletons from the source nodes.
-     */
-    public void checkSourceSkeletonCorrectness(NMAEManager exprManager) {
-        // Re-initialize ...
-        initialize();
-
-        // First phase: check all paths for conflicts
-        for (var src: srcToPathsMap.keySet()) {
-            for (var path: srcToPathsMap.get(src)) {
-                var success = path.tryMergeLayoutForwardOnPath(exprManager);
-                if (!success) {
-                    Logging.error("TypeFlowPathManager", "Unexpected error in checking paths conflicts.");
-                    break;
-                }
-            }
-        }
-
-        // Second phase: check all merged sources for conflicts.
-        for (var src: srcToPathsMap.keySet()) {
-            var mergedSkt = new Skeleton();
-            for (var path: srcToPathsMap.get(src)) {
-                var success = mergedSkt.tryMergeLayoutStrict(path.finalSkeletonOnPath);
-                if (!success) {
-                    Logging.error("TypeFlowPathManager", "Unexpected error in merging source's skeletons.");
-                    break;
-                }
-            }
-            srcToMergedSkeleton.put(src, mergedSkt);
         }
     }
 
@@ -457,13 +438,13 @@ public class TypeFlowPathManager<T> {
 
         /* merge sources if they have common children nodes */
         for (var src1: source) {
-            Set<T> children1 = srcChildren.get(src1);
+            Set<T> children1 = sourceToChildren.get(src1);
             if (children1 == null) continue;
 
             for (T src2: source) {
                 if (src1.equals(src2)) continue;
 
-                Set<T> children2 = srcChildren.get(src2);
+                Set<T> children2 = sourceToChildren.get(src2);
                 if (children2 == null) continue;
 
                 // if children1 and children2 has common nodes, union their sources
@@ -519,7 +500,7 @@ public class TypeFlowPathManager<T> {
 
         var exprs = new HashSet<NMAE>();
         for (var src: sources) {
-            var children = srcChildren.get(src);
+            var children = sourceToChildren.get(src);
             if (children == null) {
                 Logging.warn("TypeRelationPathManager", String.format("Source %s has no children", src));
                 continue;
@@ -578,7 +559,6 @@ public class TypeFlowPathManager<T> {
         Set<T> previousUnCoveredNodes = new HashSet<>();
 
         while (!unCoveredNodes.isEmpty()) {
-
             // Check if the uncovered nodes are the same as before, means we are stuck
             if (previousUnCoveredNodes.equals(unCoveredNodes)) {
                 for (T node : unCoveredNodes) {

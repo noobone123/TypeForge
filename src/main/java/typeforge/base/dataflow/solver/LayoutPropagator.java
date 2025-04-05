@@ -1,9 +1,13 @@
 package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.TFG.TFGManager;
+import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.constraint.Skeleton;
+import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.utils.Logging;
+
+import java.util.Set;
 
 /**
  * Used for propagating Layout information through the whole-program TFG and
@@ -61,10 +65,10 @@ public class LayoutPropagator {
         // Reorganize the TFGs
         graphManager.reOrganize();
 
-        // Step2: Now each graph should have only one connected component
+        // Step2: iteratively process the conflict graphs
         for (var graph: graphManager.getGraphs()) {
             if (!graph.isValid()) {
-                Logging.error("TypeHintCollector", String.format("Unexpected Invalid Graph %s, skip it.", graph));
+                Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
                 continue;
             }
 
@@ -74,27 +78,48 @@ public class LayoutPropagator {
 
             var connectedComponents = graph.getConnectedComponents();
             if (connectedComponents.size() > 1) {
-                Logging.error("TypeHintCollector",
+                Logging.error("LayoutPropagator",
                         String.format("Now Each Graph should have only one connected component, but %d", connectedComponents.size()));
                 System.exit(1);
             }
 
-            var mergedSkeleton = new Skeleton();
             var connects = connectedComponents.get(0);
-            for (var node: connects) {
-                var nodeSkt = exprManager.getSkeleton(node);
-                if (nodeSkt == null) continue;
-
-                var success = mergedSkeleton.tryMergeLayoutRelax(nodeSkt);
-                if (!success) {
-                    // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
-                    // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
-                    // So we need to rebuild the path Manager there and detect them.
-                    Logging.error("TypeHintCollector",
-                            String.format("Graph: %s -> %d", graph, graph.getNodes().size()));
-                    break;
+            var success = tryToMergeAllNodesSkeleton(graph, connects);
+            // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
+            // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
+            // So we need to rebuild the path Manager there and detect them.
+            if (!success) {
+                graph.pathManager.initialize();
+                var hasPathMergeConflict = graph.pathManager.tryMergeLayoutFormSamePathsForward(exprManager);
+                var hasSourceMergeConflict = graph.pathManager.tryMergeLayoutFromSameSourceForward(exprManager);
+                if (hasPathMergeConflict || hasSourceMergeConflict) {
+                    Logging.error("LayoutPropagator",
+                            "Should not have any merge conflict after the first pass in theory, please check the code.");
                 }
             }
+
         }
+    }
+
+    public boolean tryToMergeAllNodesSkeleton(TypeFlowGraph<NMAE> graph, Set<NMAE> graphNodes) {
+        var mergedSkeleton = new Skeleton();
+        for (var node: graphNodes) {
+            var nodeSkt = exprManager.getSkeleton(node);
+            if (nodeSkt == null) continue;
+
+            var success = mergedSkeleton.tryMergeLayoutRelax(nodeSkt);
+            if (!success) {
+                // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
+                // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
+                // So we need to rebuild the path Manager there and detect them.
+                Logging.warn("LayoutPropagator",
+                        String.format("Graph: %s -> %d need to be processed to avoid conflicts further.", graph, graphNodes.size()));
+                graph.finalSkeleton = null;
+                return false;
+            }
+        }
+
+        graph.finalSkeleton = mergedSkeleton;
+        return true;
     }
 }

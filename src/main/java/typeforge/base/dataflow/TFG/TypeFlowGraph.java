@@ -8,6 +8,7 @@ import org.jgrapht.graph.DefaultDirectedGraph;
 import org.jgrapht.graph.DefaultEdge;
 import org.jgrapht.Graphs;
 
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.utils.Logging;
 
 import java.util.*;
@@ -44,6 +45,7 @@ public class TypeFlowGraph<T> {
     private final String shortUUID;
 
     public TypeFlowPathManager<T> pathManager;
+    public Skeleton finalSkeleton;
 
     public TypeFlowGraph() {
         graph = new DefaultDirectedGraph<>(TypeFlowEdge.class);
