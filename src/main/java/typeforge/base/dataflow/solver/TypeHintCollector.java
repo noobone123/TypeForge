@@ -337,6 +337,7 @@ public class TypeHintCollector {
      * Handle May Nesting Relationships between Skeletons
      * @param exprsAsArgument SymbolExpr that used as arguments in callSite.
      */
+    // TODO: avoid nesting of chars, these primitive types should be further identified ...
     public void handleNesting(Set<NMAE> exprsAsArgument) {
         /* Add MayNestedSkeleton */
         for (var expr: exprsAsArgument) {

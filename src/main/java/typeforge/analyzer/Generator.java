@@ -450,18 +450,5 @@ public class Generator {
             Logging.debug("Generator", String.format("Exploring Skeleton: %s", skt));
             skt.dumpInfo();
         }
-
-//        Logging.debug("Generator", String.format("Evil Sources (%d):", typeHintCollector.evilSource.size()));
-//        for (var source: typeHintCollector.evilSource) {
-//            Logging.debug("Generator", source.toString());
-//        }
-//        Logging.debug("Generator", String.format("Evil Nodes (%d):", typeHintCollector.evilNodes.size()));
-//        for (var node: typeHintCollector.evilNodes) {
-//            Logging.debug("Generator", node.toString());
-//        }
-//        Logging.debug("Generator", String.format("Evil Paths (%d):", typeHintCollector.evilPaths.size()));
-//        for (var path: typeHintCollector.evilPaths) {
-//            Logging.debug("Generator", path.toString());
-//        }
     }
 }
