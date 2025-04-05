@@ -7,6 +7,8 @@ import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.utils.Logging;
 
+import java.util.LinkedList;
+import java.util.Queue;
 import java.util.Set;
 
 /**
@@ -26,17 +28,66 @@ public class LayoutPropagator {
     }
 
     public void run() {
+        // Step1: process all the TFGs in the first pass
+        processAllGraphsFirstPass();
 
+        // Reorganize the TFGs
+        graphManager.reOrganize();
+
+        // Step2: process the conflict graphs in the workList
+        processConflictGraphs();
+    }
+
+    private void processConflictGraphs() {
+        // Step2: iteratively process the conflict graphs in the workList
+        Queue<TypeFlowGraph<NMAE>> workList = new LinkedList<>();
+
+        for (var graph: graphManager.getGraphs()) {
+            if (!isProcessableGraph(graph)) {
+                continue;
+            }
+            addToWorkListIfConflict(workList, graph);
+        }
+
+        while (!workList.isEmpty()) {
+            TypeFlowGraph<NMAE> graph = workList.poll();
+
+            graph.pathManager.initialize();
+            var hasPathMergeConflict = graph.pathManager.tryMergeLayoutFormSamePathsForward(exprManager);
+            var hasSourceMergeConflict = graph.pathManager.tryMergeLayoutFromSameSourceForward(exprManager);
+            if (hasPathMergeConflict || hasSourceMergeConflict) {
+                Logging.error("LayoutPropagator",
+                        "Should not have any merge conflict after the first pass in theory, please check the code.");
+            }
+            // Following Propagation is actually not needed
+            var hasBFSConflict = graph.pathManager.propagateLayoutFromSourcesBFS();
+            if (hasBFSConflict) {
+                Logging.error("LayoutPropagator",
+                        "Should not have any BFS conflict after the first pass in theory, please check the code.");
+            }
+
+            graph.pathManager.resolveMultiSourceConflicts();
+            /* remember to remove the evil edges related to Multi Source Conflicts */
+            for (var edge: graph.pathManager.evilEdgesInMultiSourceResolving) {
+                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+            }
+
+            var newGraphs = graphManager.reOrganizeTFG(graph);
+            for (var newGraph: newGraphs) {
+                if (!isProcessableGraph(newGraph)) {
+                    continue;
+                }
+                addToWorkListIfConflict(workList, newGraph);
+            }
+        }
+    }
+
+    private void processAllGraphsFirstPass() {
         // Step1
         for (var graph: graphManager.getGraphs()) {
             Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
 
-            if (!graph.isValid()) {
-                Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
-                continue;
-            }
-
-            if (graph.getNodes().size() == 1) {
+            if (!isProcessableGraph(graph)) {
                 continue;
             }
 
@@ -66,57 +117,39 @@ public class LayoutPropagator {
                 graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
             }
         }
+    }
 
-        // Reorganize the TFGs
-        graphManager.reOrganize();
+    private void addToWorkListIfConflict(Queue<TypeFlowGraph<NMAE>> workList, TypeFlowGraph<NMAE> graph) {
+        var connectedComponents = graph.getConnectedComponents();
+        if (connectedComponents.size() > 1) {
+            Logging.error("LayoutPropagator",
+                    String.format("Now Each Graph should have only one connected component, but %d", connectedComponents.size()));
+            System.exit(1);
+        }
 
-        // Step2: iteratively process the conflict graphs in the workList
-        for (var graph: graphManager.getGraphs()) {
-            if (!graph.isValid()) {
-                Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
-                continue;
-            }
-
-            if (graph.getNodes().size() == 1) {
-                continue;
-            }
-
-            var connectedComponents = graph.getConnectedComponents();
-            if (connectedComponents.size() > 1) {
-                Logging.error("LayoutPropagator",
-                        String.format("Now Each Graph should have only one connected component, but %d", connectedComponents.size()));
-                System.exit(1);
-            }
-
-            var connects = connectedComponents.get(0);
-            var success = tryToMergeAllNodesSkeleton(graph, connects);
-            // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
-            // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
-            // So we need to rebuild the path Manager there and detect them.
-            if (!success) {
-                graph.pathManager.initialize();
-                var hasPathMergeConflict = graph.pathManager.tryMergeLayoutFormSamePathsForward(exprManager);
-                var hasSourceMergeConflict = graph.pathManager.tryMergeLayoutFromSameSourceForward(exprManager);
-                if (hasPathMergeConflict || hasSourceMergeConflict) {
-                    Logging.error("LayoutPropagator",
-                            "Should not have any merge conflict after the first pass in theory, please check the code.");
-                }
-
-                var hasBFSConflict = graph.pathManager.propagateLayoutFromSourcesBFS();
-                if (hasBFSConflict) {
-                    Logging.error("LayoutPropagator",
-                            "Should not have any BFS conflict after the first pass in theory, please check the code.");
-                }
-
-                graph.pathManager.resolveMultiSourceConflicts();
-
-                /* remember to remove the evil edges related to Multi Source Conflicts */
-                for (var edge: graph.pathManager.evilEdgesInMultiSourceResolving) {
-                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
-                }
-            }
+        var connects = connectedComponents.get(0);
+        var success = tryToMergeAllNodesSkeleton(graph, connects);
+        // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
+        // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
+        // So we need to rebuild the path Manager there and detect them.
+        if (!success) {
+            workList.add(graph);
+            Logging.info("LayoutPropagator",
+                    String.format("Graph: %s (%d) has been added into work list ...", graph, connects.size()));
         }
     }
+
+    private boolean isProcessableGraph(TypeFlowGraph<NMAE> graph) {
+        if (graph.getNumNodes() <= 1) {
+            return false;
+        }
+        if (!graph.isValid()) {
+            Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
+            return false;
+        }
+        return true;
+    }
+
 
     public boolean tryToMergeAllNodesSkeleton(TypeFlowGraph<NMAE> graph, Set<NMAE> graphNodes) {
         var mergedSkeleton = new Skeleton();
@@ -130,7 +163,7 @@ public class LayoutPropagator {
                 // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
                 // So we need to rebuild the path Manager there and detect them.
                 Logging.warn("LayoutPropagator",
-                        String.format("Graph: %s -> %d need to be processed to avoid conflicts further.", graph, graphNodes.size()));
+                        String.format("Graph: %s (%d) need to be processed to avoid conflicts further.", graph, graphNodes.size()));
                 graph.finalSkeleton = null;
                 return false;
             }

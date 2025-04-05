@@ -450,11 +450,11 @@ public class TypeFlowPathManager<T> {
 
         if (srcSktConflictCount > 0) {
             Logging.info("TypeFlowPathManager",
-                    String.format("Resolving Multi Source Layout Conflicts: Found %d conflicts in merged skeletons", srcSktConflictCount));
-            Logging.info("TypeFlowPathManager",
                     String.format("Resolving Multi Source Layout Conflicts: Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
             Logging.info("TypeFlowPathManager",
-                    String.format("Resolving Multi Source Layout Conflicts: Found %d of %d evil edges in conflict nodes", totalEvilEdges, graph.getEdges().size()));
+                    String.format("Resolving Multi Source Layout Conflicts: Found %d merged source skeleton conflicts", srcSktConflictCount));
+            Logging.info("TypeFlowPathManager",
+                    String.format("Resolving Multi Source Layout Conflicts: Found %d of %d evil edges in resolving multi source conflicts", totalEvilEdges, graph.getEdges().size()));
         }
     }
 

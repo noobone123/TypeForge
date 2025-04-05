@@ -126,8 +126,11 @@ public class TFGManager {
     }
 
     /**
-     * Since some edges are removed during analysis, we need to re-organize the graphs by connected nodes.
+     * Since some edges are removed during analysis.
+     * For these changed graphs, we need to re-organize and split them into multiple graphs.
+     * we need to re-organize the graphs by connected nodes.
      */
+    // TODO: only re-organize the graphs which are changed
     public void reOrganize() {
         // A set to hold the new reorganized graphs
         Set<TypeFlowGraph<NMAE>> newGraphs = new HashSet<>();
@@ -180,6 +183,65 @@ public class TFGManager {
         exprToGraph.putAll(newExprToGraph);
 
         simpleTFGStatistics();
+    }
+
+    /**
+     * Reorganize a specific TFG into multiple graphs based on connected components.
+     * Updates the graphs and exprToGraph collections accordingly.
+     *
+     * @param graph The graph to reorganize
+     * @return A set of newly created TypeFlowGraphs
+     */
+    public Set<TypeFlowGraph<NMAE>> reOrganizeTFG(TypeFlowGraph<NMAE> graph) {
+        // A set to hold the new reorganized graphs
+        Set<TypeFlowGraph<NMAE>> newGraphs = new HashSet<>();
+
+        if (!graphs.contains(graph)) {
+            Logging.warn("TFGManager", "The provided graph is not managed by this TFGManager");
+            return newGraphs;
+        }
+
+        // Get connected components of the graph
+        List<Set<NMAE>> components = graph.getConnectedComponents();
+
+        // Process each disconnected component
+        for (Set<NMAE> component : components) {
+            if (component.isEmpty()) continue;
+
+            // Create a new graph for this component
+            TypeFlowGraph<NMAE> newGraph = new TypeFlowGraph<>();
+
+            if (component.size() == 1) {
+                Logging.debug("TFGManager",
+                        String.format("Found a single node graph %s", component));
+            }
+
+            // Add nodes from this component
+            for (NMAE node : component) {
+                newGraph.getGraph().addVertex(node);
+                exprToGraph.put(node, newGraph);
+            }
+
+            // Add edges that connect nodes within this component
+            for (TypeFlowGraph.TypeFlowEdge edge : graph.getGraph().edgeSet()) {
+                NMAE source = graph.getGraph().getEdgeSource(edge);
+                NMAE target = graph.getGraph().getEdgeTarget(edge);
+                if (component.contains(source) && component.contains(target)) {
+                    newGraph.addEdge(source, target, edge.getType());
+                }
+            }
+
+            newGraphs.add(newGraph);
+
+            Logging.debug("TFGManager",
+                    String.format("Created new graph %s with %d nodes from disconnected component",
+                            newGraph, newGraph.getNumNodes()));
+        }
+
+        graphs.addAll(newGraphs);
+        graphs.remove(graph);
+
+        return newGraphs;
     }
 
 
