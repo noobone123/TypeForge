@@ -2,6 +2,7 @@ package typeforge.base.dataflow.TFG;
 
 import generic.stl.Pair;
 import org.jgrapht.GraphPath;
+import typeforge.base.dataflow.ConflictGraph;
 import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.base.dataflow.UnionFind;
@@ -49,7 +50,10 @@ public class TypeFlowPathManager<T> {
     public final Map<T, Skeleton> sourceToConstraints = new HashMap<>();
 
     public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
-    public final Map<T, Set<T>> nodeToReachableSource = new HashMap<>();
+    public final Map<T, Set<T>> nodeToReachableSources = new HashMap<>();
+    public final Map<T, Set<T>> intersectionSourcePair = new HashMap<>();
+    /** Graph used for resolving conflicts */
+    ConflictGraph<T> conflictGraph = new ConflictGraph<T>();
 
     public TypeFlowPathManager(TypeFlowGraph<T> graph) {
         this.graph = graph;
@@ -69,7 +73,7 @@ public class TypeFlowPathManager<T> {
         this.srcToMergedSkeleton.clear();
         this.nodeToMergedSkeleton.clear();
         this.sourceToChildren.clear();
-        this.nodeToReachableSource.clear();
+        this.nodeToReachableSources.clear();
 
         findSourcesAndSinks();
 
@@ -374,17 +378,10 @@ public class TypeFlowPathManager<T> {
      * 4. Process the conflict graph, extract the sourceChildren nodes of conflict source, and mark the evil edges that need to be deleted.
      */
     public void resolveLayoutConflicts() {
-        int srcSktConflictCount = 0;
 
-        // 1. Build srcToChildren map
-        for (var src: srcToMergedSkeleton.keySet()) {
-            var paths = srcToPathsMap.get(src);
-            for (var path: paths) {
-                for (var node: path.nodes) {
-                    sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).add(node);
-                }
-            }
-        }
+        buildUsefulMappingsForConflictResolving();
+
+        int srcSktConflictCount = 0;
 
         // 2. pairwise conflict detection
         List<T> sources = new ArrayList<>(srcToMergedSkeleton.keySet());
@@ -400,9 +397,18 @@ public class TypeFlowPathManager<T> {
                 var hasConflicts = TCHelper.checkFieldOverlapStrict(skt1, skt2);
                 if (hasConflicts) {
                     srcSktConflictCount++;
+                    var hasInterSection = intersectionSourcePair.get(src1).contains(src2);
+                    if (hasInterSection) {
+                        conflictGraph.addIntersecEdge(src1, src2);
+                    } else {
+                        conflictGraph.addNoIntersecEdge(src1, src2);
+                    }
                 }
             }
         }
+
+        // 3. process the conflict graph
+
 
         if (srcSktConflictCount > 0) {
             Logging.info("TypeFlowPathManager",
@@ -410,6 +416,39 @@ public class TypeFlowPathManager<T> {
             Logging.info("TypeFlowPathManager",
                     String.format("Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
             return;
+        }
+    }
+
+    private void buildUsefulMappingsForConflictResolving() {
+        for (var src: srcToMergedSkeleton.keySet()) {
+            var paths = srcToPathsMap.get(src);
+            for (var path: paths) {
+                for (var node: path.nodes) {
+                    sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).add(node);
+                }
+            }
+        }
+
+        for (var src: srcToMergedSkeleton.keySet()) {
+            var children = sourceToChildren.get(src);
+            for (var node: children) {
+                nodeToReachableSources.computeIfAbsent(node, k -> new HashSet<>()).add(src);
+            }
+        }
+
+        for (var node: nodeToReachableSources.keySet()) {
+            var reachableSources = nodeToReachableSources.get(node);
+            if (reachableSources.size() > 1) {
+                var reachableSourceList = new ArrayList<>(reachableSources);
+                for (int i = 0; i < reachableSourceList.size(); i++) {
+                    var src1 = reachableSourceList.get(i);
+                    for (int j = i + 1; j < reachableSourceList.size(); j++) {
+                        var src2 = reachableSourceList.get(j);
+                        intersectionSourcePair.computeIfAbsent(src1, k -> new HashSet<>()).add(src2);
+                        intersectionSourcePair.computeIfAbsent(src2, k -> new HashSet<>()).add(src1);
+                    }
+                }
+            }
         }
     }
 

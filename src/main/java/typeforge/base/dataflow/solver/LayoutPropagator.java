@@ -107,6 +107,8 @@ public class LayoutPropagator {
                     Logging.error("LayoutPropagator",
                             "Should not have any propagate merging after the first pass in theory, please check the code.");
                 }
+
+                graph.pathManager.resolveLayoutConflicts();
             }
 
         }
@@ -118,7 +120,7 @@ public class LayoutPropagator {
             var nodeSkt = exprManager.getSkeleton(node);
             if (nodeSkt == null) continue;
 
-            var success = mergedSkeleton.tryMergeLayoutRelax(nodeSkt);
+            var success = mergedSkeleton.tryMergeLayoutStrict(nodeSkt);
             if (!success) {
                 // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
                 // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
