@@ -1,7 +1,9 @@
 package typeforge.base.dataflow.TFG;
 
 import generic.stl.Pair;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.expression.NMAE;
+import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.utils.Logging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -244,6 +246,38 @@ public class TFGManager {
         return newGraphs;
     }
 
+    public boolean isProcessableGraph(TypeFlowGraph<NMAE> graph) {
+        if (graph.getNumNodes() <= 1) {
+            return false;
+        }
+        if (!graph.isValid()) {
+            Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
+            return false;
+        }
+        return true;
+    }
+
+    public boolean tryToMergeAllNodesSkeleton(TypeFlowGraph<NMAE> graph, Set<NMAE> graphNodes, NMAEManager exprManager) {
+        var mergedSkeleton = new Skeleton();
+        for (var node: graphNodes) {
+            var nodeSkt = exprManager.getSkeleton(node);
+            if (nodeSkt == null) continue;
+
+            var success = mergedSkeleton.tryMergeLayoutStrict(nodeSkt);
+            if (!success) {
+                // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
+                // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
+                // So we need to rebuild the path Manager there and detect them.
+                Logging.warn("LayoutPropagator",
+                        String.format("Graph: %s (%d) need to be processed to avoid conflicts further.", graph, graphNodes.size()));
+                graph.finalSkeleton = null;
+                return false;
+            }
+        }
+
+        graph.finalSkeleton = mergedSkeleton;
+        return true;
+    }
 
     public TypeFlowGraph<NMAE> getTFG(NMAE node) {
         return exprToGraph.get(node);

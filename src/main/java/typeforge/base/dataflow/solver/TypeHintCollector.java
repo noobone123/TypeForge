@@ -49,7 +49,16 @@ public class TypeHintCollector {
     }
 
     public void buildTypeConstraintsBasedOnSkeletons() {
+        for (var graph: graphManager.getGraphs()) {
+            if (!graphManager.isProcessableGraph(graph)) {
+                continue;
+            }
 
+            var success = graphManager.tryToMergeAllNodesSkeleton(graph, graph.getNodes(), exprManager);
+            if (!success) {
+                Logging.error("TypeHintCollector", "This should not have happened, please check the Propagator.");
+            }
+        }
     }
 
 

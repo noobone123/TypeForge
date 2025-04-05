@@ -43,7 +43,7 @@ public class LayoutPropagator {
         Queue<TypeFlowGraph<NMAE>> workList = new LinkedList<>();
 
         for (var graph: graphManager.getGraphs()) {
-            if (!isProcessableGraph(graph)) {
+            if (!graphManager.isProcessableGraph(graph)) {
                 continue;
             }
             addToWorkListIfConflict(workList, graph);
@@ -74,7 +74,7 @@ public class LayoutPropagator {
 
             var newGraphs = graphManager.reOrganizeTFG(graph);
             for (var newGraph: newGraphs) {
-                if (!isProcessableGraph(newGraph)) {
+                if (!graphManager.isProcessableGraph(newGraph)) {
                     continue;
                 }
                 addToWorkListIfConflict(workList, newGraph);
@@ -87,7 +87,7 @@ public class LayoutPropagator {
         for (var graph: graphManager.getGraphs()) {
             Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
 
-            if (!isProcessableGraph(graph)) {
+            if (!graphManager.isProcessableGraph(graph)) {
                 continue;
             }
 
@@ -128,7 +128,7 @@ public class LayoutPropagator {
         }
 
         var connects = connectedComponents.get(0);
-        var success = tryToMergeAllNodesSkeleton(graph, connects);
+        var success = graphManager.tryToMergeAllNodesSkeleton(graph, connects, exprManager);
         // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
         // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
         // So we need to rebuild the path Manager there and detect them.
@@ -137,39 +137,5 @@ public class LayoutPropagator {
             Logging.info("LayoutPropagator",
                     String.format("Graph: %s (%d) has been added into work list ...", graph, connects.size()));
         }
-    }
-
-    private boolean isProcessableGraph(TypeFlowGraph<NMAE> graph) {
-        if (graph.getNumNodes() <= 1) {
-            return false;
-        }
-        if (!graph.isValid()) {
-            Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
-            return false;
-        }
-        return true;
-    }
-
-
-    public boolean tryToMergeAllNodesSkeleton(TypeFlowGraph<NMAE> graph, Set<NMAE> graphNodes) {
-        var mergedSkeleton = new Skeleton();
-        for (var node: graphNodes) {
-            var nodeSkt = exprManager.getSkeleton(node);
-            if (nodeSkt == null) continue;
-
-            var success = mergedSkeleton.tryMergeLayoutStrict(nodeSkt);
-            if (!success) {
-                // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
-                // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
-                // So we need to rebuild the path Manager there and detect them.
-                Logging.warn("LayoutPropagator",
-                        String.format("Graph: %s (%d) need to be processed to avoid conflicts further.", graph, graphNodes.size()));
-                graph.finalSkeleton = null;
-                return false;
-            }
-        }
-
-        graph.finalSkeleton = mergedSkeleton;
-        return true;
     }
 }
