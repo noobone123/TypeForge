@@ -235,9 +235,7 @@ public class InterSolver {
 
         layoutPropagator.run();
         typeHintCollector.run();
-//
-//        /* Following handler's order is important */
-//        typeHintCollector.mergeSkeletons();
+
 //        /* Important: handle Type Alias first, then handle Final Constraint. Due to Type Alias may have a negative impact on soundness */
 //        typeHintCollector.handleTypeAlias();
 //        typeHintCollector.handleFinalConstraint();

@@ -46,10 +46,14 @@ public class TypeConstraint {
 
     public int size = -1;
 
-    public TypeConstraint() { }
+    public TypeConstraint(Skeleton skeleton, Set<NMAE> exprs, boolean isFinal) {
+        this.skeletons.add(skeleton);
+        this.finalSkeleton = skeleton;
+        this.exprs.addAll(exprs);
+    }
 
-    public TypeConstraint(Skeleton skeletons, Set<NMAE> exprs) {
-        this.skeletons.add(skeletons);
+    public TypeConstraint(Skeleton skeleton, Set<NMAE> exprs) {
+        this.skeletons.add(skeleton);
         this.exprs.addAll(exprs);
     }
 

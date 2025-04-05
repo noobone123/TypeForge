@@ -1,7 +1,6 @@
 package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.TFG.TFGManager;
-import typeforge.base.dataflow.TFG.TypeFlowGraph;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.expression.ParsedExpr;
@@ -16,171 +15,75 @@ import java.util.*;
 
 public class TypeHintCollector {
 
-    private final InterSolver interSolver;
-    private final NMAEManager exprManager;
-    private final TFGManager graphManager;
+    private InterSolver interSolver;
+    private NMAEManager exprManager;
+    private TFGManager graphManager;
 
-    /* Map[SymbolExpr, Set[Skeleton]]: this is temp data structure before handling skeletons */
-    private final Map<NMAE, Set<TypeConstraint>> exprToSkeletons_T;
     /* Map[SymbolExpr, Skeleton]: this is final data structure, very important */
     public final Map<NMAE, TypeConstraint> exprToConstraintMap;
     private final Set<TypeConstraint> typeConstraints;
 
-    /* SymbolExprs that have multiple skeletons */
-    private final Set<NMAE> multiSkeletonExprs;
-
     public TypeHintCollector(InterSolver interSolver) {
         this.typeConstraints = new HashSet<>();
-        this.exprToSkeletons_T = new HashMap<>();
         this.exprToConstraintMap = new HashMap<>();
-        this.multiSkeletonExprs = new HashSet<>();
 
         this.interSolver = interSolver;
         this.exprManager = this.interSolver.exprManager;
         this.graphManager = this.interSolver.graphManager;
     }
 
-
     public void run() {
         // Since EvilEdges has been removed during aforementioned const propagation and layout propagation,
         // Now we need to aggregate the type hints from connected components in the whole-program TFG.
-        buildTypeConstraintsBasedOnSkeletons();
+        buildTypeConstraintsBySkeletons();
         return;
     }
 
-    public void buildTypeConstraintsBasedOnSkeletons() {
-        var totalCnt = 0;
+    public void buildTypeConstraintsBySkeletons() {
+        var emptyCount = 0;
+        var totalSingleMemberCount = 1;
+        var totalCompositeCount = 0;
+
         for (var graph: graphManager.getGraphs()) {
-            if (!graphManager.isProcessableGraph(graph)) {
+            Skeleton finalSkeleton = null;
+            if (!graph.isValid()) {
+                Logging.error("TypeHintCollector", String.format("Unexpected Invalid Graph %s, skip it.", graph));
                 continue;
             }
 
-            var success = graphManager.tryToMergeAllNodesSkeleton(graph, graph.getNodes(), exprManager);
-            if (!success) {
-                Logging.error("TypeHintCollector", "This should not have happened, please check the Propagator.");
+            if (graph.getNumNodes() < 1) {
+                continue;
+            } else if (graph.getNumNodes() == 1) {
+                finalSkeleton = exprManager.getOrCreateSkeleton(graph.getNodes().iterator().next());
             } else {
-                var skeleton = graph.finalSkeleton;
-                if (!skeleton.isEmpty()) {
-                    totalCnt += 1;
-                    Logging.debug("TypeHintCollector", String.format("Skeleton: %s", skeleton));
-                    Logging.debug("TypeHintCollector", String.format("Skeleton: %s", skeleton.dumpLayout(2)));
+                var success = graphManager.tryToMergeAllNodesSkeleton(graph, graph.getNodes(), exprManager);
+                if (!success) {
+                    Logging.error("TypeHintCollector", "This should not have happened, please check the Propagator.");
+                    continue;
                 }
-                var constraint = new TypeConstraint(skeleton, graph.getNodes());
-                typeConstraints.add(constraint);
+                finalSkeleton = graph.finalSkeleton;
             }
+
+            if (finalSkeleton.isEmpty()) {
+                emptyCount += 1;
+                continue;
+            }
+
+            var constraint = new TypeConstraint(finalSkeleton, graph.getNodes(), true);
+            for (var expr: graph.getNodes()) {
+                exprToConstraintMap.put(expr, constraint);
+            }
+
+            if (constraint.hasOneField()) {
+                totalSingleMemberCount += 1;
+            }
+
+            totalCompositeCount += 1;
         }
 
-        Logging.debug("TypeHintCollector", String.format("Total Skeletons: %d", totalCnt));
-    }
-
-
-    /**
-     * Some SymbolExprs may hold multiple Skeletons, we need to
-     * merge and rebuild these Skeletons, and finally generate `exprToSkeletonMap`
-     */
-    public void mergeSkeletons() {
-        // Generate expr To Skeletons
-        for (var skt: typeConstraints) {
-            for (var expr: skt.exprs) {
-                exprToSkeletons_T.computeIfAbsent(expr, k -> new HashSet<>()).add(skt);
-            }
-        }
-
-        for (var entry: exprToSkeletons_T.entrySet()) {
-            var expr = entry.getKey();
-            var skeletons = entry.getValue();
-            if (skeletons.size() == 1) {
-                exprToConstraintMap.put(expr, skeletons.iterator().next());
-                Logging.debug("SkeletonCollector", String.format("%s: S = 1", expr));
-            }
-            else if (skeletons.size() > 1) {
-                Logging.debug("SkeletonCollector", String.format("%s: S > 1", expr));
-                /* IF one SymbolExpr holds multi Skeletons, Create New Skeleton based on them */
-                multiSkeletonExprs.add(expr);
-                var constraints = new HashSet<Skeleton>();
-                for (var skeleton: skeletons) {
-                    constraints.addAll(skeleton.skeletons);
-                }
-                var newSkeleton = new TypeConstraint(constraints, expr);
-                newSkeleton.hasMultiSkeleton = true;
-                exprToConstraintMap.put(expr, newSkeleton);
-                skeletons.add(newSkeleton);
-            }
-        }
-
-        // Remove multiSkeletonExprs from old skeletons
-        for (var expr: multiSkeletonExprs) {
-            for (var skt: exprToConstraintMap.values()) {
-                if (skt.hasMultiSkeleton) continue;
-                var removed = skt.exprs.remove(expr);
-                if (removed) {
-                    Logging.debug("SkeletonCollector", String.format("%s is removed from skeleton %s", expr, skt));
-                }
-            }
-        }
-
-        // Merge Skeletons with multiConstraints by constraints' hashID
-        var hashToSkeletons = new HashMap<Integer, Set<TypeConstraint>>();
-        for (var expr: multiSkeletonExprs) {
-            var skt = exprToConstraintMap.get(expr);
-            var hash = skt.getSkeletonsHash();
-            hashToSkeletons.computeIfAbsent(hash, k -> new HashSet<>()).add(skt);
-        }
-        for (var entry: hashToSkeletons.entrySet()) {
-            var skeletons = entry.getValue();
-            if (skeletons.size() > 1) {
-                var newSkeleton = new TypeConstraint();
-                for (var skt: skeletons) {
-                    newSkeleton.mergeConstraintFrom(skt);
-                }
-                for (var expr: newSkeleton.exprs) {
-                    exprToConstraintMap.put(expr, newSkeleton);
-                }
-            }
-        }
-
-        var SkeletonsToRemove = new HashSet<TypeConstraint>();
-        // Checking Consistency
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            for (var e: skt.exprs) {
-                if (exprToConstraintMap.get(e) != skt) {
-                    Logging.error("SkeletonCollector", String.format("Inconsistent Detected! %s", e));
-                    System.exit(1);
-                }
-            }
-
-            if (!skt.hasMultiSkeleton) {
-                assert skt.skeletons.size() == 1;
-                Logging.debug("SkeletonCollector", String.format("%s with single Constraint has Exprs: \n%s", skt.toString(), skt.exprs));
-                Logging.debug("SkeletonCollector", String.format("Constraint: \n%s", skt.skeletons.iterator().next().dumpLayout(0)));
-            } else {
-                assert skt.skeletons.size() > 1;
-                Logging.debug("SkeletonCollector", String.format("%s with multiple Constraints has Exprs: \n%s", skt.toString(), skt.exprs));
-                for (var constraint: skt.skeletons) {
-                    Logging.debug("SkeletonCollector", String.format("Constraint: \n%s", constraint.dumpLayout(0)));
-                }
-            }
-
-            /* Remove Redundant Constraints */
-            boolean emptySkeleton = true;
-            for (var constraint: skt.skeletons) {
-                if (!constraint.isEmpty()) {
-                    emptySkeleton = false;
-                    break;
-                }
-            }
-            if (emptySkeleton) {
-                Logging.debug("SkeletonCollector", String.format("Empty Skeleton Detected: %s", skt));
-                SkeletonsToRemove.add(skt);
-            }
-        }
-
-        for (var skt: SkeletonsToRemove) {
-            typeConstraints.remove(skt);
-            for (var expr: skt.exprs) {
-                exprToConstraintMap.remove(expr);
-            }
-        }
+        Logging.debug("TypeHintCollector", String.format("Total Composite TypeConstraint: %d", totalCompositeCount));
+        Logging.debug("TypeHintCollector", String.format("Total Empty TypeConstraint: %d", emptyCount));
+        Logging.debug("TypeHintCollector", String.format("Total Single Member TypeConstraint: %d", totalSingleMemberCount));
     }
 
     /**
