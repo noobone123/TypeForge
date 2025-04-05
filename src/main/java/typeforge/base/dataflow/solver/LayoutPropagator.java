@@ -60,6 +60,11 @@ public class LayoutPropagator {
             }
 
             graph.pathManager.propagateLayoutFromSourcesBFS();
+
+            /* remember to remove the evil edges related to BFS */
+            for (var edge: graph.pathManager.evilEdgesInConflictNodes) {
+                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+            }
         }
 
         // Reorganize the TFGs
@@ -95,6 +100,12 @@ public class LayoutPropagator {
                 if (hasPathMergeConflict || hasSourceMergeConflict) {
                     Logging.error("LayoutPropagator",
                             "Should not have any merge conflict after the first pass in theory, please check the code.");
+                }
+
+                var hasPropagatedConflict = graph.pathManager.propagateLayoutFromSourcesBFS();
+                if (hasPropagatedConflict) {
+                    Logging.error("LayoutPropagator",
+                            "Should not have any propagate merging after the first pass in theory, please check the code.");
                 }
             }
 
