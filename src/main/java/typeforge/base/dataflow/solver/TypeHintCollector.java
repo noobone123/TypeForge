@@ -87,6 +87,25 @@ public class TypeHintCollector {
     }
 
     /**
+     * Similar to `handleMemoryAlias`,
+     * if `*(a+0x8)` and `*(b+0x8)` has different TypeConstraint but `a` and `b` has same TypeConstraint.
+     * We Consider `*(a+0x8)` and `*(b+0x8)` has same TypeConstraint and merge them.
+     */
+    public void handleTypeAlias() {
+        /* initialize aliasMap using Skeleton's expressions */
+        var aliasMap = new UnionFind<NMAE>();
+        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
+            aliasMap.initializeWithCluster(skt.exprs);
+        }
+
+        for (var expr: exprToConstraintMap.keySet()) {
+            if (expr.isDereference()) {
+                parseAndSetTypeAlias(expr, aliasMap);
+            }
+        }
+    }
+
+    /**
      * For Skeletons with multiple constraints, we choose the most visited one as the final constraint.
      */
     public void handleFinalConstraint() {
@@ -223,25 +242,6 @@ public class TypeHintCollector {
 
             for (var offset: removeCandidate) {
                 skt.finalSkeleton.fieldAccess.remove(offset);
-            }
-        }
-    }
-
-
-    /**
-     * Similar to `handleMemoryAlias`, if `*(a+0x8)` and `*(b+0x8)` has different Skeleton but `a` and `b` has same Skeleton.
-     * We Consider `*(a+0x8)` and `*(b+0x8)` has same Skeleton and merge them.
-     */
-    public void handleTypeAlias() {
-        /* initialize aliasMap using Skeleton's expressions */
-        var aliasMap = new UnionFind<NMAE>();
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            aliasMap.initializeWithCluster(skt.exprs);
-        }
-
-        for (var expr: exprToConstraintMap.keySet()) {
-            if (expr.isDereference()) {
-                parseAndSetTypeAlias(expr, aliasMap);
             }
         }
     }

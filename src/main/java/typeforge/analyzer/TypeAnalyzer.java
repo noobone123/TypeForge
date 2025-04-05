@@ -154,14 +154,6 @@ public class TypeAnalyzer {
         interSolver.buildWholeProgramTFG();
         interSolver.typeHintPropagation();
 
-        /* try {
-            var outputFile = new File(Global.outputDirectory);
-            ctx.typeRelationManager.dumpTRG(outputFile);
-            ctx.typeRelationManager.dumpEntryToExitPaths(outputFile);
-        } catch (Exception e) {
-            Logging.error("InterSolver", "Failed to dump TRGInfo: " + e.getMessage());
-        } */
-
 //        generator = new Generator(interSolver.skeletonCollector, interSolver.symExprManager);
 //        generator.run();
 //        generator.explore();

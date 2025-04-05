@@ -22,7 +22,7 @@ import java.util.*;
  * 2. A set of Function and its HighSymbol which uses this DataType.
  *
  * Next, above information can be taken as input to the DataType Importer component.
- * DataType Importer will create retype HighSymbols for each Structure Builder and get each Function's updated pseudo code.
+ * DataType Importer will create retype HighSymbols for each Structure Builder and get each Function's updated pseudocode.
  * Retype process should be done from callee to caller, which can utilize.
  * result: {
  *     "StructureBuilder_1": [pseudo_code_1, pseudo_code_2, ...],
