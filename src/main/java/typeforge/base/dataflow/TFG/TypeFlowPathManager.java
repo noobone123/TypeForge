@@ -84,7 +84,8 @@ public class TypeFlowPathManager<T> {
     }
 
     /**
-     * Try merge Skeletons from each node along the same path
+     * Try merge Skeletons from each node along the same path.
+     * After the merge is completed, theoretically, there should no longer be any conflicts on each path stored in srcToPathsMap.
      * IMPORTANT: This Function should be called after all Graph's pathManager built
      */
     public void tryMergeLayoutFormSamePathsForward(NMAEManager exprManager) {
@@ -140,6 +141,7 @@ public class TypeFlowPathManager<T> {
     /**
      * Since a Source node in whole-program TFG may have multiple paths,
      * We should try to merge Skeletons from each path to build layout information of each source.
+     * After the merge is completed, theoretically, each source point and all nodes (srcChildren) on its corresponding path will not generate conflicts.
      * IMPORTANT: This Function should be called after `tryMergeLayoutFormSamePaths`,
      *              Now all paths get from `srcToPathsMap` has no conflicts.
      * @param exprManager NMAE Manager
@@ -152,13 +154,13 @@ public class TypeFlowPathManager<T> {
             var mergedSkt = new Skeleton();
 
             // These valid edges does not contain paths with conflicts or noComposite
-            var validPathsFromSrc = getAllValidPathsFromSource(src);
-            if (validPathsFromSrc.isEmpty()) {
+            var pathsFromSrc = srcToPathsMap.get(src);
+            if (pathsFromSrc.isEmpty()) {
                 continue;
             }
 
             var success = true;
-            for (var path: validPathsFromSrc) {
+            for (var path: pathsFromSrc) {
                 success = mergedSkt.tryMergeLayoutStrict(path.finalSkeletonOnPath);
                 if (!success) {
                     break;
@@ -170,25 +172,27 @@ public class TypeFlowPathManager<T> {
                 srcToMergedSkeleton.put(src, mergedSkt);
             } else {
                 Logging.debug("TypeFlowPathManager",
-                        String.format("Found Conflict when merging paths from same source: %s, total paths: %d", src, validPathsFromSrc.size()));
+                        String.format("Found Conflict when merging paths from same source: %s, total paths: %d", src, pathsFromSrc.size()));
                 conflictSources.add(src);
 
-                var LCP = getLongestCommonPrefixPath(validPathsFromSrc);
+                var LCP = getLongestCommonPrefixPath(pathsFromSrc);
                 Logging.debug("TypeFlowPathManager", String.format("Found common prefix path: %s", LCP));
-                var intraLCPEdges = getEdgesInLCP(LCP, validPathsFromSrc);
+                var intraLCPEdges = getEdgesInLCP(LCP, pathsFromSrc);
                 keepEdges.addAll(intraLCPEdges);
 
-                for (var path: validPathsFromSrc) {
+                for (var path: pathsFromSrc) {
                     Logging.debug("TypeFlowPathManager", String.format("Split path: %s", path));
                     var LCPEndEdge = getEndEdgeOfLCP(LCP, path);
                     if (LCPEndEdge == null) continue;
                     evilEdgesInSourceAggregate.add(LCPEndEdge);
+                    /* metadata (source, srcToPathsMap) will be updated in splitPathByEdge */
                     var newPaths = splitPathByEdge(path, LCPEndEdge);
                     if (newPaths == null) continue;
                     var pathPrefix = newPaths.first;
                     var pathSuffix = newPaths.second;
 
-                    // Due to workList process in `tryMergeLayoutFormSamePaths`, now these split paths should not have conflicts
+                    /* This is a further breakdown of a non-conflict path,
+                       so theoretically, the split paths will not result in conflicts. */
                     var pathPrefixSuccess = pathPrefix.tryMergeLayoutForwardOnPath(exprManager);
                     var pathSuffixSuccess = pathSuffix.tryMergeLayoutForwardOnPath(exprManager);
                     if (!pathPrefixSuccess || !pathSuffixSuccess) {
@@ -199,6 +203,21 @@ public class TypeFlowPathManager<T> {
                     workList.add(pathSuffix.start);
                 }
             }
+        }
+    }
+
+    /**
+     * This method is based on conflict graph.
+     * 1. Perform pairwise conflict detection on the merged skeleton corresponding to the source.
+     * 2. If a conflict exists and there is an intersection in srcChildren, locate the conflicting node via BFS propagation and remove the evil edges.
+     * 3. If a conflict exists but there is no intersection in srcChildren (meaning we cannot detect conflicting nodes through BFS propagation), then utilize the conflict graph.
+     * 4. Process the conflict graph, extract the sourceChildren nodes of conflict source, and mark the evil edges that need to be deleted.
+     */
+    public void resolveLayoutConflicts() {
+        if (source.size() != srcToMergedSkeleton.size()) {
+            Logging.error("TypeFlowPathManager", "Source size does not match srcToMergedSkeleton size");
+            System.exit(1);
+            return;
         }
     }
 
@@ -391,40 +410,6 @@ public class TypeFlowPathManager<T> {
             }
         }
     }
-
-
-    /**
-     * Merge paths from same source, and propagate TypeConstraints to each node start from this source.
-     * This method should be called in rebuilt path manager.
-     */
-    public void mergePathsFromSameSource() {
-        for (var src: source) {
-            var mergedConstraints = new Skeleton();
-            var pathsFromSource = getAllValidPathsFromSource(src);
-            var success = true;
-            for (var path: pathsFromSource) {
-                success = mergedConstraints.tryMergeLayoutStrict(path.finalSkeletonOnPath);
-                if (!success) {
-                    break;
-                }
-            }
-
-            if (success) {
-                Logging.debug("TypeRelationPathManager", "Expected Source");
-                sourceToConstraints.put(src, mergedConstraints);
-                for (var path: pathsFromSource) {
-                    sourceToChildren.computeIfAbsent(src, k -> new HashSet<>()).addAll(path.nodes);
-                }
-            } else {
-                Logging.debug("TypeRelationPathManager", "Unexpected Evil Source");
-                for (var path: pathsFromSource) {
-                    Logging.debug("TypeRelationPathManager", path.toString());
-                    Logging.debug("TypeRelationPathManager", path.finalSkeletonOnPath.dumpLayout(0));
-                }
-            }
-        }
-    }
-
 
     public void buildSkeletons(TypeHintCollector collector) {
         /* init sourceGroups */
@@ -776,6 +761,7 @@ public class TypeFlowPathManager<T> {
      *  Then the path will be split into:
      *  A -> B
      *  C -> D
+     * Important: Metadata is updated in this function.
      */
     private Pair<TypeFlowPath<T>, TypeFlowPath<T>>
     splitPathByEdge(TypeFlowPath<T> originPath,
@@ -837,24 +823,6 @@ public class TypeFlowPathManager<T> {
                 .sorted((e1, e2) -> e2.getValue().size() - e1.getValue().size())
                 .collect(LinkedHashMap::new, (m, e) -> m.put(e.getKey(), e.getValue()), Map::putAll);
         return layoutToConstraints;
-    }
-
-    public Set<TypeFlowPath<T>> getAllValidPathsFromSource(T source) {
-        var result = new HashSet<TypeFlowPath<T>>();
-        if (!srcToPathsMap.containsKey(source)) {
-            Logging.warn("TypeFlowPathManager",
-                    String.format("Unexpected Source node: %s, no paths found", source));
-            return result;
-        }
-        for (var path: srcToPathsMap.get(source)) {
-            if (path.conflict) {
-                Logging.warn("TypeFlowPathManager",
-                        String.format("Path has conflict, not valid: %s", path));
-                continue;
-            }
-            result.add(path);
-        }
-        return result;
     }
 
     private T findNodeWithMinInDegreeInSet(Set<T> nodeSet) {

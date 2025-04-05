@@ -46,18 +46,23 @@ public class LayoutPropagator {
             for (var edge: graph.pathManager.evilEdgesInSourceAggregate) {
                 graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
             }
+
+            /* Backward edges must be removed before BFS,
+                as the previous merge was based on TFGPath,
+                and the subsequent BFS will not involve path. */
             for (var edge: graph.pathManager.backwardEdges) {
                 graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
             }
 
             // graph.pathManager.checkSourceSkeletonCorrectness(exprManager);
+            graph.pathManager.resolveLayoutConflicts();
 
             // Propagate the aggregated layout information to the whole-program TFG by BFS
-            graph.pathManager.propagateLayoutFromSourcesBFS();
-
-            for (var edge: graph.pathManager.evilEdgesInConflictNodes) {
-                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
-            }
+//            graph.pathManager.propagateLayoutFromSourcesBFS();
+//
+//            for (var edge: graph.pathManager.evilEdgesInConflictNodes) {
+//                graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+//            }
         }
     }
 }

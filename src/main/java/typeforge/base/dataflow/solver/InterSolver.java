@@ -239,9 +239,9 @@ public class InterSolver {
 
         layoutPropagator.run();
 
-        graphManager.reOrganize();
+        // graphManager.reOrganize();
 
-        typeHintCollector.run();
+        // typeHintCollector.run();
 
         // buildSkeletons(typeHintCollector);
 //
