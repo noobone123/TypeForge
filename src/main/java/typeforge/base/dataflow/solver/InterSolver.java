@@ -234,12 +234,7 @@ public class InterSolver {
         }
 
         layoutPropagator.run();
-
-
         typeHintCollector.run();
-
-        // buildSkeletons(typeHintCollector);
-//
 //
 //        /* Following handler's order is important */
 //        typeHintCollector.mergeSkeletons();
@@ -253,24 +248,6 @@ public class InterSolver {
 //        typeHintCollector.handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
 //        typeHintCollector.handleMemberConflict();
 //        // skeletonCollector.handleCodePtr(symExprManager.getExprsByAttribute(SymbolExpr.Attribute.CODE_PTR));
-    }
-
-    private void buildSkeletons(TypeHintCollector collector) {
-        Logging.debug("InterSolver", "========================= Start to merge skeletons =========================");
-        Logging.debug("InterSolver", "Total Graph Number: " + graphManager.getGraphs().size());
-        graphManager.initAllPathManagers();
-
-        Set<Function> evilFunctions = new HashSet<>();
-
-        // TODO: above already finished in layout propagater
-        for (var graph: graphManager.getGraphs()) {
-            if (!graph.rebuildPathManager()) {
-                continue;
-            }
-            graph.pathManager.mergeOnPath(exprManager);
-            // graph.pathManager.mergePathsFromSameSource();
-            graph.pathManager.buildSkeletons(collector);
-        }
     }
 
     /**

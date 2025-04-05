@@ -49,6 +49,7 @@ public class TypeHintCollector {
     }
 
     public void buildTypeConstraintsBasedOnSkeletons() {
+        var totalCnt = 0;
         for (var graph: graphManager.getGraphs()) {
             if (!graphManager.isProcessableGraph(graph)) {
                 continue;
@@ -57,8 +58,19 @@ public class TypeHintCollector {
             var success = graphManager.tryToMergeAllNodesSkeleton(graph, graph.getNodes(), exprManager);
             if (!success) {
                 Logging.error("TypeHintCollector", "This should not have happened, please check the Propagator.");
+            } else {
+                var skeleton = graph.finalSkeleton;
+                if (!skeleton.isEmpty()) {
+                    totalCnt += 1;
+                    Logging.debug("TypeHintCollector", String.format("Skeleton: %s", skeleton));
+                    Logging.debug("TypeHintCollector", String.format("Skeleton: %s", skeleton.dumpLayout(2)));
+                }
+                var constraint = new TypeConstraint(skeleton, graph.getNodes());
+                typeConstraints.add(constraint);
             }
         }
+
+        Logging.debug("TypeHintCollector", String.format("Total Skeletons: %d", totalCnt));
     }
 
 
@@ -575,9 +587,5 @@ public class TypeHintCollector {
         } else {
             return false;
         }
-    }
-
-    public void addSkeleton(TypeConstraint skt) {
-        typeConstraints.add(skt);
     }
 }

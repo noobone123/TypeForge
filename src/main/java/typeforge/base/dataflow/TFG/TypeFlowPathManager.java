@@ -3,11 +3,7 @@ package typeforge.base.dataflow.TFG;
 import generic.stl.Pair;
 import org.jgrapht.GraphPath;
 import typeforge.base.dataflow.ConflictGraph;
-import typeforge.base.dataflow.expression.NMAE;
 import typeforge.base.dataflow.expression.NMAEManager;
-import typeforge.base.dataflow.UnionFind;
-import typeforge.base.dataflow.constraint.TypeConstraint;
-import typeforge.base.dataflow.solver.TypeHintCollector;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.Layout;
 import typeforge.utils.Logging;
@@ -44,11 +40,6 @@ public class TypeFlowPathManager<T> {
 
     /** We do forward propagation which is enough, so we need to remove backward edges to avoid interference */
     public final Set<TypeFlowGraph.TypeFlowEdge> backwardEdges = new HashSet<>();
-
-    /** Fields for build skeletons, not used for conflict checking
-     * If source's PathNodes has common nodes, we should put them in one cluster using UnionFind */
-    public UnionFind<T> sourceGroups = new UnionFind<>();
-    public final Map<T, Skeleton> sourceToConstraints = new HashMap<>();
 
     public final Map<T, Set<T>> sourceToChildren = new HashMap<>();
     public final Map<T, Set<T>> sourceToOnlyReachableChildren = new HashMap<>();
@@ -492,107 +483,6 @@ public class TypeFlowPathManager<T> {
                 sourceToOnlyReachableChildren.computeIfAbsent(src, k -> new HashSet<>()).add(node);
             }
         }
-    }
-
-    /**
-     * This method is actually very similar to tryMergeOnPath
-     * @param exprManager SymbolExprManager
-     */
-    public void mergeOnPath(NMAEManager exprManager) {
-        for (var src: srcToPathsMap.keySet()) {
-            for (var path: srcToPathsMap.get(src)) {
-                var success = path.tryMergeLayoutForwardOnPath(exprManager);
-                if (!success) {
-                    pathsHasConflict.add(path);
-                    path.conflict = true;
-                    Logging.debug("TypeRelationPathManager", String.format("Evil in path: \n%s", path));
-                }
-            }
-        }
-    }
-
-    public void buildSkeletons(TypeHintCollector collector) {
-        /* init sourceGroups */
-        for (var src: source) {
-            sourceGroups.add(src);
-        }
-
-        /* merge sources if they have common children nodes */
-        for (var src1: source) {
-            Set<T> children1 = sourceToChildren.get(src1);
-            if (children1 == null) continue;
-
-            for (T src2: source) {
-                if (src1.equals(src2)) continue;
-
-                Set<T> children2 = sourceToChildren.get(src2);
-                if (children2 == null) continue;
-
-                // if children1 and children2 has common nodes, union their sources
-                for (var child1: children1) {
-                    if (children2.contains(child1)) {
-                        sourceGroups.union(src1, src2);
-                        break;
-                    }
-                }
-            }
-        }
-
-        var clusters = sourceGroups.getClusters();
-        Logging.debug("TypeRelationPathManager", String.format("Found %d clusters in sourceGroups", clusters.size()));
-        for (var cluster: clusters) {
-            Logging.debug("TypeRelationPathManager", String.format("Cluster size: %s", cluster.size()));
-            var layoutToSources = new HashMap<Layout, Set<T>>();
-            /* group the cluster by node's layout */
-            for (var src: cluster) {
-                var sc = sourceToConstraints.get(src);
-                if (sc == null) {
-                    Logging.warn("TypeRelationPathManager", String.format("Source has no final constraints: %s", src));
-                    continue;
-                }
-                var layout = new Layout(sc);
-                layoutToSources.computeIfAbsent(layout, k -> new HashSet<>()).add(src);
-            }
-
-            if (layoutToSources.size() > 1) {
-                Logging.debug("TypeRelationPathManager", "L > 1");
-                /* If layout count > 1, we merge children and TC by each layout */
-                for (var layout: layoutToSources.keySet()) {
-                    var sources = layoutToSources.get(layout);
-                    buildSkeleton(collector, sources);
-                }
-            } else if (layoutToSources.size() == 1) {
-                /* If layout count = 1, which means all sources in this cluster have same layout, we merge them */
-                Logging.debug("TypeRelationPathManager", "L = 1");
-                buildSkeleton(collector, cluster);
-            } else {
-                Logging.error("TypeRelationPathManager", "L = 0");
-            }
-        }
-    }
-
-    public void buildSkeleton(TypeHintCollector collector, Set<T> sources) {
-        var mergedConstraints = new Skeleton();
-        for (var src: sources) {
-            mergedConstraints.mergeOther(sourceToConstraints.get(src));
-        }
-
-        if (mergedConstraints.isEmpty()) { return; }
-
-        var exprs = new HashSet<NMAE>();
-        for (var src: sources) {
-            var children = sourceToChildren.get(src);
-            if (children == null) {
-                Logging.warn("TypeRelationPathManager", String.format("Source %s has no children", src));
-                continue;
-            }
-            for (var node: children) {
-                exprs.add((NMAE) node);
-            }
-        }
-
-        var skeleton = new TypeConstraint(mergedConstraints, exprs);
-        collector.addSkeleton(skeleton);
     }
 
     /**
