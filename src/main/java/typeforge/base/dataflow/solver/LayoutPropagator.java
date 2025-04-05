@@ -62,7 +62,7 @@ public class LayoutPropagator {
             graph.pathManager.propagateLayoutFromSourcesBFS();
 
             /* remember to remove the evil edges related to BFS */
-            for (var edge: graph.pathManager.evilEdgesInConflictNodes) {
+            for (var edge: graph.pathManager.evilEdgesInPropagateBFS) {
                 graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
             }
         }
@@ -70,7 +70,7 @@ public class LayoutPropagator {
         // Reorganize the TFGs
         graphManager.reOrganize();
 
-        // Step2: iteratively process the conflict graphs
+        // Step2: iteratively process the conflict graphs in the workList
         for (var graph: graphManager.getGraphs()) {
             if (!graph.isValid()) {
                 Logging.error("LayoutPropagator", String.format("Unexpected Invalid Graph %s, skip it.", graph));
@@ -102,9 +102,19 @@ public class LayoutPropagator {
                             "Should not have any merge conflict after the first pass in theory, please check the code.");
                 }
 
-                graph.pathManager.resolveLayoutConflicts();
-            }
+                var hasBFSConflict = graph.pathManager.propagateLayoutFromSourcesBFS();
+                if (hasBFSConflict) {
+                    Logging.error("LayoutPropagator",
+                            "Should not have any BFS conflict after the first pass in theory, please check the code.");
+                }
 
+                graph.pathManager.resolveMultiSourceConflicts();
+
+                /* remember to remove the evil edges related to Multi Source Conflicts */
+                for (var edge: graph.pathManager.evilEdgesInMultiSourceResolving) {
+                    graph.removeEdge(graph.getGraph().getEdgeSource(edge), graph.getGraph().getEdgeTarget(edge));
+                }
+            }
         }
     }
 

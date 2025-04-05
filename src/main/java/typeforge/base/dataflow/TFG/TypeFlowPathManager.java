@@ -38,7 +38,8 @@ public class TypeFlowPathManager<T> {
     public final Set<T> evilNonSourceNodes = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInPerPath = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInSourceAggregate = new HashSet<>();
-    public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInConflictNodes = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInPropagateBFS = new HashSet<>();
+    public final Set<TypeFlowGraph.TypeFlowEdge> evilEdgesInMultiSourceResolving = new HashSet<>();
     public final Set<TypeFlowGraph.TypeFlowEdge> keepEdges = new HashSet<>();
 
     /** We do forward propagation which is enough, so we need to remove backward edges to avoid interference */
@@ -363,7 +364,7 @@ public class TypeFlowPathManager<T> {
                 var inEdges = graph.getGraph().incomingEdgesOf(node);
                 for (var edge: inEdges) {
                     if (keepEdges.contains(edge)) continue;
-                    evilEdgesInConflictNodes.add(edge);
+                    evilEdgesInPropagateBFS.add(edge);
                 }
             }
         }
@@ -375,10 +376,10 @@ public class TypeFlowPathManager<T> {
      * This method is based on conflict graph.
      * 1. Perform pairwise conflict detection on the merged skeleton corresponding to the source.
      * 2. If a conflict exists and there is an intersection in srcChildren, locate the conflicting node via BFS propagation and remove the evil edges.
-     * 3. If a conflict exists but there is no intersection in srcChildren (meaning we cannot detect conflicting nodes through BFS propagation), then utilize the conflict graph.
+     * 3. In theory, since conflicting node has been detected and removed during BFS propagation, there should not have intersection conflicts ...
      * 4. Process the conflict graph, extract the sourceChildren nodes of conflict source, and mark the evil edges that need to be deleted.
      */
-    public void resolveLayoutConflicts() {
+    public void resolveMultiSourceConflicts() {
 
         buildUsefulMappingsForConflictResolving();
 
@@ -399,6 +400,7 @@ public class TypeFlowPathManager<T> {
                 if (hasConflicts) {
                     srcSktConflictCount++;
                     var hasInterSection = intersectionSourcePair.get(src1).contains(src2);
+                    // Anyway, there should be no intersecEdges in theory
                     if (hasInterSection) {
                         conflictGraph.addIntersecEdge(src1, src2);
                     } else {
@@ -410,7 +412,7 @@ public class TypeFlowPathManager<T> {
 
         int totalEvilEdges = 0;
         // 3. process the conflict graph
-        while (conflictGraph.hasIntersecConnections()) {
+        while (conflictGraph.hasNoIntersecConnections()) {
             int currentRoundEvilEdges = 0;
             var filterSrc = conflictGraph.findNodeWithMostNoIntersecConnections();
             // we only save nodes and edges can only be reached current filterSrc to Minimize the impact of deletion
@@ -420,7 +422,7 @@ public class TypeFlowPathManager<T> {
                 for (var edge: graph.getGraph().incomingEdgesOf(node)) {
                     var edgeSrc = graph.getGraph().getEdgeSource(edge);
                     if (!onlyReachableNodes.contains(edgeSrc)) {
-                        evilEdgesInConflictNodes.add(edge);
+                        evilEdgesInMultiSourceResolving.add(edge);
                         currentRoundEvilEdges++;
                     }
                 }
@@ -428,7 +430,7 @@ public class TypeFlowPathManager<T> {
                 for (var edge: graph.getGraph().outgoingEdgesOf(node)) {
                     var edgeTarget = graph.getGraph().getEdgeTarget(edge);
                     if (!onlyReachableNodes.contains(edgeTarget)) {
-                        evilEdgesInConflictNodes.add(edge);
+                        evilEdgesInMultiSourceResolving.add(edge);
                         currentRoundEvilEdges++;
                     }
                 }
@@ -439,7 +441,7 @@ public class TypeFlowPathManager<T> {
             var afterRemove = conflictGraph.getEdgesCountOfType(ConflictGraph.EdgeType.NOINTERSEC);
 
             Logging.debug("TypeFlowPathManager",
-                    String.format("Remove NOINTERSEC edges from conflict graph, %d -> %d", beforeRemove - afterRemove, beforeRemove, afterRemove));
+                    String.format("Current Round Remove NOINTERSEC edges from conflict graph, %d -> %d", beforeRemove, afterRemove));
             Logging.debug("TypeFlowPathManager",
                     String.format("Current Round marked evil edges: %d", currentRoundEvilEdges));
 
@@ -448,11 +450,11 @@ public class TypeFlowPathManager<T> {
 
         if (srcSktConflictCount > 0) {
             Logging.info("TypeFlowPathManager",
-                    String.format("Resolving Layout Conflicts: Found %d conflicts in merged skeletons", srcSktConflictCount));
+                    String.format("Resolving Multi Source Layout Conflicts: Found %d conflicts in merged skeletons", srcSktConflictCount));
             Logging.info("TypeFlowPathManager",
-                    String.format("Resolving Layout Conflicts: Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
+                    String.format("Resolving Multi Source Layout Conflicts: Found %d sources in merged skeletons", srcToMergedSkeleton.size()));
             Logging.info("TypeFlowPathManager",
-                    String.format("Resolving Layout Conflicts: Found %d of %d evil edges in conflict nodes", totalEvilEdges, graph.getEdges().size()));
+                    String.format("Resolving Multi Source Layout Conflicts: Found %d of %d evil edges in conflict nodes", totalEvilEdges, graph.getEdges().size()));
         }
     }
 

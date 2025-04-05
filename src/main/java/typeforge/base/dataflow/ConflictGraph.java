@@ -89,6 +89,11 @@ public class ConflictGraph<T> {
                 .anyMatch(edge -> edge.getType() == EdgeType.INTERSEC);
     }
 
+    public boolean hasNoIntersecConnections() {
+        return graph.edgeSet().stream()
+                .anyMatch(edge -> edge.getType() == EdgeType.NOINTERSEC);
+    }
+
     public void removeAllNoIntersecEdgesOfNode(T vertex) {
         // Create a copy to avoid concurrent modification
         Set<ConflictEdge> edgesToRemove = graph.edgesOf(vertex).stream()
