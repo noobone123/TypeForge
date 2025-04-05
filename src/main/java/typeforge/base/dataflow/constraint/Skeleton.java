@@ -48,7 +48,7 @@ public class Skeleton {
     /** Recording where this size information comes from */
     private final Set<SizeSource> sizeSources;
 
-    public final Set<DataType> polymorphicTypes;
+    public final Set<DataType> decompilerInferredTypes;
 
     public Set<Long> elementSize;
 
@@ -66,7 +66,7 @@ public class Skeleton {
         fieldAttrs = new TreeMap<>();
         globalAttrs = new HashSet<>();
         accessOffsets = new HashMap<>();
-        polymorphicTypes = new HashSet<>();
+        decompilerInferredTypes = new HashSet<>();
         elementSize = new HashSet<>();
         sizeSources = new HashSet<>();
     }
@@ -97,7 +97,7 @@ public class Skeleton {
             this.accessOffsets.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
 
-        this.polymorphicTypes = new HashSet<>(other.polymorphicTypes);
+        this.decompilerInferredTypes = new HashSet<>(other.decompilerInferredTypes);
 
         this.sizeSources = new HashSet<>(other.sizeSources);
         this.isComposite = other.isComposite;
@@ -255,8 +255,8 @@ public class Skeleton {
         this.sizeSources.addAll(other.sizeSources);
         this.elementSize.addAll(other.elementSize);
 
-        // Merging polymorphicTypes
-        this.polymorphicTypes.addAll(other.polymorphicTypes);
+        // Merging decompiler inferred types
+        this.decompilerInferredTypes.addAll(other.decompilerInferredTypes);
     }
 
     public String getName() {
@@ -297,12 +297,16 @@ public class Skeleton {
 
     public boolean isEmpty() {
         return fieldAccess.isEmpty() && fieldAttrs.isEmpty() &&
-                polymorphicTypes.isEmpty() && sizeSources.isEmpty();
+                decompilerInferredTypes.isEmpty() && sizeSources.isEmpty();
     }
 
-    public void addPolymorphicType(DataType dataType) {
-        polymorphicTypes.add(dataType);
+    public void addDecompilerInferredType(DataType dataType) {
+        decompilerInferredTypes.add(dataType);
         Logging.debug("Skeleton", String.format("Skeleton_%s adding polymorphicType: %s", shortUUID, dataType.getName()));
+    }
+
+    public Set<DataType> getDecompilerInferredTypes() {
+        return decompilerInferredTypes;
     }
 
     public int getAllFieldsAccessCount() {
@@ -318,7 +322,7 @@ public class Skeleton {
         StringBuilder sb = new StringBuilder();
         String prefixTab = "\t".repeat(prefixTabCnt);
         sb.append(prefixTab).append("Skeleton_").append(shortUUID).append(":\n");
-        sb.append(prefixTab).append("PolyTypes: ").append(polymorphicTypes).append("\n");
+        sb.append(prefixTab).append("DecompilerInferred: ").append(decompilerInferredTypes).append("\n");
         fieldAccess.forEach((offset, aps) -> {
             /* Group the aps into Map[dataType, accessCount] */
             sb.append(prefixTab).append("\t");

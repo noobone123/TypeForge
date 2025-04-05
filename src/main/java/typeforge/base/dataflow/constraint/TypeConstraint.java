@@ -92,10 +92,10 @@ public class TypeConstraint {
 
     public boolean isMultiLevelMidPtr() {
         if (skeletons.size() > 1) { return false; }
-        var constraint = skeletons.iterator().next();
-        if (constraint.fieldAccess.size() != 1) { return false; }
-        if (constraint.fieldAccess.get(0L) == null) { return false; }
-        for (var element: constraint.fieldAccess.get(0L).getApSet()) {
+        var skeleton = finalSkeleton;
+        if (skeleton.fieldAccess.size() != 1) { return false; }
+        if (skeleton.fieldAccess.get(0L) == null) { return false; }
+        for (var element: skeleton.fieldAccess.get(0L).getApSet()) {
             var dataType = element.dataType;
             var size = dataType.getLength();
             if (size != Global.currentProgram.getDefaultPointerSize()) { return false; }
@@ -338,14 +338,6 @@ public class TypeConstraint {
             Range newRange = new Range(startOffset, endOffset);
             nestedRange.add(newRange);
         }
-    }
-
-
-    public void updateDecompilerInferredTypes(DataType dt) {
-        if (decompilerInferredTypes == null) {
-            decompilerInferredTypes = new HashSet<>();
-        }
-        decompilerInferredTypes.add(dt);
     }
 
     public boolean mustPrimitiveTypeAtOffset(long offset) {

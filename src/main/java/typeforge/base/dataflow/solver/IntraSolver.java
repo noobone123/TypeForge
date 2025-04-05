@@ -160,7 +160,7 @@ public class IntraSolver {
                     skeleton = exprManager.getOrCreateSkeleton(expr);
                     skeleton.setComposite(true);
                     skeleton.setSizeFromExpr(array.getLength(), expr);
-                    skeleton.addPolymorphicType(array);
+                    skeleton.addDecompilerInferredType(array);
 
                     Logging.debug("IntraSolver", String.format("Found Array: %s -> %s", expr, decompilerDT.getName()));
                 }
@@ -170,7 +170,7 @@ public class IntraSolver {
                     skeleton = exprManager.getOrCreateSkeleton(expr);
                     skeleton.setComposite(true);
                     skeleton.setSizeFromExpr(structure.getLength(), expr);
-                    skeleton.addPolymorphicType(structure);
+                    skeleton.addDecompilerInferredType(structure);
 
                     Logging.debug("IntraSolver", String.format("Found Structure: %s -> %s", expr, decompilerDT.getName()));
                 }
@@ -180,7 +180,7 @@ public class IntraSolver {
                     skeleton = exprManager.getOrCreateSkeleton(expr);
                     skeleton.setComposite(true);
                     skeleton.setSizeFromExpr(union.getLength(), expr);
-                    skeleton.addPolymorphicType(union);
+                    skeleton.addDecompilerInferredType(union);
 
                     Logging.debug("IntraSolver", String.format("Found Union: %s -> %s", expr, decompilerDT.getName()));
                 }
@@ -193,7 +193,7 @@ public class IntraSolver {
                         skeleton = exprManager.getOrCreateSkeleton(expr);
                         skeleton.setComposite(true);
                         skeleton.setSizeFromExpr(structure.getLength(), expr);
-                        skeleton.addPolymorphicType(structure);
+                        skeleton.addDecompilerInferredType(structure);
 
                         Logging.debug("IntraSolver", String.format("Found Pointer to Struct: %s -> %s", expr, decompilerDT.getName()));
                     }
@@ -202,7 +202,7 @@ public class IntraSolver {
                         skeleton = exprManager.getOrCreateSkeleton(expr);
                         skeleton.setComposite(true);
                         skeleton.setSizeFromExpr(union.getLength(), expr);
-                        skeleton.addPolymorphicType(union);
+                        skeleton.addDecompilerInferredType(union);
 
                         Logging.debug("IntraSolver", String.format("Found Pointer to Union: %s -> %s", expr, decompilerDT.getName()));
                     }

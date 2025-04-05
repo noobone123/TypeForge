@@ -236,7 +236,6 @@ public class InterSolver {
         layoutPropagator.run();
         typeHintCollector.run();
 
-//        typeHintCollector.handleAPSets();
 //        typeHintCollector.handleUnreasonableSkeleton();
 //        typeHintCollector.handlePtrReference();
 //        // typeHintCollector.handleDecompilerInferredTypes();

@@ -1,6 +1,5 @@
 package typeforge.base.dataflow.solver;
 
-import org.python.antlr.ast.Str;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.constraint.TypeConstraint;
@@ -38,6 +37,8 @@ public class TypeHintCollector {
         buildTypeConstraintsBySkeletons();
         handleTypeAlias();
         confirmFinalConstraint();
+        handleAPSets();
+        addDecompilerInferredTypes();
         return;
     }
 
@@ -244,25 +245,25 @@ public class TypeHintCollector {
                 while (ptrEESkt.isMultiLevelMidPtr()) {
                     ptrLevel++;
                     if (ptrEESkt == ptrEESkt.finalPtrReference.get(0L)) {
-                        Logging.warn("SkeletonCollector", "Ptr Reference Loop Detected!");
+                        Logging.warn("TypeHintCollector", "Ptr Reference Loop Detected!");
                         break;
                     }
                     ptrEESkt = ptrEESkt.finalPtrReference.get(0L);
                 }
 
                 if (ptrLevel > 1) {
-                    Logging.debug("SkeletonCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
+                    Logging.debug("TypeHintCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
                     skt.ptrLevel.put(offset, ptrLevel);
                     skt.finalPtrReference.put(offset, ptrEESkt);
 
                     /* For debug */
-                    Logging.debug("SkeletonCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
-                    Logging.debug("SkeletonCollector", skt.exprs.toString());
-                    Logging.debug("SkeletonCollector", skt.finalSkeleton.dumpLayout(0));
-                    Logging.debug("SkeletonCollector", ptrEESkt.exprs.toString());
-                    Logging.debug("SkeletonCollector", ptrEESkt.finalSkeleton.dumpLayout(0));
+                    Logging.debug("TypeHintCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEESkt));
+                    Logging.debug("TypeHintCollector", skt.exprs.toString());
+                    Logging.debug("TypeHintCollector", skt.finalSkeleton.dumpLayout(0));
+                    Logging.debug("TypeHintCollector", ptrEESkt.exprs.toString());
+                    Logging.debug("TypeHintCollector", ptrEESkt.finalSkeleton.dumpLayout(0));
                 } else {
-                    Logging.debug("SkeletonCollector", "Ptr Level = 1");
+                    Logging.debug("TypeHintCollector", "Ptr Level = 1");
                 }
             }
         }
@@ -275,7 +276,7 @@ public class TypeHintCollector {
                     if (ptrEE.isMultiLevelMidPtr) {
                         skt.finalPtrReference.remove(offset);
                         skt.ptrLevel.remove(offset);
-                        Logging.debug("SkeletonCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
+                        Logging.debug("TypeHintCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
                     }
                 }
             }
@@ -303,15 +304,15 @@ public class TypeHintCollector {
                 if (skt.finalPtrReference.containsKey(offset)) {
                     if (nextOffset != -1 && (nextOffset - offset) < ptrSize) {
                         skt.finalPtrReference.remove(offset);
-                        Logging.debug("SkeletonCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
+                        Logging.debug("TypeHintCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
                     }
                 } else {
                     var size = aps.mostAccessedDT.getLength();
                     if (nextOffset != -1 && (nextOffset - offset) < size) {
                         removeCandidate.add(offset);
-                        Logging.debug("SkeletonCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
-                        Logging.debug("SkeletonCollector", String.format("MostAccessedDTSize = %d", size));
-                        Logging.debug("SkeletonCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
+                        Logging.debug("TypeHintCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
+                        Logging.debug("TypeHintCollector", String.format("MostAccessedDTSize = %d", size));
+                        Logging.debug("TypeHintCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
                     }
                 }
             }
@@ -350,7 +351,7 @@ public class TypeHintCollector {
                     var offset = iterator.next();
                     if (offset > skt.getSize()) {
                         iterator.remove();
-                        Logging.debug("SkeletonCollector", "Offset larger than the size of the nester!");
+                        Logging.debug("TypeHintCollector", "Offset larger than the size of the nester!");
                     } else {
                         var removeCandidates = new HashSet<TypeConstraint>();
                         for (var s: skt.mayNestedConstraint.get(offset)) {
@@ -363,7 +364,7 @@ public class TypeHintCollector {
                             if (skt.mayNestedConstraint.get(offset).isEmpty()) {
                                 iterator.remove();
                             }
-                            Logging.debug("SkeletonCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
+                            Logging.debug("TypeHintCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
                         }
                     }
                 }
@@ -396,11 +397,11 @@ public class TypeHintCollector {
         /* Choose the most visited one as the final ReferenceTo constraint */
         for (var skt: new HashSet<>(exprToConstraintMap.values())) {
             if (skt.hasMultiPtrReferenceTo()) {
-                Logging.warn("SkeletonCollector", String.format("Multi Ptr Reference To Detected: \n%s", skt));
+                Logging.warn("TypeHintCollector", String.format("Multi Ptr Reference To Detected: \n%s", skt));
                 for (var offset: skt.ptrReference.keySet()) {
                     var ptrEEs = skt.ptrReference.get(offset);
                     if (ptrEEs.size() > 1) {
-                        Logging.warn("SkeletonCollector", String.format("At 0x%s: %s", Long.toHexString(offset), ptrEEs));
+                        Logging.warn("TypeHintCollector", String.format("At 0x%s: %s", Long.toHexString(offset), ptrEEs));
                         TypeConstraint chosenSkt = null;
                         for (var ptrEE: ptrEEs) {
                             if (chosenSkt == null) {
@@ -426,49 +427,44 @@ public class TypeHintCollector {
         }
     }
 
-    /**
-     * This method should be called after all skeletons are successfully handled.
-     */
-    public void handleDecompilerInferredTypes() {
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            for (var expr: skt.exprs) {
-                if (expr.isVariable()) {
-                    // var inferredType = exprManager.getInferredType(expr);
-                    // inferredType.ifPresent(skt::updateDecompilerInferredTypes);
-                }
-            }
+    public void addDecompilerInferredTypes() {
+        for (var constraint: exprToConstraintMap.values()) {
+            constraint.decompilerInferredTypes.addAll(
+                    constraint.finalSkeleton.getDecompilerInferredTypes()
+            );
         }
     }
 
     /**
-     * Mark MayPrimitiveType for Skeletons and handle reference and nested mayPrimitiveType skeletons.
+     * Mark MayPrimitiveType for TypeConstraints and handle reference and nested mayPrimitiveType skeletons.
      */
     public void handleUnreasonableSkeleton() {
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            if (skt.isMultiLevelMidPtr()) {
-                Logging.debug("SkeletonCollector", "Multi Level Mid Ptr Skeleton: " + skt);
-                skt.isMultiLevelMidPtr = true;
-            } else if (skt.isIndependent() && skt.hasOneField() &&
-                    !skt.decompilerInferredTypesHasComposite() &&
-                    (skt.finalSkeleton.fieldAccess.get(0L) != null)) {
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            if (constraint.isMultiLevelMidPtr()) {
+                Logging.debug("TypeHintCollector", "Multi Level Mid Ptr Skeleton: " + constraint);
+                constraint.isMultiLevelMidPtr = true;
+            } else if (constraint.isIndependent() && constraint.hasOneField() &&
+                    !constraint.decompilerInferredTypesHasComposite() &&
+                    (constraint.finalSkeleton.fieldAccess.get(0L) != null)) {
                 /* These types are considered as pointers to primitive types and no need to assess and ranking */
-                Logging.debug("SkeletonCollector", "Pointer to Primitive Detected: " + skt);
-                var aps = skt.finalSkeleton.fieldAccess.get(0L);
-                skt.setPrimitiveType(aps.mostAccessedDT);
+                Logging.debug("TypeHintCollector", "Pointer to Primitive Detected: " + constraint);
+                var aps = constraint.finalSkeleton.fieldAccess.get(0L);
+                constraint.setPrimitiveType(aps.mostAccessedDT);
             }
         }
     }
 
-
+    /**
+     * Update the member accesses and its data type information.
+     */
     public void handleAPSets() {
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            for (var offset: skt.finalSkeleton.fieldAccess.keySet()) {
-                var APSet = skt.finalSkeleton.fieldAccess.get(offset);
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            for (var offset: constraint.finalSkeleton.fieldAccess.keySet()) {
+                var APSet = constraint.finalSkeleton.fieldAccess.get(offset);
                 APSet.postHandle();
             }
         }
     }
-
 
     private void tryPopulateNester(TypeConstraint nester, Long nestStartOffset, TypeConstraint nestee) {
         for (var offset: nestee.finalSkeleton.fieldAccess.keySet()) {
