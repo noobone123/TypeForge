@@ -6,6 +6,7 @@ import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import ghidra.program.model.data.DataType;
+import typeforge.utils.TCHelper;
 
 import java.util.*;
 import java.util.stream.Stream;
@@ -482,9 +483,11 @@ public class TypeConstraint {
      * @param tc1 merged constraint
      * @param tc2 merged constraint
      * @param isStrongMerge if true, merge all constraints in set into one constraint; otherwise just merge constraints set
+     * @param isRelax if true, merge with relax; otherwise merge with strict
      * @return new merged constraint
      */
-    public static Optional<TypeConstraint> mergeConstraints(TypeConstraint tc1, TypeConstraint tc2, boolean isStrongMerge) {
+    public static Optional<TypeConstraint> mergeConstraints(TypeConstraint tc1, TypeConstraint tc2,
+                                                            boolean isStrongMerge, boolean isRelax) {
         var newSkeletons = new HashSet<Skeleton>();
         var newExprs = new HashSet<NMAE>();
         newSkeletons.addAll(tc1.skeletons);
@@ -493,37 +496,49 @@ public class TypeConstraint {
         newExprs.addAll(tc2.exprs);
 
         if (isStrongMerge) {
-            Logging.debug("TypeConstraint", String.format("Strong merging TypeConstraint %s and %s", tc1, tc2));
             var mergedSkeleton = new Skeleton();
-            var noConflict = true;
-            for (var c: newSkeletons) {
-                Logging.debug("TypeConstraint", String.format("Merging skeleton:\n %s", c.dumpLayout(0)));
-                noConflict = mergedSkeleton.tryMergeLayoutStrict(c);
-                if (!noConflict) {
+            var success = true;
+            for (var skt: newSkeletons) {
+                if (isRelax) {
+                    success = mergedSkeleton.tryMergeLayoutRelax(skt);
+                } else {
+                    success = mergedSkeleton.tryMergeLayoutStrict(skt);
+                }
+                if (!success) {
                     break;
                 }
             }
 
-            if (!noConflict) {
-                Logging.warn("TypeConstraint", String.format("Failed to merge TypeConstraints %s and %s", tc1, tc2));
+            if (!success) {
+                Logging.warn("TypeConstraint", String.format("Failed to (%s) merge TypeConstraints %s and %s",
+                        isStrongMerge ? "strong" : "weak", tc1, tc2));
                 return Optional.empty();
             }
 
-
-            Logging.debug("TypeConstraint", String.format("Merged skeleton:\n %s", mergedSkeleton.dumpLayout(0)));
-            newSkeletons.clear();
-            newSkeletons.add(mergedSkeleton);
-            var newTypeConstraint = new TypeConstraint(newSkeletons, newExprs);
+            var newTypeConstraint = new TypeConstraint(mergedSkeleton, newExprs, true);
             newTypeConstraint.hasMultiSkeleton = false;
             return Optional.of(newTypeConstraint);
-        } else {
-            Logging.debug("TypeConstraint", String.format("Weak merging TypeConstraints %s and %s", tc1, tc2));
-            for (var c: newSkeletons) {
-                Logging.debug("TypeConstraint", c.dumpLayout(0));
-            }
+        }
+        else {
             var newTypeConstraint = new TypeConstraint(newSkeletons, newExprs);
             newTypeConstraint.hasMultiSkeleton = true;
             return Optional.of(newTypeConstraint);
+        }
+    }
+
+    public static boolean checkConstraintConflict(TypeConstraint constraint1,
+                                                  TypeConstraint constraint2,
+                                                  boolean isRelax) {
+        // Only check if both skeletons have single constraint
+        if (constraint1.finalSkeleton != null && constraint2.finalSkeleton != null) {
+            if (isRelax) {
+                return TCHelper.checkFieldOverlapRelax(constraint1.finalSkeleton, constraint2.finalSkeleton);
+            } else {
+                return TCHelper.checkFieldOverlapStrict(constraint1.finalSkeleton, constraint2.finalSkeleton);
+            }
+        } else {
+            // If one of the skeletons is null, we can not merge so return conflict
+            return true;
         }
     }
 

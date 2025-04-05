@@ -36,6 +36,7 @@ public class TypeHintCollector {
         // Since EvilEdges has been removed during aforementioned const propagation and layout propagation,
         // Now we need to aggregate the type hints from connected components in the whole-program TFG.
         buildTypeConstraintsBySkeletons();
+        handleTypeAlias();
         return;
     }
 
@@ -70,6 +71,7 @@ public class TypeHintCollector {
             }
 
             var constraint = new TypeConstraint(finalSkeleton, graph.getNodes(), true);
+            typeConstraints.add(constraint);
             for (var expr: graph.getNodes()) {
                 exprToConstraintMap.put(expr, constraint);
             }
@@ -92,15 +94,85 @@ public class TypeHintCollector {
      * We Consider `*(a+0x8)` and `*(b+0x8)` has same TypeConstraint and merge them.
      */
     public void handleTypeAlias() {
-        /* initialize aliasMap using Skeleton's expressions */
-        var aliasMap = new UnionFind<NMAE>();
-        for (var skt: new HashSet<>(exprToConstraintMap.values())) {
-            aliasMap.initializeWithCluster(skt.exprs);
+        /* initialize shareSameType using Skeleton's expressions */
+        var shareSameType = new UnionFind<NMAE>();
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            // In theory, nodes from the same TFG should be connected in the same cluster in UnionFind.
+            shareSameType.initializeWithCluster(constraint.exprs);
         }
 
         for (var expr: exprToConstraintMap.keySet()) {
             if (expr.isDereference()) {
-                parseAndSetTypeAlias(expr, aliasMap);
+                parseAndSetTypeAlias(expr, shareSameType);
+            }
+        }
+    }
+
+    private void parseAndSetTypeAlias(NMAE query, UnionFind<NMAE> shareSameType) {
+        // IMPORTANT: this algorithm is not perfect, it didn't run until a fixed point is reached.
+        // So UnionFind may cause some inconsistency problem.
+        var parsed = ParsedExpr.parseFieldAccessExpr(query);
+        if (parsed.isEmpty()) { return; }
+        var parsedExpr = parsed.get();
+        var base = parsedExpr.base;
+        var offset = parsedExpr.offsetValue;
+        if (base == null) { return; }
+
+        if (parsedExpr.base.isDereference()) {
+            parseAndSetTypeAlias(parsedExpr.base, shareSameType);
+        }
+
+        if (!shareSameType.contains(base)) {
+            return;
+        }
+
+        // IMPORTANT: be careful, now new built shareSameType can not ensure that
+        // all alias expr has no conflict, so we need to check it.
+        // For example: if we are finding alias of *(a + 0x4),
+        //  shareSameType.getCluster(base) can get all exprs that share the same type with `a` (like b, c),
+        //  then we further use `exprManager.getFieldExprsByOffset(alias, offset)` to find *(b + 0x4) and *(c + 0x4) ...
+        //  If these expr exists, they can be considered as alias of *(a + 0x4).
+        for (var node: shareSameType.getCluster(base)) {
+            var res = exprManager.getFieldExprsByOffset(node, offset);
+            if (res.isEmpty()) { continue; }
+            var queryAliases = res.get();
+            for (var alias: queryAliases) {
+                // Mark sure alias and query are all in union find
+                if (shareSameType.contains(alias) && shareSameType.contains(query)) {
+                    // If already in the same cluster, skip it.
+                    if (shareSameType.connected(alias, query)) continue;
+
+                    var aliasConstraint = exprToConstraintMap.get(alias);
+                    var queryConstraint = exprToConstraintMap.get(query);
+
+                    if (aliasConstraint.equals(queryConstraint)) continue;
+
+                    // TODO: also checking polyTypes.
+                    if (TypeConstraint.checkConstraintConflict(aliasConstraint, queryConstraint, true)) {
+                        Logging.debug("TypeHintCollector", String.format("Detected Conflict Type Alias: %s <--> %s", alias, query));
+                        continue;
+                    }
+
+                    Logging.debug("TypeHintCollector", String.format("Detect Regular Type Alias: %s <--> %s", alias, query));
+                    shareSameType.union(alias, query);
+
+                    Optional<TypeConstraint> mergedRes;
+
+                    mergedRes = TypeConstraint.mergeConstraints(aliasConstraint, queryConstraint, true, true);
+
+                    if (mergedRes.isPresent()) {
+                        var mergedTypeConstraint = mergedRes.get();
+                        /* update exprToSkeletonMap */
+                        for (var e: mergedTypeConstraint.exprs) {
+                            exprToConstraintMap.put(e, mergedTypeConstraint);
+                        }
+                        typeConstraints.remove(aliasConstraint);
+                        typeConstraints.remove(queryConstraint);
+                        typeConstraints.add(mergedTypeConstraint);
+                    } else {
+                        Logging.warn("TypeHintCollector", String.format("Failed to merge alias constraint of %s and %s", alias, query));
+                    }
+                }
             }
         }
     }
@@ -411,84 +483,6 @@ public class TypeHintCollector {
             var nesterOffset = nestStartOffset + offset;
             var nesteePtrRef = nestee.finalPtrReference.get(offset);
             nester.finalPtrReference.putIfAbsent(nesterOffset, nesteePtrRef);
-        }
-    }
-
-
-    private void parseAndSetTypeAlias(NMAE expr, UnionFind<NMAE> aliasMap) {
-        // IMPORTANT: this algorithm is not perfect, it didn't run until a fixed point is reached.
-        // So UnionFind may cause some inconsistency problem.
-        var parsed = ParsedExpr.parseFieldAccessExpr(expr);
-        if (parsed.isEmpty()) { return; }
-        var parsedExpr = parsed.get();
-        var base = parsedExpr.base;
-        var offset = parsedExpr.offsetValue;
-        if (base == null) { return; }
-
-        if (parsedExpr.base.isDereference()) {
-            parseAndSetTypeAlias(parsedExpr.base, aliasMap);
-        }
-
-        if (!aliasMap.contains(base)) {
-            return;
-        }
-
-        for (var alias: aliasMap.getCluster(base)) {
-            var res = exprManager.getFieldExprsByOffset(alias, offset);
-            if (res.isEmpty()) { continue; }
-            var fieldExprs = res.get();
-            for (var e: fieldExprs) {
-                if (aliasMap.contains(e) && aliasMap.contains(expr)) {
-                    if (aliasMap.connected(e, expr)) continue;
-
-                    var skt1 = exprToConstraintMap.get(e);
-                    var skt2 = exprToConstraintMap.get(expr);
-                    if (skt1 != skt2) {
-                        // TODO: also checking polyTypes.
-                        if (twoSkeletonsConflict(skt1, skt2)) {
-                            Logging.warn("SkeletonCollector", String.format("Conflict Type Alias: %s <--> %s", e, expr));
-                            continue;
-                        }
-
-                        Logging.debug("SkeletonCollector", String.format("Type Alias Detected: %s <--> %s", e, expr));
-                        aliasMap.union(e, expr);
-                        Optional<TypeConstraint> mergedRes;
-                        TypeConstraint newTypeConstraint = null;
-
-                        if (skt1.hasMultiSkeleton && skt2.hasMultiSkeleton) {
-                            Logging.warn("SkeletonCollector", "all have multi constraints");
-                            mergedRes = TypeConstraint.mergeConstraints(skt1, skt2, false);
-                        } else if (skt1.hasMultiSkeleton || skt2.hasMultiSkeleton) {
-                            Logging.warn("SkeletonCollector", "one has multi constraints");
-                            mergedRes = TypeConstraint.mergeConstraints(skt1, skt2, false);
-                        } else {
-                            Logging.warn("SkeletonCollector", "none has multi constraints");
-                            mergedRes = TypeConstraint.mergeConstraints(skt1, skt2, true);
-                        }
-
-                        if (mergedRes.isPresent()) {
-                            newTypeConstraint = mergedRes.get();
-                            Logging.debug("SkeletonCollector", String.format("New Merged %s from type Alias.", newTypeConstraint));
-                            Logging.debug("SkeletonCollector", newTypeConstraint.exprs.toString());
-                            /* update exprToSkeletonMap */
-                            for (var e1: newTypeConstraint.exprs) {
-                                exprToConstraintMap.put(e1, newTypeConstraint);
-                            }
-                        } else {
-                            Logging.warn("SkeletonCollector", String.format("Failed to merge skeletons of %s and %s", e, expr));
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private boolean twoSkeletonsConflict(TypeConstraint skt1, TypeConstraint skt2) {
-        // Only check if both skeletons have single constraint
-        if (!skt1.hasMultiSkeleton && !skt2.hasMultiSkeleton) {
-            return TCHelper.checkFieldOverlapStrict(skt1.skeletons.iterator().next(), skt2.skeletons.iterator().next());
-        } else {
-            return false;
         }
     }
 }
