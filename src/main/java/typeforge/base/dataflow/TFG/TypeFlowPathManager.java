@@ -61,7 +61,7 @@ public class TypeFlowPathManager<T> {
 
     public void initialize() {
         Logging.debug("TypeFlowPathManager",
-                String.format("Initialize TypeFlowPathManager for graph: %s", graph));
+                String.format("Initialize TypeFlowPathManager for graph: %s with %d nodes", graph, graph.getNodes().size()));
         this.source.clear();
         this.sink.clear();
         this.srcToPathsMap.clear();
@@ -575,7 +575,24 @@ public class TypeFlowPathManager<T> {
         Set<T> unCoveredNodes = new HashSet<>(graph.getNodes());
         unCoveredNodes.removeAll(getCoveredNodes());
 
+        Set<T> previousUnCoveredNodes = new HashSet<>();
+
         while (!unCoveredNodes.isEmpty()) {
+
+            // Check if the uncovered nodes are the same as before, means we are stuck
+            if (previousUnCoveredNodes.equals(unCoveredNodes)) {
+                for (T node : unCoveredNodes) {
+                    List<T> singleNodeList = Collections.singletonList(node);
+                    TypeFlowPath<T> singleNodePath = new TypeFlowPath<>(graph, singleNodeList, Collections.emptyList());
+                    srcToPathsMap.computeIfAbsent(node, k -> new HashSet<>()).add(singleNodePath);
+                    source.add(node);
+                    sink.add(node);
+                }
+                unCoveredNodes.clear();
+                break;
+            }
+            previousUnCoveredNodes = new HashSet<>(unCoveredNodes);
+
             Set<T> virtualSources = new HashSet<>();
             Set<T> virtualSinks = new HashSet<>();
 

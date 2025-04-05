@@ -1,6 +1,7 @@
 package typeforge.base.dataflow.solver;
 
 import typeforge.base.dataflow.TFG.TFGManager;
+import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.expression.NMAEManager;
 import typeforge.utils.Logging;
 
@@ -21,6 +22,8 @@ public class LayoutPropagator {
     }
 
     public void run() {
+
+        // Step1
         for (var graph: graphManager.getGraphs()) {
             Logging.debug("LayoutPropagator", String.format("*********************** Handle Graph %s ***********************", graph));
 
@@ -30,7 +33,6 @@ public class LayoutPropagator {
             }
 
             if (graph.getNodes().size() == 1) {
-                Logging.debug("LayoutPropagator", String.format("Graph %s has only one node, skip it.", graph));
                 continue;
             }
 
@@ -56,6 +58,43 @@ public class LayoutPropagator {
             graph.pathManager.propagateLayoutFromSourcesBFS();
         }
 
+        // Reorganize the TFGs
         graphManager.reOrganize();
+
+        // Step2: Now each graph should have only one connected component
+        for (var graph: graphManager.getGraphs()) {
+            if (!graph.isValid()) {
+                Logging.error("TypeHintCollector", String.format("Unexpected Invalid Graph %s, skip it.", graph));
+                continue;
+            }
+
+            if (graph.getNodes().size() == 1) {
+                continue;
+            }
+
+            var connectedComponents = graph.getConnectedComponents();
+            if (connectedComponents.size() > 1) {
+                Logging.error("TypeHintCollector",
+                        String.format("Now Each Graph should have only one connected component, but %d", connectedComponents.size()));
+                System.exit(1);
+            }
+
+            var mergedSkeleton = new Skeleton();
+            var connects = connectedComponents.get(0);
+            for (var node: connects) {
+                var nodeSkt = exprManager.getSkeleton(node);
+                if (nodeSkt == null) continue;
+
+                var success = mergedSkeleton.tryMergeLayoutRelax(nodeSkt);
+                if (!success) {
+                    // IMPORTANT: If not success in merging, means some conflict nodes are not detected by previous propagateLayoutFromSourcesBFS.
+                    // This is because if the mergedSkeleton from different source has no intersection in their path, their conflicts will not be detected.
+                    // So we need to rebuild the path Manager there and detect them.
+                    Logging.error("TypeHintCollector",
+                            String.format("Graph: %s -> %d", graph, graph.getNodes().size()));
+                    break;
+                }
+            }
+        }
     }
 }

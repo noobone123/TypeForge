@@ -49,29 +49,7 @@ public class TypeHintCollector {
     }
 
     public void buildTypeConstraintsBasedOnSkeletons() {
-        for (var graph: graphManager.getGraphs()) {
-            if (!graph.isValid()) {
-                Logging.error("TypeHintCollector", String.format("Unexpected Invalid Graph %s, skip it.", graph));
-                continue;
-            }
 
-            for (var connects: graph.getConnectedComponents()) {
-                var mergedSkeleton = new Skeleton();
-                for (var node: connects) {
-                    var nodeSkt = exprManager.getSkeleton(node);
-                    if (nodeSkt == null) continue;
-
-                    var success = mergedSkeleton.tryMergeLayoutRelax(nodeSkt);
-                    if (!success) {
-                        Logging.error("TypeHintCollector",
-                                String.format("This Behavior is not expected! %s", nodeSkt));
-                        Logging.error("TypeHintCollector",
-                                String.format("Graph: %s -> %d", graph, graph.getNodes().size()));
-                        break;
-                    }
-                }
-            }
-        }
     }
 
 
