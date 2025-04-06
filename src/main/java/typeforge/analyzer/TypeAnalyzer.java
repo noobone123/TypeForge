@@ -153,10 +153,11 @@ public class TypeAnalyzer {
 
         interSolver.buildWholeProgramTFG();
         interSolver.typeHintPropagation();
+        // TODO: collect evil edges and evil nodes ...
 
-        // generator = new Generator(interSolver.typeHintCollector, interSolver.exprManager);
-        // generator.run();
-        // generator.explore();
+        generator = new Generator(interSolver.typeHintCollector, interSolver.exprManager);
+        generator.run();
+        generator.explore();
     }
 
     /**

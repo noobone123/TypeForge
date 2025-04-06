@@ -31,6 +31,8 @@ public class TypeConstraint {
     public Set<Long> inConsistentOffsets = new HashSet<>();
 
     public boolean mayPointerToPrimitive = false;
+    public boolean mayPointerToPrimitiveArray = false;
+    public DataType mayElementType = null;
     public boolean isMultiLevelMidPtr = false;
     /**
      *  Following Fields should be updated after all TypeConstraints are merged, handled and confirmed
@@ -114,6 +116,11 @@ public class TypeConstraint {
                 apSet.postHandle();
             }
         }
+
+        if (innerSkeleton.fieldAccess.size() == 1
+                && innerSkeleton.fieldAccess.get(0L) != null) {
+            mayPointerToPrimitive = true;
+        }
     }
 
     /**
@@ -133,7 +140,9 @@ public class TypeConstraint {
 
         if (finalPtrReference.get(0L) != null) {
             isMultiLevelMidPtr = true;
+            mayPointerToPrimitiveArray = false;
             mayPointerToPrimitive = false;
+            mayElementType = null;
             return true;
         } else {
             isMultiLevelMidPtr = false;
@@ -211,20 +220,16 @@ public class TypeConstraint {
         return false;
     }
 
-    public boolean hasNestedConstraint() {
-        return !nestedConstraint.isEmpty();
+    public boolean hasFinalNestedConstraint() {
+        return !finalNestedConstraint.isEmpty();
     }
 
     public boolean hasFinalPtrReference() {
         return !finalPtrReference.isEmpty();
     }
 
-    public boolean hasOneFirstField() {
-        if (innerSkeleton.fieldAccess.size() == 1) {
-            var apSet = innerSkeleton.fieldAccess.get(0L);
-            return apSet != null && !apSet.apSet.isEmpty();
-        }
-        return false;
+    public boolean mayPointerToPrimitive() {
+        return mayPointerToPrimitive;
     }
 
     public boolean hasOneField() {

@@ -1,5 +1,6 @@
 package typeforge.base.dataflow.solver;
 
+import ghidra.program.model.data.Array;
 import typeforge.base.dataflow.TFG.TFGManager;
 import typeforge.base.dataflow.constraint.Skeleton;
 import typeforge.base.dataflow.constraint.TypeConstraint;
@@ -156,9 +157,11 @@ public class TypeHintCollector {
                     var aliasConstraint = exprToConstraintMap.get(alias);
                     var queryConstraint = exprToConstraintMap.get(query);
 
-                    // If alias or query is a pointer to primitive type, we do not merged them.
                     if (aliasConstraint.mayPointerToPrimitive || queryConstraint.mayPointerToPrimitive) {
-                        Logging.debug("TypeHintCollector", String.format("Detected Pointer to Primitive Type Alias: %s <--> %s", alias, query));
+                        continue;
+                    }
+                    // If alias or query is a pointer to primitive type, we do not merged them.
+                    if (aliasConstraint.mayPointerToPrimitiveArray || queryConstraint.mayPointerToPrimitiveArray) {
                         continue;
                     }
                     // If already in the same cluster, skip it.
@@ -206,7 +209,7 @@ public class TypeHintCollector {
                             String.format("Offset 0x%x is aligned (Nested) with pointer size.", offset));
                     var nester = exprToConstraintMap.get(base);
                     var nestee = exprToConstraintMap.get(expr);
-                    if (nestee.mayPointerToPrimitive) {
+                    if (nestee.mayPointerToPrimitiveArray || nestee.mayPointerToPrimitive) {
                         Logging.debug("TypeHintCollector", String.format("Nestee may be a pointer to primitive type: %s", nestee));
                         continue;
                     }
@@ -294,10 +297,18 @@ public class TypeHintCollector {
 
             if (exprToConstraintMap.containsKey(base)) {
                 Logging.debug("TypeHintCollector", String.format("Offset 0x%x is aligned with pointer size.", offset));
+                var ptrEEConstraint = exprToConstraintMap.get(expr);
                 var baseConstraint = exprToConstraintMap.get(base);
 
+                // Since we can not distinguish between pointer to primitive type and multi-level mid-pointer yet,
+                // So we do not check primitive type here.
+                if (ptrEEConstraint.mayPointerToPrimitiveArray) {
+                    Logging.debug("TypeHintCollector", String.format("Pointer to Primitive Array Detected: %s", ptrEEConstraint));
+                    continue;
+                }
+
                 baseConstraint.ptrReference
-                        .computeIfAbsent(offset, k -> new HashSet<>()).add(exprToConstraintMap.get(expr));
+                        .computeIfAbsent(offset, k -> new HashSet<>()).add(ptrEEConstraint);
                 baseConstraint.ptrLevel.put(offset, 1);
             }
         }
@@ -414,11 +425,10 @@ public class TypeHintCollector {
      */
     public void handleMayPrimitiveConstraints() {
         for (var c: exprToConstraintMap.values()) {
-            if (c.hasOneFirstField() && !c.hasDecompilerInferredCompositeType()) {
+            if (c.mayPointerToPrimitive() && !c.hasDecompilerInferredCompositeType()) {
                 Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Detected: " + c);
-                c.dumpInfo();
-                c.mayPointerToPrimitive = true;
-                return;
+                c.mayElementType = c.innerSkeleton.fieldAccess.get(0L).mostAccessedDT;
+                continue;
             }
 
             // If there are multiple stack allocated arrays and variables in the constraint,
@@ -429,8 +439,13 @@ public class TypeHintCollector {
                     if (c.onlyArraysInDecompilerInferredCompositeTypes()) {
                         Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to arrays) Detected: " + c);
                         c.dumpInfo();
-                        c.mayPointerToPrimitive = true;
-                        return;
+                        if (c.mayPointerToPrimitive()) {
+                            c.mayPointerToPrimitive = true;
+                        } else {
+                            c.mayPointerToPrimitiveArray = true;
+                        }
+                        c.mayElementType = ((Array) inferredTypes.iterator().next()).getDataType();
+                        continue;
                     }
                 }
             }
@@ -439,7 +454,8 @@ public class TypeHintCollector {
             if (c.hasMultipleNonPointerSameSizeMembers()) {
                 Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to duplicates) Detected: " + c);
                 c.dumpInfo();
-                c.mayPointerToPrimitive = true;
+                c.mayPointerToPrimitiveArray = true;
+                c.mayElementType = c.innerSkeleton.fieldAccess.get(0L).mostAccessedDT;
             }
         }
     }

@@ -2,6 +2,7 @@ import ghidra.app.script.GhidraScript;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
+import typeforge.analyzer.Generator;
 import typeforge.analyzer.TypeAnalyzer;
 import typeforge.base.graph.CallGraph;
 import typeforge.utils.*;

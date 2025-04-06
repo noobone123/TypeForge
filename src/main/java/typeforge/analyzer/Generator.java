@@ -8,6 +8,7 @@ import typeforge.base.dataflow.constraint.TypeConstraint;
 import typeforge.base.dataflow.solver.TypeHintCollector;
 import typeforge.base.passes.SlidingWindowProcessor;
 import typeforge.utils.DataTypeHelper;
+import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import ghidra.program.model.data.DataType;
 
@@ -67,15 +68,16 @@ public class Generator {
         generation();
 
         /* Post Processing: remove redundant type declaration in morph range */
-        for (var skt: finalTypeConstraints) {
-            if (skt.mayPointerToPrimitive || skt.isMultiLevelMidPtr) {
+        for (var c: finalTypeConstraints) {
+            if (c.isMultiLevelMidPtr || c.mayPointerToPrimitive) {
                 continue;
             }
-            if (skt.noMorphingTypes() && skt.finalType != null) {
-                Logging.debug("Generator", "Found Stable Skeleton with Final Type");
+            if (c.noMorphingTypes() && c.finalType != null) {
+                Logging.debug("Generator", "Found Stable Constraint with Final Type");
             } else {
-                Logging.debug("Generator", "Found Unstable Skeleton with Morphing Types");
-                for (var entry: new HashMap<>(skt.rangeMorphingTypes).entrySet()) {
+                Logging.debug("Generator", "Found Unstable Constraint with Morphing Types");
+                // Removing redundant composite type declaration with different name
+                for (var entry: new HashMap<>(c.rangeMorphingTypes).entrySet()) {
                     var range = entry.getKey();
                     var morphingTypes = entry.getValue();
                     Map<Integer, DataType> layoutHashToDT = new HashMap<>();
@@ -87,129 +89,114 @@ public class Generator {
                             layoutHashToDT.put(layoutHash, morphingType);
                         }
                     }
-                    skt.rangeMorphingTypes.put(range, new HashSet<>(layoutHashToDT.values()));
+                    c.rangeMorphingTypes.put(range, new HashSet<>(layoutHashToDT.values()));
                 }
             }
         }
     }
 
-    private void generation() {
-        var exprToSkeletonMap = typeHintCollector.exprToConstraintMap;
 
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-//            if (skt.isPointerToPrimitive) {
-//                Logging.debug("Generator", "Pointer to Primitive Found");
-//                continue;
-//            }
-            if (skt.isMultiLevelMidPtr) {
-                Logging.debug("Generator", "Multi-Level Mid Pointer Found");
+    // TODO: populate empty (not padding) intervals with char[]
+    // TODO: utilize ghidra structure's auto undefined filler.
+    // TODO: handle Evil Sources, Evil Nodes and Evil Paths
+    private void generation() {
+        var exprToConstraintMap = typeHintCollector.exprToConstraintMap;
+
+        for (var c: new HashSet<>(exprToConstraintMap.values())) {
+            if (c.innerSkeleton.isEmpty()) {
                 continue;
             }
-
-//            if (!skt.hasPtrReference() && skt.mayPrimitiveArray()) {
-//                Logging.debug("Generator", "May Primitive Array Found");
-//                handleMayPrimitiveArray(skt);
-//                continue;
-//            }
-            if (!skt.hasNestedConstraint()) {
-                /* If No Nested Skeleton Found */
-                Logging.debug("Generator", "No Nested Skeleton: " + skt);
-                handleNoNestedSkeleton(skt);
-            } else {
-                /* If Nested Skeleton Found */
-                Logging.debug("Generator", "Has Nested Skeleton: " + skt);
-                handleNestedSkeleton(skt);
+            if (c.isMultiLevelMidPtr || c.mayPointerToPrimitive) {
+                continue;
             }
-            // TODO: populate empty (not padding) intervals with char[]
-            // TODO: utilize ghidra structure's auto undefined filler.
+            if (c.mayPointerToPrimitiveArray) {
+                handleMayPrimitiveArray(c);
+                continue;
+            }
+            processFieldMorphing(c);
         }
-
-        // TODO: handle Evil Sources, Evil Nodes and Evil Paths
 
         /* Handle Stable Skeletons */
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-//            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
-//                continue;
-//            }
-            /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
-            if (skt.noMorphingTypes() && skt.finalType == null) {
-                handleNormalSkeleton(skt);
-                finalTypeConstraints.add(skt);
-            } else {
-                finalTypeConstraints.add(skt);
+        for (var c: new HashSet<>(exprToConstraintMap.values())) {
+            if (c.innerSkeleton.isEmpty()) {
+                continue;
             }
+            if (c.isMultiLevelMidPtr || c.mayPointerToPrimitive) {
+                continue;
+            }
+            /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
+            if (c.noMorphingTypes() && c.finalType == null) {
+                handleNoMorphingSkeleton(c);
+            }
+            finalTypeConstraints.add(c);
         }
     }
 
-    private void handleNestedSkeleton(TypeConstraint skt) {
-        handleInconsistencyField(skt);
-        handleComplexFlatten(skt);
-        handlePrimitiveFlatten(skt);
+    private void processFieldMorphing(TypeConstraint c) {
+        handleInconsistencyField(c);
+        handleComplexFlatten(c);
+        handlePrimitiveFlatten(c);
     }
 
-    private void handleNoNestedSkeleton(TypeConstraint skt) {
-        handleInconsistencyField(skt);
-        handleComplexFlatten(skt);
-        handlePrimitiveFlatten(skt);
+    private void handleNoMorphingSkeleton(TypeConstraint c) {
+        var componentMap = getComponentMapByMostAccessed(c);
+        c.finalType = DataTypeHelper.createUniqueStructure(c, componentMap);
     }
 
-    private void handleNormalSkeleton(TypeConstraint skt) {
-        var componentMap = getComponentMapByMostAccessed(skt);
-        var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
-        // skt.setFinalType(structDT);
-    }
-
-    private void handleMayPrimitiveArray(TypeConstraint skt) {
-        skt.mayPointerToPrimitive = true;
-        var aps = skt.innerSkeleton.fieldAccess.get(0L);
+    private void handleMayPrimitiveArray(TypeConstraint constraint) {
+        var aps = constraint.innerSkeleton.fieldAccess.get(0L);
         var elementType = aps.mostAccessedDT;
 
-        var componentMap = getComponentMapByMostAccessed(skt);
-        var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
-        skt.updateGlobalMorphingDataType(elementType);
-        skt.updateGlobalMorphingDataType(structDT);
+        var componentMap = getComponentMapByMostAccessed(constraint);
+        var structDT = DataTypeHelper.createUniqueStructure(constraint, componentMap);
+        constraint.updateGlobalMorphingDataType(elementType);
+        constraint.updateGlobalMorphingDataType(structDT);
     }
 
-    private void handleInconsistencyField(TypeConstraint skt) {
-        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
+    private void handleInconsistencyField(TypeConstraint c) {
+        for (var entry: c.innerSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
 
-            if (skt.hasNestedConstraint() && skt.isInNestedRange(offset)) {
+            if (c.hasFinalNestedConstraint() && c.isInNestedRange(offset)) {
                 continue;
             }
 
-            /* If Contains Ptr Reference, this field should be a ptrReference */
-            if (!aps.isSameSizeType && !skt.finalPtrReference.containsKey(offset)) {
+            if (!aps.isSameSizeType && !c.finalPtrReference.containsKey(offset)) {
                 Logging.debug("Generator", String.format("Inconsistency Field: Offset = 0x%s", Long.toHexString(offset)));
-                skt.markInconsistentOffset(offset);
+                c.markInconsistentOffset(offset);
 
                 // Create Union or Find the most accessed data type
-                var componentMap_u = getComponentMapByUnionFields(skt, offset);
-                var structDT_u = DataTypeHelper.createUniqueStructure(skt, componentMap_u);
+                var componentMap_u = getComponentMapByUnionFields(c, offset);
+                var structDT_u = DataTypeHelper.createUniqueStructure(c, componentMap_u);
                 var DTs = new HashSet<DataType>(Set.of(structDT_u));
 
                 /* create unique structure for each different member size */
-                var typeSizes = new HashSet<Integer>();
+                var typeSizes = new HashSet<Integer>(aps.mostAccessedDT.getLength());
                 for (var dt: aps.allDTs) {
                     if (typeSizes.contains(dt.getLength())) { continue; }
-                    var componentMap = getComponentMapBySpecifyDT(skt, offset, dt);
-                    var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
+                    var componentMap = getComponentMapBySpecifyDT(c, offset, dt);
+                    var structDT = DataTypeHelper.createUniqueStructure(c, componentMap);
                     DTs.add(structDT);
                     typeSizes.add(dt.getLength());
                 }
 
-                skt.updateRangeMorphingDataType(offset, offset + aps.maxDTSize, DTs);
+                c.updateRangeMorphingDataType(offset, offset + aps.maxDTSize, DTs);
             }
         }
     }
 
-    private void handlePrimitiveFlatten(TypeConstraint skt) {
-        List<Long> offsets = new ArrayList<>(skt.innerSkeleton.fieldAccess.keySet());
-        SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 1);
+    private void handlePrimitiveFlatten(TypeConstraint constraint) {
+        List<Long> offsets = new ArrayList<>(constraint.innerSkeleton.fieldAccess.keySet());
+        SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(constraint, offsets, 1);
 
         for (int i = 0; i < offsets.size() - 1; i++) {
             var curOffset = offsets.get(i);
+            if (Global.currentProgram.getDefaultPointerSize() > 0
+                    && curOffset % Global.currentProgram.getDefaultPointerSize() != 0) {
+                continue;
+            }
+
             var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i, 4);
             if (hasFlattenWindow.isEmpty()) { continue; }
 
@@ -217,15 +204,15 @@ public class Generator {
             DataType winDT = window.getWindowDT();
             int flattenCnt = windowProcessor.getFlattenCount();
 
-            var componentMap_1 = getComponentMapByMostAccessed(skt);
-            var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
+            var componentMap_1 = getComponentMapByMostAccessed(constraint);
+            var structDT_1 = DataTypeHelper.createUniqueStructure(constraint, componentMap_1);
 
-            var componentMap_2 = getComponentMapByRecoverFlattenToArray(skt, curOffset, winDT, flattenCnt);
-            var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
+            var componentMap_2 = getComponentMapByRecoverFlattenToArray(constraint, curOffset, winDT, flattenCnt);
+            var structDT_2 = DataTypeHelper.createUniqueStructure(constraint, componentMap_2);
 
             var startOffset = offsets.get(i).intValue();
             var endOffset = startOffset + window.getAlignedWindowSize() * flattenCnt;
-            skt.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2)));
+            constraint.updateRangeMorphingDataType(startOffset, endOffset, new HashSet<>(Set.of(structDT_1, structDT_2)));
 
             Logging.debug("Generator",
                     String.format("Found a match of primitive flatten from offset 0x%x with %d count", curOffset, flattenCnt));
@@ -236,13 +223,18 @@ public class Generator {
         }
     }
 
-    private void handleComplexFlatten(TypeConstraint skt) {
-        List<Long> offsets = new ArrayList<>(skt.innerSkeleton.fieldAccess.keySet());
-        SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 2);
+    private void handleComplexFlatten(TypeConstraint c) {
+        List<Long> offsets = new ArrayList<>(c.innerSkeleton.fieldAccess.keySet());
+        SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(c, offsets, 2);
 
         /* same window should not appear twice in the same range */
         Map<Integer, Set<Range>> winDTHashToRanges = new HashMap<>();
         for (int i = 0; i < offsets.size() - 1; i++) {
+            var offset = offsets.get(i);
+            if (Global.currentProgram.getDefaultPointerSize() > 0
+                    && offset % Global.currentProgram.getDefaultPointerSize() != 0) {
+                continue;
+            }
             for (int capacity = 2; ((offsets.size() - i) / capacity) >= 2; capacity ++) {
                 windowProcessor.setWindowCapacity(capacity);
                 var hasFlattenWindow = windowProcessor.tryMatchingFromCurrentOffset(i, 3);
@@ -267,15 +259,14 @@ public class Generator {
                     }
                 }
 
-                var componentMap_1 = getComponentMapByMostAccessed(skt);
-                var structDT_1 = DataTypeHelper.createUniqueStructure(skt, componentMap_1);
+                var componentMap_1 = getComponentMapByMostAccessed(c);
+                var structDT_1 = DataTypeHelper.createUniqueStructure(c, componentMap_1);
                 // var componentMap_2 = getComponentMapByRecoverFlattenToArray(skt, offsets.get(i), winDT, flattenCnt);
                 // var structDT_2 = DataTypeHelper.createUniqueStructure(skt, componentMap_2);
-                var componentMap_3 = getComponentMapByRecoverFlattenToNest(skt, offsets.get(i), winDT, flattenCnt);
-                var structDT_3 = DataTypeHelper.createUniqueStructure(skt, componentMap_3);
+                var componentMap_3 = getComponentMapByRecoverFlattenToNest(c, offsets.get(i), winDT, flattenCnt);
+                var structDT_3 = DataTypeHelper.createUniqueStructure(c, componentMap_3);
 
-
-                skt.updateRangeMorphingDataType(nestStartOffset, nestEndOffset, new HashSet<>(Set.of(structDT_1, structDT_3)));
+                c.updateRangeMorphingDataType(nestStartOffset, nestEndOffset, new HashSet<>(Set.of(structDT_1, structDT_3)));
 
                 Logging.debug("Generator",
                         String.format("Found a match of complex flatten (%d) from offset 0x%x with %d count", capacity, offsets.get(i), flattenCnt));
@@ -286,19 +277,19 @@ public class Generator {
     }
 
     /**
-     * Get the component map of the skeleton, parameter `skt` should not have conflicts
-     * @param skt the skeleton
-     * @return the component map
+     * Get the component map of the Type Constraint, parameter `constraint` should not have conflicts
+     * @param constraint the composite type constraint
+     * @return the component map used for creating structure
      */
-    private Map<Integer, DataType> getComponentMapByMostAccessed(TypeConstraint skt) {
+    private Map<Integer, DataType> getComponentMapByMostAccessed(TypeConstraint constraint) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
+        for (var entry: constraint.innerSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
             var mostAccessedDT = aps.mostAccessedDT;
 
-            if (skt.finalPtrReference.containsKey(offset)) {
-                createPtrRefMember(skt, componentMap, offset);
+            if (constraint.finalPtrReference.containsKey(offset)) {
+                createPtrRefMember(constraint, componentMap, offset);
                 continue;
             }
 
@@ -330,23 +321,23 @@ public class Generator {
 
     /**
      * Create union at the specified offset, other fields using the most accessed data type
-     * @param skt the skeleton
+     * @param constraint the skeleton
      * @param offset the offset to create union
      * @return the component map
      */
-    private Map<Integer, DataType> getComponentMapByUnionFields(TypeConstraint skt, long offset) {
+    private Map<Integer, DataType> getComponentMapByUnionFields(TypeConstraint constraint, long offset) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
+        for (var entry: constraint.innerSkeleton.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey().intValue();
 
-            if (skt.finalPtrReference.containsKey((long) fieldOffset)) {
-                createPtrRefMember(skt, componentMap, (long) fieldOffset);
+            if (constraint.finalPtrReference.containsKey((long) fieldOffset)) {
+                createPtrRefMember(constraint, componentMap, (long) fieldOffset);
                 continue;
             }
 
             var aps = entry.getValue();
             if (fieldOffset == offset) {
-                var unionDT = DataTypeHelper.createAnonUnion(skt, offset);
+                var unionDT = DataTypeHelper.createAnonUnion(constraint, offset);
                 componentMap.put(fieldOffset, unionDT);
             } else {
                 var mostAccessedDT = aps.mostAccessedDT;
@@ -428,27 +419,37 @@ public class Generator {
     }
 
 
-    private void createPtrRefMember(TypeConstraint skt, Map<Integer, DataType> componentMap, Long offset) {
-        var ptrEE = skt.finalPtrReference.get(offset);
+    private void createPtrRefMember(TypeConstraint constraint, Map<Integer, DataType> componentMap, Long offset) {
+        var ptrEE = constraint.finalPtrReference.get(offset);
         DataType dt;
-        if (ptrEE.mayPointerToPrimitive) {
-            dt = DataTypeHelper.getPointerDT(ptrEE.finalType, skt.ptrLevel.get(offset) != null ? skt.ptrLevel.get(offset) : 1);
+        if (ptrEE.mayPointerToPrimitiveArray && ptrEE.mayElementType != null) {
+            dt = DataTypeHelper.getPointerDT(ptrEE.mayElementType, constraint.ptrLevel.get(offset) != null ? constraint.ptrLevel.get(offset) : 1);
         } else {
             dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
-                    skt.ptrLevel.get(offset) != null ? skt.ptrLevel.get(offset) : 1);
+                    constraint.ptrLevel.get(offset) != null ? constraint.ptrLevel.get(offset) : 1);
         }
         componentMap.put(offset.intValue(), dt);
         return;
     }
 
     public void explore() {
-        var exprToSkeletonMap = typeHintCollector.exprToConstraintMap;
-        for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.mayPointerToPrimitive || skt.isMultiLevelMidPtr) {
+        for (var constraint: finalTypeConstraints) {
+            if (constraint.isMultiLevelMidPtr) {
+                Logging.debug("Generator", "Multi-Level Mid Pointer Explored");
                 continue;
             }
-            Logging.debug("Generator", String.format("Exploring Skeleton: %s", skt));
-            skt.dumpInfo();
+            else if (constraint.mayPointerToPrimitiveArray) {
+                Logging.debug("Generator", "May Pointer to Primitive Array Explored");
+                constraint.dumpInfo();
+            }
+            else if (constraint.noMorphingTypes() && constraint.finalType != null) {
+                Logging.debug("Generator", "No Morphing Stable Skeleton Explored");
+                constraint.dumpInfo();
+            }
+            else {
+                Logging.debug("Generator", "Morphing Skeleton Explored");
+                constraint.dumpInfo();
+            }
         }
     }
 }

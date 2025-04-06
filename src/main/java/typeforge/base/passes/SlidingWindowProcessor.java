@@ -7,14 +7,14 @@ import typeforge.utils.Logging;
 import java.util.*;
 
 public class SlidingWindowProcessor {
-    public final TypeConstraint curSkt;
+    public final TypeConstraint constraint;
     public final List<Long> offsetList;
 
     private int windowCapacity;
     private int flattenCnt;
 
-    public SlidingWindowProcessor(TypeConstraint curSkt, List<Long> offsetList, int initialWindowCapacity) {
-        this.curSkt = curSkt;
+    public SlidingWindowProcessor(TypeConstraint constraint, List<Long> offsetList, int initialWindowCapacity) {
+        this.constraint = constraint;
         this.offsetList = offsetList;
         this.windowCapacity = initialWindowCapacity;
     }
@@ -44,7 +44,7 @@ public class SlidingWindowProcessor {
                     prevWindowStartOffset = offsetList.get(i);
                     prevWindow = candidateWindow;
                 } else {
-                    Logging.debug("SlidingWindowProcessor", "Window equal but not contiguous of Skeleton " + curSkt);
+                    Logging.debug("SlidingWindowProcessor", "Window equal but not contiguous of Skeleton " + constraint);
                     Logging.debug("SlidingWindowProcessor",
                             String.format("Previous Window:\nStart: 0x%x\n%s", prevWindowStartOffset, prevWindow));
                     Logging.debug("SlidingWindowProcessor",
@@ -85,7 +85,7 @@ public class SlidingWindowProcessor {
 
         /* We don't consider windows with only one element if the element is a pointer */
         if (windowCapacity == 1 &&
-                (curSkt.innerSkeleton.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
+                (constraint.innerSkeleton.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
             return Optional.empty();
         }
 
@@ -95,24 +95,24 @@ public class SlidingWindowProcessor {
 
         for (int i = 0; i < windowCapacity; i++) {
             var currentOffset = offsetList.get(startIndex + i);
-            if (curSkt.isInconsistentOffset(currentOffset)) {
+            if (constraint.isInconsistentOffset(currentOffset)) {
                 return Optional.empty();
             }
-            if (curSkt.hasNestedConstraint() && curSkt.isInNestedRange(currentOffset)) {
+            if (constraint.hasFinalNestedConstraint() && constraint.isInNestedRange(currentOffset)) {
                 return Optional.empty();
             }
 
             Object element = null;
-            if (curSkt.finalPtrReference.containsKey(currentOffset)) {
-                element = curSkt.finalPtrReference.get(currentOffset);
+            if (constraint.finalPtrReference.containsKey(currentOffset)) {
+                element = constraint.finalPtrReference.get(currentOffset);
             } else {
-                element = curSkt.innerSkeleton.fieldAccess.get(currentOffset);
+                element = constraint.innerSkeleton.fieldAccess.get(currentOffset);
             }
 
             var relativeOffset = currentOffset.intValue() - startOffset.intValue();
             window.addElement(relativeOffset, element);
             if (element instanceof TypeConstraint) {
-                window.addPtrLevel(relativeOffset, curSkt.ptrLevel.get(currentOffset) != null ? curSkt.ptrLevel.get(currentOffset) : 1);
+                window.addPtrLevel(relativeOffset, constraint.ptrLevel.get(currentOffset) != null ? constraint.ptrLevel.get(currentOffset) : 1);
             }
 
             prevOffset = currentOffset;

@@ -11,11 +11,11 @@ public class DataTypeHelper {
 
     private static final DataTypeManager dtM = Global.currentProgram.getDataTypeManager();
     private static final Map<String, DataType> nameToDTMap = new HashMap<>();
-    private static final String DEFAULT_STRUCT_BASENAME = "ClayStruct";
-    private static final String DEFAULT_ANON_STRUCT_BASENAME = "ClayAnonStruct";
-    private static final String DEFAULT_UNION_BASENAME = "ClayUnion";
-    private static final String DEFAULT_ANON_UNION_BASENAME = "ClayAnonUnion";
-    private static final String DEFAULT_CATEGORY = "/TypeClay_structs";
+    private static final String DEFAULT_STRUCT_BASENAME = "ForgedStruct";
+    private static final String DEFAULT_ANON_STRUCT_BASENAME = "ForgedAnonStruct";
+    private static final String DEFAULT_UNION_BASENAME = "ForgedUnion";
+    private static final String DEFAULT_ANON_UNION_BASENAME = "ForgedAnonUnion";
+    private static final String DEFAULT_CATEGORY = "/TypeForge_structs";
 
 
     public static void prepare() {
@@ -104,7 +104,7 @@ public class DataTypeHelper {
     }
 
     public static Structure createAnonStructureFromWindow(Window window) {
-        Logging.debug("Generator", "Creating Anon Structure Type with Length: 0x" + Integer.toHexString(window.getAlignedWindowSize()));
+        Logging.debug("DataTypeHelper", "Creating Anon Structure Type with Length: 0x" + Integer.toHexString(window.getAlignedWindowSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_STRUCT_BASENAME);
         var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, window.getAlignedWindowSize(), dtM);
         var winElements = window.getWindowElements();
@@ -131,17 +131,17 @@ public class DataTypeHelper {
      * Create a new structure
      * @return the new Structure
      */
-    public static Structure createUniqueStructure(TypeConstraint skt, Map<Integer, DataType> componentMap) {
-        Logging.debug("Generator", "Creating Structure Type with Length: 0x" + Integer.toHexString(skt.getMaxSize()));
+    public static Structure createUniqueStructure(TypeConstraint constraint, Map<Integer, DataType> componentMap) {
+        Logging.debug("DataTypeHelper", "Creating Structure Type with Length: 0x" + Integer.toHexString(constraint.getMaxSize()));
         String structName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_STRUCT_BASENAME);
-        var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, skt.getMaxSize(), dtM);
-        populateStructure(structDT, componentMap, skt);
+        var structDT = new StructureDataType(new CategoryPath(DEFAULT_CATEGORY), structName, constraint.getMaxSize(), dtM);
+        populateStructure(structDT, componentMap, constraint);
         return structDT;
     }
 
 
     public static Union createAnonUnion(TypeConstraint skt, Long offset) {
-        Logging.debug("Generator", "Creating Union Type");
+        Logging.debug("DataTypeHelper", "Creating Union Type");
         String unionName = dtM.getUniqueName(new CategoryPath(DEFAULT_CATEGORY), DEFAULT_ANON_UNION_BASENAME);
         var unionDT = new UnionDataType(new CategoryPath(DEFAULT_CATEGORY), unionName, dtM);
         int index = 0;
@@ -163,18 +163,18 @@ public class DataTypeHelper {
     }
 
     public static Array createArray(DataType elementDT, int length) {
-        Logging.debug("Generator", String.format("Creating Array Type of %s with Length: %d", elementDT.getName(), length));
+        Logging.debug("DataTypeHelper", String.format("Creating Array Type of %s with Length: %d", elementDT.getName(), length));
         return new ArrayDataType(elementDT, length, elementDT.getLength(), dtM);
     }
 
-    public static void populateStructure(Structure structDT, Map<Integer, DataType> componentMap, TypeConstraint skt) {
+    public static void populateStructure(Structure structDT, Map<Integer, DataType> componentMap, TypeConstraint constraint) {
         for (var entry: componentMap.entrySet()) {
             var offset = entry.getKey();
             var dt = entry.getValue();
 
             if (structDT.getLength() < (offset + dt.getLength())) {
-                skt.dumpInfo();
-                Logging.error("Generator", String.format("Offset + DT Length (0x%x + 0x%x) > Structure Length (0x%x)",
+                constraint.dumpInfo();
+                Logging.error("DataTypeHelper", String.format("Offset + DT Length (0x%x + 0x%x) > Structure Length (0x%x)",
                         offset, dt.getLength(), structDT.getLength()));
                 return;
             }
@@ -182,8 +182,8 @@ public class DataTypeHelper {
             try {
                 String name = null;
                 String comment = null;
-                if (skt.finalPtrReference.containsKey((long) offset)) {
-                    name = String.format("ref_0x%s_%s", Long.toHexString(offset), skt.finalPtrReference.get((long) offset).toString());
+                if (constraint.finalPtrReference.containsKey((long) offset)) {
+                    name = String.format("ref_0x%s_%s", Long.toHexString(offset), constraint.finalPtrReference.get((long) offset).toString());
                 }
                 else if (dt instanceof Array) {
                     name = String.format("array_field_0x%s", Long.toHexString(offset));
@@ -194,7 +194,7 @@ public class DataTypeHelper {
                 structDT.replaceAtOffset(offset, dt, dt.getLength(), name, comment);
             }
             catch (IllegalArgumentException e) {
-                Logging.error("Generator", "Failed to populate structure");
+                Logging.error("DataTypeHelper", "Failed to populate structure");
                 return;
             }
         }
