@@ -38,7 +38,7 @@ public class TypeHintCollector {
         handleMayPrimitiveConstraints();
         handleTypeAlias();
 
-//        handlePtrReference();
+        handlePtrReference();
 //        handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
 //        handleMemberConflict();
     }
@@ -205,8 +205,16 @@ public class TypeHintCollector {
             var parsedExpr = parsed.get();
             var base = parsedExpr.base;
             var offset = parsedExpr.offsetValue;
+            // IMPORTANT: offset should be aligned with pointer size
+            if (Global.currentProgram.getDefaultPointerSize() > 0) {
+                if (offset % Global.currentProgram.getDefaultPointerSize() != 0) {
+                    Logging.debug("TypeHintCollector", String.format("Offset 0x%x is not aligned with pointer size, skip it.", offset));
+                    continue;
+                }
+            }
 
             if (exprToConstraintMap.containsKey(base)) {
+                Logging.debug("TypeHintCollector", String.format("Offset 0x%x is aligned with pointer size.", offset));
                 var baseConstraint = exprToConstraintMap.get(base);
                 baseConstraint.addPtrReference(offset, exprToConstraintMap.get(expr));
                 baseConstraint.ptrLevel.put(offset, 1);
