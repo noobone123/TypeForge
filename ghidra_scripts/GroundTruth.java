@@ -103,6 +103,10 @@ public class GroundTruth extends GhidraScript {
             var paramObj = objMapper.createObjectNode();
             for (var i = 0; i < localSymTable.getNumParams(); i++) {
                 var param = localSymTable.getParamSymbol(i);
+                if (!checkHighSymbolValid(param)) {
+                    Logging.warn("sanityCheck", "Parameter " + param.getName() + " is not valid");
+                    continue;
+                }
                 var paramEntry = handleHighSymbol(param);
                 var paramName = String.format("param_%d", (i + 1));
                 var location = DecompilerHelper.Location.getLocation(param, paramName);
@@ -117,7 +121,10 @@ public class GroundTruth extends GhidraScript {
             for (Iterator<HighSymbol> it = localSymTable.getSymbols(); it.hasNext(); ) {
                 var sym = it.next();
                 if (sym.isParameter()) { continue; }
-                if (sym.getHighVariable() == null) { continue; }
+                if (!checkHighSymbolValid(sym)) {
+                    Logging.warn("sanityCheck", "LocalVar " + sym.getName() + " is not valid");
+                    continue;
+                }
                 var varEntry = handleHighSymbol(sym);
                 var location = DecompilerHelper.Location.getLocation(sym);
                 if (location != null) {
@@ -182,6 +189,22 @@ public class GroundTruth extends GhidraScript {
                 processUnion((Union) dt, (ObjectNode) unionObj);
             }
         }
+    }
+
+    /**
+     * Since some highSymbol has no usage in the code, we need to filter them out.
+     * @param highSymbol the HighSymbol to check
+     */
+    private boolean checkHighSymbolValid(HighSymbol highSymbol) {
+        if (highSymbol.getHighVariable() == null) {
+            return false;
+        }
+        var instances = highSymbol.getHighVariable().getInstances();
+        var totalCnt = 0;
+        for (var vn: instances) {
+            totalCnt += 1;
+        }
+        return totalCnt != 0;
     }
 
     private void checkDataType(ObjectNode varNode, Set<String> LibTypes) {
