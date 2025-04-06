@@ -50,7 +50,9 @@ public class PCodeVisitor {
             var iter = bb.getIterator();
             while (iter.hasNext()) {
                 PcodeOp op = iter.next();
-                workList.add((PcodeOpAST) op);
+                if (op != null) {
+                    workList.add((PcodeOpAST) op);
+                }
             }
         }
     }
@@ -182,7 +184,9 @@ public class PCodeVisitor {
             for (var fact: intraSolver.getOrCreateDataFlowFacts(outputVn)) {
                 intraSolver.updateDataFlowFacts(inputVn, fact);
             }
-            workList.add((PcodeOpAST) inputVn.getDef());
+            if (inputVn.getDef() != null) {
+                workList.add((PcodeOpAST) inputVn.getDef());
+            }
             return;
         }
 
