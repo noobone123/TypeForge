@@ -23,7 +23,7 @@ public class TypeConstraint {
     public Map<Long, Set<TypeConstraint>> ptrReference = new HashMap<>();
     public Map<Long, TypeConstraint> finalPtrReference = new HashMap<>();
     public Map<Long, Integer> ptrLevel = new HashMap<>();
-    public Map<Long, Set<TypeConstraint>> mayNestedConstraint = new HashMap<>();
+    public Map<Long, Set<TypeConstraint>> nestedConstraint = new HashMap<>();
     public Map<Long, TypeConstraint> finalNestedConstraint = new HashMap<>();
 
     public Set<DataType> decompilerInferredCompositeTypes = new HashSet<>();
@@ -50,9 +50,11 @@ public class TypeConstraint {
         this.innerSkeleton = skeleton;
         this.exprs.addAll(exprs);
         this.decompilerInferredCompositeTypes.addAll(innerSkeleton.getDecompilerInferredCompositeTypes());
-        setMaxSize();
         setVariables();
+        // Following order should not be changed.
+        // As setMaxSize depends on handleFieldAPSet
         handleFieldAPSet();
+        setMaxSize();
     }
 
     /**
@@ -94,8 +96,8 @@ public class TypeConstraint {
         newTypeConstraint.finalPtrReference.putAll(tc2.finalPtrReference);
         newTypeConstraint.ptrLevel.putAll(tc1.ptrLevel);
         newTypeConstraint.ptrLevel.putAll(tc2.ptrLevel);
-        newTypeConstraint.mayNestedConstraint.putAll(tc1.mayNestedConstraint);
-        newTypeConstraint.mayNestedConstraint.putAll(tc2.mayNestedConstraint);
+        newTypeConstraint.nestedConstraint.putAll(tc1.nestedConstraint);
+        newTypeConstraint.nestedConstraint.putAll(tc2.nestedConstraint);
         newTypeConstraint.finalNestedConstraint.putAll(tc1.finalNestedConstraint);
         newTypeConstraint.finalNestedConstraint.putAll(tc2.finalNestedConstraint);
 
@@ -105,7 +107,7 @@ public class TypeConstraint {
     /**
      * Find the member's datatype, min/max datatype size and most accessed datatype
      */
-    private void handleFieldAPSet() {
+    public void handleFieldAPSet() {
         for (var entry: innerSkeleton.fieldAccess.entrySet()) {
             var apSet = entry.getValue();
             if (apSet != null) {
@@ -114,24 +116,30 @@ public class TypeConstraint {
         }
     }
 
-    public void addPtrReference(long ptr, TypeConstraint skt) {
-        ptrReference.computeIfAbsent(ptr, k -> new HashSet<>()).add(skt);
-    }
-
-    public boolean isMultiLevelMidPtr() {
+    /**
+     * if there are multi-level pointer references like `**a`.
+     * In TypeConstraint, a's constraint may look like
+     * a --> mid-ptr -> layout
+     * However, we want a --ptr-level(2)--> layout, so mid-ptr should be identified and removed
+     * @return If current skeleton is a multi-level mid pointer
+     */
+    public boolean checkMultiLevelMidPtr() {
         var skeleton = innerSkeleton;
         if (skeleton.fieldAccess.size() != 1) { return false; }
         if (skeleton.fieldAccess.get(0L) == null) { return false; }
-        for (var element: skeleton.fieldAccess.get(0L).getApSet()) {
-            var dataType = element.dataType;
-            var size = dataType.getLength();
-            if (size != Global.currentProgram.getDefaultPointerSize()) { return false; }
+        var apSet = skeleton.fieldAccess.get(0L);
+        if (!apSet.isSameSizeType) { return false; }
+        if (apSet.mostAccessedDT.getLength() != Global.currentProgram.getDefaultPointerSize()) { return false; }
+
+        if (finalPtrReference.get(0L) != null) {
+            isMultiLevelMidPtr = true;
+            mayPointerToPrimitive = false;
+            return true;
+        } else {
+            isMultiLevelMidPtr = false;
+            return false;
         }
-        if (finalPtrReference.get(0L) == null) { return false; }
-        return true;
     }
-
-
 
     /**
      * Get the size of current skeleton, we consider the
@@ -179,7 +187,7 @@ public class TypeConstraint {
      * @return true if independent
      */
     public boolean isIndependent() {
-        return ptrReference.isEmpty() && mayNestedConstraint.isEmpty();
+        return ptrReference.isEmpty() && nestedConstraint.isEmpty();
     }
 
     /**
@@ -195,7 +203,7 @@ public class TypeConstraint {
     }
 
     public boolean hasMultiNestedConstraint() {
-        for (var entry: mayNestedConstraint.entrySet()) {
+        for (var entry: nestedConstraint.entrySet()) {
             if (entry.getValue().size() > 1) {
                 return true;
             }
@@ -204,10 +212,10 @@ public class TypeConstraint {
     }
 
     public boolean hasNestedConstraint() {
-        return !mayNestedConstraint.isEmpty();
+        return !nestedConstraint.isEmpty();
     }
 
-    public boolean hasPtrReference() {
+    public boolean hasFinalPtrReference() {
         return !finalPtrReference.isEmpty();
     }
 
@@ -380,7 +388,7 @@ public class TypeConstraint {
 
     public boolean mustPrimitiveTypeAtOffset(long offset) {
         var aps = innerSkeleton.fieldAccess.get(offset);
-        if (ptrReference.containsKey(offset) || mayNestedConstraint.containsKey(offset) ||
+        if (ptrReference.containsKey(offset) || nestedConstraint.containsKey(offset) ||
                 !aps.isSameSizeType ||
                 (aps.mostAccessedDT.getLength() >= Global.currentProgram.getDefaultPointerSize()) ) {
             return false;
@@ -523,25 +531,12 @@ public class TypeConstraint {
                                             long offset, boolean isRelax) {
         var nesterSkt = nester.innerSkeleton;
         var nesteeSkt = nestee.innerSkeleton;
-        var nestedSkt = new Skeleton();
-        for (var f: nesteeSkt.fieldAccess.entrySet()) {
-            var offsetInSkt = f.getKey();
-            var apSet = f.getValue();
-            var newOffset = offset + offsetInSkt;
-            nestedSkt.addFieldAccessForNestChecking(newOffset, apSet);
-        }
-
-        var nestCandidate = nestedSkt.getMaxSizeFromFieldAccess();
-        if (nestCandidate > nester.getMaxSize()) {
-            Logging.debug("TypeConstraint", String.format("Nester %s has smaller size than nested %s, skip checking",
-                    nester, nestee));
-            return false;
-        }
+        var nestedCandidate = new Skeleton(nesteeSkt, offset);
 
         if (isRelax) {
-            return !TCHelper.checkFieldOverlapRelax(nesterSkt, nestedSkt);
+            return !TCHelper.checkFieldOverlapRelax(nesterSkt, nestedCandidate);
         } else {
-            return !TCHelper.checkFieldOverlapStrict(nesterSkt, nestedSkt);
+            return !TCHelper.checkFieldOverlapStrict(nesterSkt, nestedCandidate);
         }
     }
 }

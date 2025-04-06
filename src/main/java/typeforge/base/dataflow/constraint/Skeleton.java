@@ -42,8 +42,6 @@ public class Skeleton {
     public final TreeMap<Long, HashSet<NMAE>> fieldExprMap;
 
     public final HashSet<Attribute> globalAttrs;
-    /** The accessOffsets is a map which records the AP and the set of field offsets which are accessed by the AP */
-    public final HashMap<AccessPoints.AP, HashSet<Long>> accessOffsets;
 
     /** Recording where this size information comes from */
     private final Set<SizeSource> sizeSources;
@@ -65,7 +63,6 @@ public class Skeleton {
 
         fieldAttrs = new TreeMap<>();
         globalAttrs = new HashSet<>();
-        accessOffsets = new HashMap<>();
         decompilerInferredCompositeTypes = new HashSet<>();
         elementSize = new HashSet<>();
         sizeSources = new HashSet<>();
@@ -92,10 +89,45 @@ public class Skeleton {
 
         this.globalAttrs = new HashSet<>(other.globalAttrs);
 
-        this.accessOffsets = new HashMap<>();
-        for (Map.Entry<AccessPoints.AP, HashSet<Long>> entry : other.accessOffsets.entrySet()) {
-            this.accessOffsets.put(entry.getKey(), new HashSet<>(entry.getValue()));
+        this.decompilerInferredCompositeTypes = new HashSet<>(other.decompilerInferredCompositeTypes);
+
+        this.sizeSources = new HashSet<>(other.sizeSources);
+        this.isComposite = other.isComposite;
+
+        this.elementSize = new HashSet<>(other.elementSize);
+    }
+
+    /**
+     * Copy constructor with adjustedOffset, useful for creating nested skeleton.
+     * @param other the other Skeleton to copy from
+     * @param adjustedOffset the re-adjusted adjustedOffset
+     */
+    public Skeleton(Skeleton other, long adjustedOffset) {
+        this.uuid = UUID.randomUUID();
+        this.shortUUID = uuid.toString().substring(0, 8);
+
+        this.fieldAccess = new TreeMap<>();
+        for (Map.Entry<Long, AccessPoints.APSet> entry : other.fieldAccess.entrySet()) {
+            var originOffset = entry.getKey();
+            var newOffset = originOffset + adjustedOffset;
+            this.fieldAccess.put(newOffset, new AccessPoints.APSet(entry.getValue()));
         }
+
+        this.fieldExprMap = new TreeMap<>();
+        for (Map.Entry<Long, HashSet<NMAE>> entry : other.fieldExprMap.entrySet()) {
+            var originOffset = entry.getKey();
+            var newOffset = originOffset + adjustedOffset;
+            this.fieldExprMap.put(newOffset, new HashSet<>(entry.getValue()));
+        }
+
+        this.fieldAttrs = new TreeMap<>();
+        for (Map.Entry<Long, HashSet<Attribute>> entry : other.fieldAttrs.entrySet()) {
+            var originOffset = entry.getKey();
+            var newOffset = originOffset + adjustedOffset;
+            this.fieldAttrs.put(newOffset, new HashSet<>(entry.getValue()));
+        }
+
+        this.globalAttrs = new HashSet<>(other.globalAttrs);
 
         this.decompilerInferredCompositeTypes = new HashSet<>(other.decompilerInferredCompositeTypes);
 
@@ -113,8 +145,6 @@ public class Skeleton {
 
     public void addFieldAccess(long offset, AccessPoints.AP ap) {
         // update fieldAccess
-        accessOffsets.putIfAbsent(ap, new HashSet<>());
-        accessOffsets.get(ap).add(offset);
         fieldAccess.putIfAbsent(offset, new AccessPoints.APSet());
         if (fieldAccess.get(offset).addAP(ap)) {
             Logging.debug("Skeleton", String.format("Skeleton_%s adding field access: 0x%x -> %s", shortUUID, offset, ap.dataType));
@@ -272,12 +302,6 @@ public class Skeleton {
 
         // Merging global attributes
         this.globalAttrs.addAll(other.globalAttrs);
-
-        // Merging accessOffsets
-        other.accessOffsets.forEach((ap, offsets) -> {
-            this.accessOffsets.putIfAbsent(ap, new HashSet<>());
-            this.accessOffsets.get(ap).addAll(offsets);
-        });
 
         // Merging size
         this.sizeSources.addAll(other.sizeSources);

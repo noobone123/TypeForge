@@ -38,9 +38,10 @@ public class TypeHintCollector {
         handleMayPrimitiveConstraints();
         handleTypeAlias();
 
+        preHandlePtrReference();
         handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
-        // handlePtrReference();
-        // handleMemberConflict();
+        postHandlePtrReference();
+        handleMemberConflict();
     }
 
     public void buildTypeConstraintsBySkeletons() {
@@ -209,9 +210,12 @@ public class TypeHintCollector {
                         Logging.debug("TypeHintCollector", String.format("Nestee may be a pointer to primitive type: %s", nestee));
                         continue;
                     }
-                    // TODO: do not do that, just try to create a new offset resized nestee.
+                    if (nester == nestee) {
+                        Logging.debug("TypeHintCollector", String.format("Nester and Nestee are the same: %s", nester));
+                        continue;
+                    }
                     if (TypeConstraint.checkNestConflict(nester, nestee, offset, false)) {
-                        nester.mayNestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
+                        nester.nestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
                                 .add(nestee);
                         Logging.debug("TypeHintCollector", String.format("No conflicts when nest %s and %s", nester, nestee));
                     } else {
@@ -221,52 +225,35 @@ public class TypeHintCollector {
             }
         }
 
-        /* Remove skeletons that should not be nested */
-        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (!constraint.hasNestedConstraint()) continue;
-        }
-
-        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (constraint.hasNestedConstraint()) {
-                var iterator = constraint.mayNestedConstraint.keySet().iterator();
-                while (iterator.hasNext()) {
-                    var offset = iterator.next();
-                    var removeCandidates = new HashSet<TypeConstraint>();
-                    for (var s: constraint.mayNestedConstraint.get(offset)) {
-                        if (s.isMultiLevelMidPtr || s.mayPointerToPrimitive || constraint == s) {
-                            removeCandidates.add(s);
-                        }
-                    }
-                    if (!removeCandidates.isEmpty()) {
-                        constraint.mayNestedConstraint.get(offset).removeAll(removeCandidates);
-                        if (constraint.mayNestedConstraint.get(offset).isEmpty()) {
-                            iterator.remove();
-                        }
-                        Logging.debug("TypeHintCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
-                    }
-                }
-            }
-        }
-
         /* Handling mayNested Skeleton and build the finalNestedSkeleton */
         for (var nester: new HashSet<>(exprToConstraintMap.values())) {
-            for (var entry: nester.mayNestedConstraint.entrySet()) {
-                // TODO: consider try merging constraints of nestedConstraints ?
+            for (var entry: nester.nestedConstraint.entrySet()) {
                 var offset = entry.getKey();
                 var nestedConstraints = entry.getValue();
-                TypeConstraint finalNestedCandidate = null;
-                for (var nestee: nestedConstraints) {
-                    tryPopulateNester(nester, offset, nestee);
-                    if (finalNestedCandidate == null) {
-                        finalNestedCandidate = nestee;
-                    } else {
-                        if (nestee.variables.size() >= finalNestedCandidate.variables.size()) {
-                            finalNestedCandidate = nestee;
+                if (nestedConstraints.size() == 1) {
+                    Logging.debug("TypeHintCollector", String.format("Single Nested Constraints Detected: %s", nestedConstraints));
+                    nester.finalNestedConstraint.put(entry.getKey(), nestedConstraints.iterator().next());
+                }
+                else if (nestedConstraints.size() > 1) {
+                    Logging.debug("TypeHintCollector", String.format("Multiple Nested Constraints Detected: %s", nestedConstraints));
+                    // If multiple nested constraints detected,
+                    // we choose the constraints associated with the most number of variables and use it as the final constraint.
+                    TypeConstraint choose = null;
+                    for (var nestee: nestedConstraints) {
+                        if (choose == null) {
+                            choose = nestee;
+                        } else {
+                            if (nestee.getVariables().size() >= choose.getVariables().size()) {
+                                choose = nestee;
+                            }
                         }
                     }
+                    nester.finalNestedConstraint.put(offset, choose);
                 }
-                nester.finalNestedConstraint.put(offset, finalNestedCandidate);
-                // nester.updateNestedRange(offset, offset + finalNestedCandidate.setMaxSize());
+
+                var finalNestee = nester.finalNestedConstraint.get(offset);
+                tryPopulateNester(nester, finalNestee, offset);
+                nester.updateNestedRange(offset, offset + finalNestee.getMaxSize());
             }
         }
     }
@@ -283,10 +270,10 @@ public class TypeHintCollector {
     }
 
     /**
-     * Build Relationships introduced by Struct Pointer Reference
+     * Parsing the dereference expression and build the basic pointer reference relationship.
+     * There may multiple pointer references to the same offset, we will process them later.
      */
-    public void handlePtrReference() {
-        /* Build basic Reference Relationship */
+    public void preHandlePtrReference() {
         for (var expr: exprToConstraintMap.keySet()) {
             if (!expr.isDereference()) {
                 continue;
@@ -308,11 +295,21 @@ public class TypeHintCollector {
             if (exprToConstraintMap.containsKey(base)) {
                 Logging.debug("TypeHintCollector", String.format("Offset 0x%x is aligned with pointer size.", offset));
                 var baseConstraint = exprToConstraintMap.get(base);
-                baseConstraint.addPtrReference(offset, exprToConstraintMap.get(expr));
+
+                baseConstraint.ptrReference
+                        .computeIfAbsent(offset, k -> new HashSet<>()).add(exprToConstraintMap.get(expr));
                 baseConstraint.ptrLevel.put(offset, 1);
             }
         }
+    }
 
+    /**
+     * Post handle the pointer reference relationship.
+     * Including:
+     *  1. Handle multi pointer reference to the same offset
+     *  2. Handle multi-level pointer reference
+     */
+    public void postHandlePtrReference() {
         /* There may multiple ptr reference to the same offset, we need to handle it */
         handleMultiPtrReferenceTo();
 
@@ -321,7 +318,7 @@ public class TypeHintCollector {
             for (var offset: constraint.finalPtrReference.keySet()) {
                 var ptrEEConstraint = constraint.finalPtrReference.get(offset);
                 var ptrLevel = 1;
-                while (ptrEEConstraint.isMultiLevelMidPtr()) {
+                while (ptrEEConstraint.checkMultiLevelMidPtr()) {
                     ptrLevel++;
                     if (ptrEEConstraint == ptrEEConstraint.finalPtrReference.get(0L)) {
                         Logging.warn("TypeHintCollector", "Ptr Reference Loop Detected!");
@@ -334,29 +331,8 @@ public class TypeHintCollector {
                     Logging.debug("TypeHintCollector", String.format("Ptr Level > 1,  = %d", ptrLevel));
                     constraint.ptrLevel.put(offset, ptrLevel);
                     constraint.finalPtrReference.put(offset, ptrEEConstraint);
-
-                    /* For debug */
-                    Logging.debug("TypeHintCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEEConstraint));
-                    Logging.debug("TypeHintCollector", constraint.exprs.toString());
-                    Logging.debug("TypeHintCollector", constraint.innerSkeleton.dumpLayout(0));
-                    Logging.debug("TypeHintCollector", ptrEEConstraint.exprs.toString());
-                    Logging.debug("TypeHintCollector", ptrEEConstraint.innerSkeleton.dumpLayout(0));
                 } else {
                     Logging.debug("TypeHintCollector", "Ptr Level = 1");
-                }
-            }
-        }
-
-        /* Remove Ptr Reference which points to a multiLevelMidPtr */
-        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (constraint.hasPtrReference()) {
-                for (var offset: constraint.finalPtrReference.keySet()) {
-                    var ptrEE = constraint.finalPtrReference.get(offset);
-                    if (ptrEE.isMultiLevelMidPtr) {
-                        constraint.finalPtrReference.remove(offset);
-                        constraint.ptrLevel.remove(offset);
-                        Logging.debug("TypeHintCollector", String.format("Remove multiLevel Mid Ptr: %s", ptrEE));
-                    }
                 }
             }
         }
@@ -370,43 +346,40 @@ public class TypeHintCollector {
         for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
             List<Long> offsets = new ArrayList<>(constraint.innerSkeleton.fieldAccess.keySet());
             Collections.sort(offsets);
-            List<Long> removeCandidate = new ArrayList<>();
+            List<Long> removedFields = new ArrayList<>();
 
             for (int i = 0; i < offsets.size(); i++) {
                 var offset = offsets.get(i);
                 var aps = constraint.innerSkeleton.fieldAccess.get(offset);
 
-                long nextOffset = -1;
-                if (i < offsets.size() - 1) {
-                    nextOffset = offsets.get(i + 1);
-                }
+                if (i == offsets.size() - 1) break;
+                var nextOffset = offsets.get(i + 1);
 
                 // If there is a pointer reference at this offset, but the size between this offset and the next offset is less than the pointer size,
                 // we consider it as a conflict and remove the pointer reference.
                 if (constraint.finalPtrReference.containsKey(offset)) {
-                    if (nextOffset != -1 && (nextOffset - offset) < ptrSize) {
+                    if ((nextOffset - offset) < ptrSize) {
                         constraint.finalPtrReference.remove(offset);
                         Logging.debug("TypeHintCollector", String.format("Found Conflict Member's Ptr Reference at 0x%s", Long.toHexString(offset)));
                     }
-                } else {
-                    // Use mostAccessedDT to check if the size between this offset and the next offset is
-                    // less than the size of the most accessed data type.
-                    var size = aps.mostAccessedDT.getLength();
-                    if (nextOffset != -1 && (nextOffset - offset) < size) {
-                        removeCandidate.add(offset);
-                        Logging.debug("TypeHintCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
-                        Logging.debug("TypeHintCollector", String.format("MostAccessedDTSize = %d", size));
-                        Logging.debug("TypeHintCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
-                    }
+                }
+
+                // Use mostAccessedDT to check if the size between this offset and the next offset is
+                // less than the size of the most accessed data type.
+                var size = aps.mostAccessedDT.getLength();
+                if ((nextOffset - offset) < size) {
+                    removedFields.add(offset);
+                    Logging.debug("TypeHintCollector", String.format("Found Conflict Member at 0x%s", Long.toHexString(offset)));
+                    Logging.debug("TypeHintCollector", String.format("MostAccessedDTSize = %d", size));
+                    Logging.debug("TypeHintCollector", String.format("Next Offset = 0x%s", Long.toHexString(nextOffset)));
                 }
             }
 
-            for (var offset: removeCandidate) {
+            for (var offset: removedFields) {
                 constraint.innerSkeleton.fieldAccess.remove(offset);
             }
         }
     }
-
 
     public void handleMultiPtrReferenceTo() {
         /* Choose the most visited one as the final ReferenceTo constraint */
@@ -419,17 +392,17 @@ public class TypeHintCollector {
                 } else {
                     Logging.warn("TypeHintCollector", String.format("Multi Ptr Reference To Detected: \n%s", constraint));
                     // TODO: Try to merge them into a new constraint?
-                    TypeConstraint chooseConstraint = null;
+                    TypeConstraint choose = null;
                     for (var ptrEE: ptrEEs) {
-                        if (chooseConstraint == null) {
-                            chooseConstraint = ptrEE;
+                        if (choose == null) {
+                            choose = ptrEE;
                         } else {
-                            if (ptrEE.exprs.size() > chooseConstraint.exprs.size()) {
-                                chooseConstraint = ptrEE;
+                            if (ptrEE.getVariables().size() > choose.getVariables().size()) {
+                                choose = ptrEE;
                             }
                         }
                     }
-                    constraint.finalPtrReference.put(offset, chooseConstraint);
+                    constraint.finalPtrReference.put(offset, choose);
                 }
             }
         }
@@ -471,23 +444,28 @@ public class TypeHintCollector {
         }
     }
 
-    private void tryPopulateNester(TypeConstraint nester, Long nestStartOffset, TypeConstraint nestee) {
-        for (var offset: nestee.innerSkeleton.fieldAccess.keySet()) {
-            var nesterOffset = nestStartOffset + offset;
-            var nesterAPS = nester.innerSkeleton.fieldAccess.get(nesterOffset);
-            var nesteeAPS = nestee.innerSkeleton.fieldAccess.get(offset);
-
-            if (nesterAPS == null) {
-                nester.innerSkeleton.fieldAccess.put(nesterOffset, nesteeAPS);
-            } else if (nesterAPS.maxDTSize >= nesteeAPS.maxDTSize) {
-                nesterAPS.update(nesteeAPS);
-            }
+    /**
+     * Try to populate the nester's skeleton with the nestee's skeleton.
+     * It's worthy to note that finalPtrReference has not been decided yet.
+     */
+    private void tryPopulateNester(TypeConstraint nester, TypeConstraint nestee,
+                                   long nestedOffset) {
+        var nesterSkeleton = nester.innerSkeleton;
+        var nesteeSkeleton = nestee.innerSkeleton;
+        var nested = new Skeleton(nesteeSkeleton, nestedOffset);
+        var canMerge = nesterSkeleton.tryMergeLayoutStrict(nested);
+        if (!canMerge) {
+            Logging.debug("TypeHintCollector",
+                    "This nested error should not have happened, please check the code.");
+            return;
         }
+        nester.handleFieldAPSet();
+        nester.setMaxSize();
 
-        for (var offset: nestee.finalPtrReference.keySet()) {
-            var nesterOffset = nestStartOffset + offset;
-            var nesteePtrRef = nestee.finalPtrReference.get(offset);
-            nester.finalPtrReference.putIfAbsent(nesterOffset, nesteePtrRef);
+        for (var offset: nestee.ptrReference.keySet()) {
+            var nesteePtrRef = nestee.ptrReference.get(offset);
+            var nesterOffset = nestedOffset + offset;
+            nester.ptrReference.computeIfAbsent(nesterOffset, k -> new HashSet<>()).addAll(nesteePtrRef);
         }
     }
 }
