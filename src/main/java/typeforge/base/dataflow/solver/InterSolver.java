@@ -151,6 +151,7 @@ public class InterSolver {
                     }
 
                     var argFacts = bridgeInfo.get(callSite).get(argVn);
+                    if (argFacts == null) { continue; }
                     for (var argExpr: argFacts) {
                         var param = calleeNode.parameters.get(argIdx);
                         var paramExpr = new NMAEManager.Builder().rootSymbol(param).build();
