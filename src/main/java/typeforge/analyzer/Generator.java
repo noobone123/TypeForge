@@ -69,7 +69,7 @@ public class Generator {
 
         /* Post Processing: remove redundant type declaration in morph range */
         for (var c: finalTypeConstraints) {
-            if (c.isMultiLevelMidPtr || c.mayPointerToPrimitive) {
+            if (c.isMultiLevelMidPtr || c.isPointerToPrimitive) {
                 continue;
             }
             if (c.noMorphingTypes() && c.finalType != null) {
@@ -106,7 +106,7 @@ public class Generator {
             if (c.innerSkeleton.isEmpty()) {
                 continue;
             }
-            if (c.isMultiLevelMidPtr || c.mayPointerToPrimitive) {
+            if (c.isMultiLevelMidPtr || c.isPointerToPrimitive) {
                 continue;
             }
             if (c.mayPointerToPrimitiveArray) {
@@ -116,12 +116,11 @@ public class Generator {
             processFieldMorphing(c);
         }
 
-        /* Handle Stable Skeletons */
         for (var c: new HashSet<>(exprToConstraintMap.values())) {
             if (c.innerSkeleton.isEmpty()) {
                 continue;
             }
-            if (c.isMultiLevelMidPtr || c.mayPointerToPrimitive) {
+            if (c.isMultiLevelMidPtr || c.isPointerToPrimitive) {
                 continue;
             }
             /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
@@ -422,8 +421,8 @@ public class Generator {
     private void createPtrRefMember(TypeConstraint constraint, Map<Integer, DataType> componentMap, Long offset) {
         var ptrEE = constraint.finalPtrReference.get(offset);
         DataType dt;
-        if (ptrEE.mayPointerToPrimitiveArray && ptrEE.mayElementType != null) {
-            dt = DataTypeHelper.getPointerDT(ptrEE.mayElementType, constraint.ptrLevel.get(offset) != null ? constraint.ptrLevel.get(offset) : 1);
+        if (ptrEE.mayPointerToPrimitiveArray && ptrEE.finalType != null) {
+            dt = DataTypeHelper.getPointerDT(ptrEE.finalType, constraint.ptrLevel.get(offset) != null ? constraint.ptrLevel.get(offset) : 1);
         } else {
             dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
                     constraint.ptrLevel.get(offset) != null ? constraint.ptrLevel.get(offset) : 1);
@@ -434,11 +433,7 @@ public class Generator {
 
     public void explore() {
         for (var constraint: finalTypeConstraints) {
-            if (constraint.isMultiLevelMidPtr) {
-                Logging.debug("Generator", "Multi-Level Mid Pointer Explored");
-                continue;
-            }
-            else if (constraint.mayPointerToPrimitiveArray) {
+            if (constraint.mayPointerToPrimitiveArray) {
                 Logging.debug("Generator", "May Pointer to Primitive Array Explored");
                 constraint.dumpInfo();
             }

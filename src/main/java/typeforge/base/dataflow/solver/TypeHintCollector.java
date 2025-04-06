@@ -43,6 +43,8 @@ public class TypeHintCollector {
         handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
         postHandlePtrReference();
         handleMemberConflict();
+
+        filterRedundantConstraints();
     }
 
     public void buildTypeConstraintsBySkeletons() {
@@ -157,13 +159,14 @@ public class TypeHintCollector {
                     var aliasConstraint = exprToConstraintMap.get(alias);
                     var queryConstraint = exprToConstraintMap.get(query);
 
-                    if (aliasConstraint.mayPointerToPrimitive || queryConstraint.mayPointerToPrimitive) {
+                    if (aliasConstraint.isPointerToPrimitive || queryConstraint.isPointerToPrimitive
+                        || aliasConstraint.mayPointerToPrimitiveArray || queryConstraint.mayPointerToPrimitiveArray) {
                         continue;
                     }
-                    // If alias or query is a pointer to primitive type, we do not merged them.
-                    if (aliasConstraint.mayPointerToPrimitiveArray || queryConstraint.mayPointerToPrimitiveArray) {
+                    if (aliasConstraint.noFieldAccess() || queryConstraint.noFieldAccess()) {
                         continue;
                     }
+
                     // If already in the same cluster, skip it.
                     if (aliasConstraint.equals(queryConstraint)) continue;
 
@@ -209,8 +212,12 @@ public class TypeHintCollector {
                             String.format("Offset 0x%x is aligned (Nested) with pointer size.", offset));
                     var nester = exprToConstraintMap.get(base);
                     var nestee = exprToConstraintMap.get(expr);
-                    if (nestee.mayPointerToPrimitiveArray || nestee.mayPointerToPrimitive) {
+                    if (nestee.mayPointerToPrimitiveArray || nestee.isPointerToPrimitive) {
                         Logging.debug("TypeHintCollector", String.format("Nestee may be a pointer to primitive type: %s", nestee));
+                        continue;
+                    }
+                    if (nestee.noFieldAccess()) {
+                        Logging.debug("TypeHintCollector", String.format("Nestee has no field access: %s", nestee));
                         continue;
                     }
                     if (nester == nestee) {
@@ -300,13 +307,6 @@ public class TypeHintCollector {
                 var ptrEEConstraint = exprToConstraintMap.get(expr);
                 var baseConstraint = exprToConstraintMap.get(base);
 
-                // Since we can not distinguish between pointer to primitive type and multi-level mid-pointer yet,
-                // So we do not check primitive type here.
-                if (ptrEEConstraint.mayPointerToPrimitiveArray) {
-                    Logging.debug("TypeHintCollector", String.format("Pointer to Primitive Array Detected: %s", ptrEEConstraint));
-                    continue;
-                }
-
                 baseConstraint.ptrReference
                         .computeIfAbsent(offset, k -> new HashSet<>()).add(ptrEEConstraint);
                 baseConstraint.ptrLevel.put(offset, 1);
@@ -322,11 +322,11 @@ public class TypeHintCollector {
      */
     public void postHandlePtrReference() {
         /* There may multiple ptr reference to the same offset, we need to handle it */
-        handleMultiPtrReferenceTo();
+        handleFinalPtrReferenceTo();
 
         /* Handle Multi-Level Ptr Reference */
         for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            for (var offset: constraint.finalPtrReference.keySet()) {
+            for (var offset: new HashSet<>(constraint.finalPtrReference.keySet())) {
                 var ptrEEConstraint = constraint.finalPtrReference.get(offset);
                 var ptrLevel = 1;
                 while (ptrEEConstraint.checkMultiLevelMidPtr()) {
@@ -344,6 +344,17 @@ public class TypeHintCollector {
                     constraint.finalPtrReference.put(offset, ptrEEConstraint);
                 } else {
                     Logging.debug("TypeHintCollector", "Ptr Level = 1");
+                }
+
+                // Since checkMultiLevelMidPtr() changed the attribute of TypeConstraint, we need to re-check if point-to
+                // primitive type or primitive array.
+                var finalPtrEE = constraint.finalPtrReference.get(offset);
+                if (finalPtrEE.isPointerToPrimitive || finalPtrEE.mayPointerToPrimitiveArray) {
+                    Logging.debug("TypeHintCollector", "Ptr Reference to Primitive/Primitive Array Detected");
+                    constraint.finalPtrReference.remove(offset);
+                    constraint.ptrLevel.remove(offset);
+                } else {
+                    Logging.debug("TypeHintCollector", "Ptr Reference to Composite Type Detected");
                 }
             }
         }
@@ -392,7 +403,7 @@ public class TypeHintCollector {
         }
     }
 
-    public void handleMultiPtrReferenceTo() {
+    public void handleFinalPtrReferenceTo() {
         /* Choose the most visited one as the final ReferenceTo constraint */
         for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
             for (var offset: constraint.ptrReference.keySet()) {
@@ -427,7 +438,7 @@ public class TypeHintCollector {
         for (var c: exprToConstraintMap.values()) {
             if (c.mayPointerToPrimitive() && !c.hasDecompilerInferredCompositeType()) {
                 Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Detected: " + c);
-                c.mayElementType = c.innerSkeleton.fieldAccess.get(0L).mostAccessedDT;
+                c.finalType = c.innerSkeleton.fieldAccess.get(0L).mostAccessedDT;
                 continue;
             }
 
@@ -435,18 +446,12 @@ public class TypeHintCollector {
             // still consider its may be a pointer to primitive type.
             if (c.hasDecompilerInferredCompositeType()) {
                 var inferredTypes = c.decompilerInferredCompositeTypes;
-                if (inferredTypes.size() >= 2) {
-                    if (c.onlyArraysInDecompilerInferredCompositeTypes()) {
-                        Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to arrays) Detected: " + c);
-                        c.dumpInfo();
-                        if (c.mayPointerToPrimitive()) {
-                            c.mayPointerToPrimitive = true;
-                        } else {
-                            c.mayPointerToPrimitiveArray = true;
-                        }
-                        c.mayElementType = ((Array) inferredTypes.iterator().next()).getDataType();
-                        continue;
-                    }
+                if (c.onlyArraysInDecompilerInferredCompositeTypes()) {
+                    Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to arrays) Detected: " + c);
+                    c.dumpInfo();
+                    c.isPointerToPrimitive = true;
+                    c.finalType = ((Array) inferredTypes.iterator().next()).getDataType();
+                    continue;
                 }
             }
 
@@ -455,7 +460,7 @@ public class TypeHintCollector {
                 Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to duplicates) Detected: " + c);
                 c.dumpInfo();
                 c.mayPointerToPrimitiveArray = true;
-                c.mayElementType = c.innerSkeleton.fieldAccess.get(0L).mostAccessedDT;
+                c.finalType = c.innerSkeleton.fieldAccess.get(0L).mostAccessedDT;
             }
         }
     }
@@ -482,6 +487,24 @@ public class TypeHintCollector {
             var nesteePtrRef = nestee.ptrReference.get(offset);
             var nesterOffset = nestedOffset + offset;
             nester.ptrReference.computeIfAbsent(nesterOffset, k -> new HashSet<>()).addAll(nesteePtrRef);
+        }
+    }
+
+    public void filterRedundantConstraints() {
+        var removeCandidates = new HashSet<TypeConstraint>();
+        for (var constraint: exprToConstraintMap.values()) {
+            // mayPointerToPrimitiveArray should be saved, as we can not distinguish
+            // between a pointer to primitive array and a pointer to composite type.
+            if (constraint.isMultiLevelMidPtr || constraint.isPointerToPrimitive
+                    || constraint.isEmpty()) {
+                removeCandidates.add(constraint);
+            }
+        }
+
+        for (var constraint: removeCandidates) {
+            for (var expr: constraint.exprs) {
+                exprToConstraintMap.remove(expr);
+            }
         }
     }
 }

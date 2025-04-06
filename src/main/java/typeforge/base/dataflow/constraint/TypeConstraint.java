@@ -30,9 +30,8 @@ public class TypeConstraint {
 
     public Set<Long> inConsistentOffsets = new HashSet<>();
 
-    public boolean mayPointerToPrimitive = false;
+    public boolean isPointerToPrimitive = false;
     public boolean mayPointerToPrimitiveArray = false;
-    public DataType mayElementType = null;
     public boolean isMultiLevelMidPtr = false;
     /**
      *  Following Fields should be updated after all TypeConstraints are merged, handled and confirmed
@@ -57,6 +56,11 @@ public class TypeConstraint {
         // As setMaxSize depends on handleFieldAPSet
         handleFieldAPSet();
         setMaxSize();
+
+        if (innerSkeleton.fieldAccess.size() == 1
+                && innerSkeleton.fieldAccess.get(0L) != null) {
+            isPointerToPrimitive = true;
+        }
     }
 
     /**
@@ -116,11 +120,6 @@ public class TypeConstraint {
                 apSet.postHandle();
             }
         }
-
-        if (innerSkeleton.fieldAccess.size() == 1
-                && innerSkeleton.fieldAccess.get(0L) != null) {
-            mayPointerToPrimitive = true;
-        }
     }
 
     /**
@@ -141,8 +140,8 @@ public class TypeConstraint {
         if (finalPtrReference.get(0L) != null) {
             isMultiLevelMidPtr = true;
             mayPointerToPrimitiveArray = false;
-            mayPointerToPrimitive = false;
-            mayElementType = null;
+            isPointerToPrimitive = false;
+            finalType = null;
             return true;
         } else {
             isMultiLevelMidPtr = false;
@@ -229,7 +228,7 @@ public class TypeConstraint {
     }
 
     public boolean mayPointerToPrimitive() {
-        return mayPointerToPrimitive;
+        return isPointerToPrimitive;
     }
 
     public boolean hasOneField() {
@@ -249,6 +248,10 @@ public class TypeConstraint {
             }
         }
         return true;
+    }
+
+    public boolean noFieldAccess() {
+        return innerSkeleton.fieldAccess.isEmpty();
     }
 
     public boolean hasMultipleNonPointerSameSizeMembers() {
@@ -443,6 +446,9 @@ public class TypeConstraint {
         return null;
     }
 
+    public boolean isEmpty() {
+        return innerSkeleton.isEmpty();
+    }
 
     @Override
     public int hashCode() {
