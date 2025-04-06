@@ -3,6 +3,7 @@ import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
 import typeforge.analyzer.Generator;
+import typeforge.analyzer.ReTyper;
 import typeforge.analyzer.TypeAnalyzer;
 import typeforge.base.graph.CallGraph;
 import typeforge.utils.*;
@@ -48,12 +49,15 @@ public class TypeForge extends GhidraScript {
         analyzer.run();
         Global.typeAnalysisEndTime = System.currentTimeMillis();
 
-        Global.retypingBeginTime = System.currentTimeMillis();
-//        ReTyper reTyper = new ReTyper(interSolver.generator.getFinalSkeletons(),
-//                                interSolver.generator.getExprToSkeletonMap());
-//        reTyper.run();
-        Global.retypingEndTime = System.currentTimeMillis();
+        Generator generator = new Generator(analyzer.interSolver.typeHintCollector,
+                analyzer.interSolver.exprManager);
+        generator.run();
+        generator.explore();
 
+        Global.retypingBeginTime = System.currentTimeMillis();
+        ReTyper reTyper = new ReTyper(generator.getFinalSkeletons());
+        reTyper.run();
+        Global.retypingEndTime = System.currentTimeMillis();
 
         Logging.info("TypeForge","Type Analysis time: " + (Global.typeAnalysisEndTime - Global.typeAnalysisBeginTime) / 1000.00 + "s");
         Logging.info("TypeForge","ReTyping time: " + (Global.retypingEndTime - Global.retypingBeginTime) / 1000.00 + "s");

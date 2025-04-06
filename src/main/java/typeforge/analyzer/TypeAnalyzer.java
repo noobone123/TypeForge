@@ -14,7 +14,7 @@ import ghidra.program.model.address.Address;
 import java.util.*;
 
 public class TypeAnalyzer {
-    InterSolver interSolver;
+    public InterSolver interSolver;
     public Generator generator;
 
     /** The call graph of the whole program */
@@ -154,10 +154,6 @@ public class TypeAnalyzer {
         interSolver.buildWholeProgramTFG();
         interSolver.typeHintPropagation();
         // TODO: collect evil edges and evil nodes ...
-
-        generator = new Generator(interSolver.typeHintCollector, interSolver.exprManager);
-        generator.run();
-        generator.explore();
     }
 
     /**

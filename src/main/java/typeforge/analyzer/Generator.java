@@ -45,7 +45,7 @@ public class Generator {
     }
 
     public Set<TypeConstraint> getFinalSkeletons() {
-        return new HashSet<>(finalTypeConstraints);
+        return finalTypeConstraints;
     }
 
     public Map<NMAE, TypeConstraint> getExprToSkeletonMap() {

@@ -24,18 +24,20 @@ import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
-/**
- * We First Utilize readability assessment method to generate final Skeleton info json base on following Skeleton_uuid_morph.json
-*/
+
 public class ReTyper {
 
-    Set<TypeConstraint> sktSet;
-    Map<NMAE, TypeConstraint> exprSkeletonMap;
+    Set<TypeConstraint> constraints = new HashSet<>();
+    Map<NMAE, TypeConstraint> exprToConstraint = new HashMap<>();
     ObjectMapper mapper = new ObjectMapper();
 
-    public ReTyper(Set<TypeConstraint> typeConstraints, Map<NMAE, TypeConstraint> exprToSkeletonMap) {
-        sktSet = typeConstraints;
-        exprSkeletonMap = exprToSkeletonMap;
+    public ReTyper(Set<TypeConstraint> typeConstraints) {
+        constraints.addAll(typeConstraints);
+        for (var c: constraints) {
+            for (var expr: c.exprs) {
+                exprToConstraint.put(expr, c);
+            }
+        }
     }
 
     /**
@@ -47,27 +49,27 @@ public class ReTyper {
         /* Dump variable retype info */
         dumpVariableTypeInfo(Global.outputDirectory + "/" + "varType.json");
 
-        /* Dump skeletons info */
-        for (var skt: sktSet) {
+        /* Dump Constraint info */
+        for (var constraint: constraints) {
             String filePath;
             ObjectNode jsonRoot;
-            if (skt.hasDecompilerInferredCompositeType()) {
-                Logging.debug("ReTyper", "Skeleton has composite types inferred by decompiler");
-                filePath = Global.outputDirectory + "/" + skt.toString() + "_final_DI.json";
-                jsonRoot = generateSkeletonJson(skt, false, true);
+            if (constraint.hasDecompilerInferredCompositeType()) {
+                Logging.debug("ReTyper", "Constraints has composite types inferred by decompiler");
+                filePath = Global.outputDirectory + "/" + constraint.toString() + "_final_DI.json";
+                jsonRoot = generateConstraintJson(constraint, false, true);
             }
-            else if (skt.noMorphingTypes() && skt.finalType != null) {
-                Logging.debug("ReTyper", "Skeleton has final type information");
-                filePath = Global.outputDirectory + "/" + skt.toString() + "_final.json";
-                jsonRoot = generateSkeletonJson(skt, false, false);
+            else if (constraint.noMorphingTypes() && constraint.finalType != null) {
+                Logging.debug("ReTyper", "Constraints has final type information");
+                filePath = Global.outputDirectory + "/" + constraint.toString() + "_final.json";
+                jsonRoot = generateConstraintJson(constraint, false, false);
             } else {
-                Logging.debug("ReTyper", "Skeleton has morphing types");
-                if (!skt.globalMorphingTypes.isEmpty()) {
-                    filePath = Global.outputDirectory + "/" + skt.toString() + "_global_morph.json";
+                Logging.debug("ReTyper", "Constraints has morphing types");
+                if (!constraint.globalMorphingTypes.isEmpty()) {
+                    filePath = Global.outputDirectory + "/" + constraint.toString() + "_global_morph.json";
                 } else {
-                    filePath = Global.outputDirectory + "/" + skt.toString() + "_range_morph.json";
+                    filePath = Global.outputDirectory + "/" + constraint.toString() + "_range_morph.json";
                 }
-                jsonRoot = generateSkeletonJson(skt, true, false);
+                jsonRoot = generateConstraintJson(constraint, true, false);
             }
             if (jsonRoot != null) {
                 saveJsonToFile(filePath, jsonRoot);
@@ -76,59 +78,59 @@ public class ReTyper {
     }
 
 
-    public ObjectNode generateSkeletonJson(TypeConstraint skt, boolean isMorph, boolean isDecompilerInferred) {
+    public ObjectNode generateConstraintJson(TypeConstraint c, boolean isMorph, boolean isDecompilerInferred) {
         var jsonRoot = mapper.createObjectNode();
-        /* If the skeleton is not morphing, write the final type information */
+        /* If the Constraint is not morphing, write the final type information */
         if (isDecompilerInferred) {
             jsonRoot.put("desc", "DecompilerInferred");
-            jsonRoot.set("decompilerInferred", writeDecompilerInferred(skt));
+            jsonRoot.set("decompilerInferred", writeDecompilerInferred(c));
             return jsonRoot;
         }
 
         if (!isMorph) {
-            Logging.debug("GhidraScript", "Writing final type information for skeleton: " + skt.toString());
-            var finalDT = skt.finalType;
+            Logging.debug("ReTyper", "Writing final type information for Constraint: " + c.toString());
+            var finalDT = c.finalType;
             if (finalDT instanceof Structure) {
-                var typeRoot = processStructure(skt, (Structure) finalDT);
+                var typeRoot = processStructure(c, (Structure) finalDT);
                 jsonRoot.set(finalDT.getName(), typeRoot);
                 return jsonRoot;
             } else if (finalDT instanceof Union) {
                 jsonRoot.put("desc", "Union");
                 jsonRoot.set("layout", writeUnionLayout((Union) finalDT));
-                jsonRoot.set("decompilerInferred", writeDecompilerInferred(skt));
+                jsonRoot.set("decompilerInferred", writeDecompilerInferred(c));
                 return jsonRoot;
             } else {
-                Logging.error("GhidraScript", "Final type is not a structure or union");
+                Logging.error("ReTyper", "Final type is not a structure or union");
                 return null;
             }
 
-        /* If the skeleton is morphing, write the morphing type information */
+        /* If the Constraint is morphing, write the morphing type information */
         } else {
-            if (!skt.globalMorphingTypes.isEmpty() && !skt.rangeMorphingTypes.isEmpty()) {
-                Logging.error("GhidraScript", "Skeleton has both global and range morphing types");
+            if (!c.globalMorphingTypes.isEmpty() && !c.rangeMorphingTypes.isEmpty()) {
+                Logging.error("ReTyper", "Constraint has both global and range morphing types");
                 return null;
             }
             /* Handle global morphing types */
-            if (!skt.globalMorphingTypes.isEmpty()) {
-                Logging.debug("GhidraScript", "Writing global morphing types for skeleton: " + skt.toString());
+            if (!c.globalMorphingTypes.isEmpty()) {
+                Logging.debug("ReTyper", "Writing global morphing types for Constraint: " + c.toString());
                 var globalMorph = mapper.createObjectNode();
                 var retypeCandidates = new HashSet<NMAE>();
                 var reservedDT = new HashMap<HighSymbol, DataType>();
-                populateRetypedCandidates(skt, 0, 0, retypeCandidates, reservedDT);
+                populateRetypedCandidates(c, 0, 0, retypeCandidates, reservedDT);
 
                 /* Check if there are no retype candidates, if so, we add the marker */
                 if (retypeCandidates.isEmpty()) {
                     jsonRoot.put("desc", "NoRetypeCandidates");
                 }
-                for (var dt: skt.globalMorphingTypes) {
+                for (var dt: c.globalMorphingTypes) {
                     ObjectNode typeRoot;
                     if (dt instanceof Structure) {
-                        typeRoot = processStructure(skt, (Structure) dt);
+                        typeRoot = processStructure(c, (Structure) dt);
                     } else if (dt instanceof Union) {
                         typeRoot = mapper.createObjectNode();
                         typeRoot.put("desc", "Union");
                         typeRoot.set("layout", writeUnionLayout((Union) dt));
-                        typeRoot.set("decompilerInferred", writeDecompilerInferred(skt));
+                        typeRoot.set("decompilerInferred", writeDecompilerInferred(c));
                     } else {
                         typeRoot = mapper.createObjectNode();
                         typeRoot.put("desc", "Primitive");
@@ -149,9 +151,9 @@ public class ReTyper {
 
             /* Handle range morphing types */
             else {
-                Logging.debug("GhidraScript", "Writing range morphing types for skeleton: " + skt.toString());
+                Logging.debug("ReTyper", "Writing range morphing types for Constraint: " + c.toString());
                 var rangeMorph = mapper.createArrayNode();
-                for (var entry: skt.rangeMorphingTypes.entrySet()) {
+                for (var entry: c.rangeMorphingTypes.entrySet()) {
                     var rangeObj = mapper.createObjectNode();
                     var range = entry.getKey();
                     var morphingDTs = entry.getValue();
@@ -160,7 +162,7 @@ public class ReTyper {
 
                     var retypeCandidates = new HashSet<NMAE>();
                     var reservedDT = new HashMap<HighSymbol, DataType>();
-                    populateRetypedCandidates(skt, 0, 0, retypeCandidates, reservedDT);
+                    populateRetypedCandidates(c, 0, 0, retypeCandidates, reservedDT);
 
                     rangeObj.put("startOffset", String.format("0x%x", start));
                     rangeObj.put("endOffset", String.format("0x%x", end));
@@ -170,7 +172,7 @@ public class ReTyper {
                         rangeObj.put("desc", "NoRetypeCandidates");
                         var finalDT = getDataTypeHasMostMember(morphingDTs);
                         if (finalDT instanceof Structure struct) {
-                            var typeRoot = processStructure(skt, struct);
+                            var typeRoot = processStructure(c, struct);
                             rangeObj.set(finalDT.getName(), typeRoot);
                         }
                     }
@@ -180,7 +182,7 @@ public class ReTyper {
                         for (var dt: morphingDTs) {
                             var typeRoot = mapper.createObjectNode();
                             if (dt instanceof Structure) {
-                                typeRoot = processStructure(skt, (Structure) dt);
+                                typeRoot = processStructure(c, (Structure) dt);
                                 typeRoot.set("decompiledCode", writeRetypedCode(retypeCandidates, reservedDT, dt));
                             }
                             typesObj.set(dt.getName(), typeRoot);
@@ -199,17 +201,17 @@ public class ReTyper {
 
     private void dumpVariableTypeInfo(String filePath) {
         var jsonRoot = mapper.createObjectNode();
-        for (var expr: exprSkeletonMap.keySet()) {
-            if (!expr.isVariable()) continue;
+        for (var expr: exprToConstraint.keySet()) {
             if (expr.isGlobal()) continue;
+            if (!expr.isVariable()) continue;
 
             HighSymbol highSym;
-            boolean isRef = false;
+            boolean isStackAllocated = false;
             if (expr.isRootSymExpr()) {
                 highSym = expr.getRootHighSymbol();
             } else {
                 highSym = expr.getNestedExpr().getRootHighSymbol();
-                isRef = true;
+                isStackAllocated = true;
             }
 
             var func = highSym.getHighFunction().getFunction();
@@ -241,8 +243,8 @@ public class ReTyper {
                 var location = DecompilerHelper.Location.getLocation(highSym, paramName);
                 varInfo.put("Name", paramName);
                 varInfo.put("desc", "pointer");
-                var skeletonName = exprSkeletonMap.get(expr).toString();
-                varInfo.put("Skeleton", skeletonName);
+                var constraintName = exprToConstraint.get(expr).toString();
+                varInfo.put("TypeConstraint", constraintName);
                 if (location != null) {
                     targetInfo.set(location.toString(), varInfo);
                 }
@@ -251,14 +253,14 @@ public class ReTyper {
                 var varInfo = mapper.createObjectNode();
                 varInfo.put("Name", highSym.getName());
                 String desc;
-                if (isRef) {
-                    desc = "nested";
+                if (isStackAllocated) {
+                    desc = "stack";
                 } else {
                     desc = "pointer";
                 }
                 varInfo.put("desc", desc);
-                var skeletonName = exprSkeletonMap.get(expr).toString();
-                varInfo.put("Skeleton", skeletonName);
+                var constraintName = exprToConstraint.get(expr).toString();
+                varInfo.put("TypeConstraint", constraintName);
 
                 if (location != null) {
                     targetInfo.set(location.toString(), varInfo);
@@ -351,7 +353,7 @@ public class ReTyper {
         return layout;
     }
 
-    private ObjectNode writeDecompilerInferred(TypeConstraint skt) {
+    private ObjectNode writeDecompilerInferred(TypeConstraint c) {
         var inferred = mapper.createObjectNode();
         var array = mapper.createArrayNode();
         var composite = mapper.createArrayNode();
@@ -360,10 +362,10 @@ public class ReTyper {
         inferred.set("array", array);
         inferred.set("primitive", primitive);
 
-        if (skt.decompilerInferredCompositeTypes == null) {
+        if (c.decompilerInferredCompositeTypes == null) {
             return inferred;
         }
-        for (var dt: skt.decompilerInferredCompositeTypes) {
+        for (var dt: c.decompilerInferredCompositeTypes) {
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
                 var baseDT = ((Pointer) dt).getDataType();
                 composite.add(baseDT.getName());
