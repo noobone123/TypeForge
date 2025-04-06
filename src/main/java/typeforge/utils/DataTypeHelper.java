@@ -297,10 +297,12 @@ public class DataTypeHelper {
 
         Set<DataType> result = new HashSet<>();
         for (var dt : dwarfDataTypes) {
-            if (builtInLibTypeNames.contains(getBaseDataType(dt).getName())) {
+            // IMPORTANT: We need to check if the type is a typedef or not, and final UDT does not contain typedef
+            var baseDataType = getTypeDefBaseDataType(dt);
+            if (builtInLibTypeNames.contains(baseDataType.getName())) {
                 Logging.warn("DataTypeHelper", "Built-in lib type detected: " + dt.getName());
             } else {
-                result.add(dt);
+                result.add(baseDataType);
             }
         }
 
@@ -320,10 +322,8 @@ public class DataTypeHelper {
         for (var dt : allUserDefinedTypes) {
             if (dt instanceof Composite) {
                 result.add(dt);
-            } else if (dt instanceof FunctionDefinition) {
-                Logging.trace("DataTypeHelper", "FunctionDefinition detected: " + dt.getName());
             } else if (dt instanceof TypeDef typedef) {
-                var baseDT = typedef.getBaseDataType();
+                var baseDT = getTypeDefBaseDataType(typedef);
                 if (baseDT instanceof Composite) {
                     result.add(baseDT);
                 }

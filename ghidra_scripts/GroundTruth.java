@@ -7,6 +7,8 @@ import ghidra.program.model.data.*;
 import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
+import org.apache.commons.io.FileUtils;
+import org.python.antlr.ast.Str;
 import typeforge.utils.*;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;
@@ -15,6 +17,8 @@ import ghidra.util.task.TaskMonitor;
 import java.io.IOException;
 import java.util.*;
 import java.io.File;
+
+import static typeforge.utils.DataTypeHelper.getTypeDefBaseDataType;
 
 public class GroundTruth extends GhidraScript {
     private ObjectMapper objMapper;
@@ -40,7 +44,6 @@ public class GroundTruth extends GhidraScript {
         typeLibJsonRoot.set("UD_Union", objMapper.createObjectNode());
         typeLibJsonRoot.set("Lib_Struct", objMapper.createObjectNode());
         typeLibJsonRoot.set("Lib_Union", objMapper.createObjectNode());
-        typeLibJsonRoot.set("TypeDef", objMapper.createObjectNode());
 
         DataTypeHelper.prepare();
         Set<Function> meaningfulFunctions = FunctionHelper.getMeaningfulFunctions();
@@ -170,14 +173,11 @@ public class GroundTruth extends GhidraScript {
 
         for (var libDT: libTypes) {
             var dt = DataTypeHelper.getDataTypeByName(libDT);
-            if (dt instanceof TypeDef typeDef) {
-                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
-                dt = typeDef.getBaseDataType();
-            }
-            if (dt instanceof Structure) {
+            var baseDT = getTypeDefBaseDataType(dt);
+            if (baseDT instanceof Structure) {
                 var structObj = typeLibJsonRoot.get("Lib_Struct");
                 processStructure((Structure) dt, (ObjectNode) structObj);
-            } else if (dt instanceof Union) {
+            } else if (baseDT instanceof Union) {
                 var unionObj = typeLibJsonRoot.get("Lib_Union");
                 processUnion((Union) dt, (ObjectNode) unionObj);
             }
@@ -188,16 +188,11 @@ public class GroundTruth extends GhidraScript {
         String desc = varNode.get("desc").asText();
         if (desc.contains("Struct") || desc.contains("Union")) {
             String typeName = varNode.get("type").asText();
-            String baseTypeName = typeName;
-            /* Check if the typeName exists in the Typedef */
-            if (typeLibJsonRoot.get("TypeDef").has(typeName)) {
-                baseTypeName = typeLibJsonRoot.get("TypeDef").get(typeName).asText();
-            }
 
             /* Check if the baseTypeName exists in the userDefinedCompositeDT */
             boolean typeExists = false;
             for (var type : userDefinedCompositeDT) {
-                if (type.getName().equals(baseTypeName)) {
+                if (type.getName().equals(typeName)) {
                     typeExists = true;
                     break;
                 }
@@ -221,52 +216,39 @@ public class GroundTruth extends GhidraScript {
 
     private ObjectNode handleHighSymbol(HighSymbol highSymbol) {
         var result = objMapper.createObjectNode();
-        var dataType = highSymbol.getDataType();
-        var baseType = dataType;
+        var dataType = getTypeDefBaseDataType(highSymbol.getDataType());
         var name = highSymbol.getName();
 
         result.put("Name", name);
-        if (dataType instanceof TypeDef typeDef) {
-            baseType = typeDef.getBaseDataType();
-            ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), baseType.getName());
-        }
+        if (dataType instanceof Pointer ptr) {
+            var ptrLevel = 1;
+            var ptrEE = getTypeDefBaseDataType(ptr.getDataType());
+            while (ptrEE instanceof Pointer p) {
+                ptrEE = getTypeDefBaseDataType(p.getDataType());
+                ptrLevel++;
+            }
 
-        if (dataType instanceof Pointer) {
-            var ptrLevel = 0;
-            DataType ptrEEBase;
-            while (dataType instanceof Pointer ptrDT) {
-                dataType = ptrDT.getDataType();
-                ptrLevel ++;
-            }
-            ptrEEBase = dataType;
-            if (dataType instanceof TypeDef typeDef) {
-                ptrEEBase = typeDef.getBaseDataType();
-                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), ptrEEBase.getName());
-            }
-            if (ptrEEBase instanceof Structure) {
+            if (ptrEE instanceof Structure) {
                 result.put("desc", "PointerToStruct");
-            } else if (ptrEEBase instanceof Union) {
+            } else if (ptrEE instanceof Union) {
                 result.put("desc", "PointerToUnion");
             } else {
                 result.put("desc", "PointerToPrimitive");
             }
-            result.put("type", dataType.getName());
+            result.put("type", ptrEE.getName());
             result.put("ptrLevel", ptrLevel);
-        } else if (baseType instanceof Structure) {
-            result.put("desc", "Struct");
+        } else if (dataType instanceof Structure) {
+            result.put("desc", "StackStruct");
             result.put("type", dataType.getName());
-        } else if (baseType instanceof Union) {
-            result.put("desc", "Union");
+        } else if (dataType instanceof Union) {
+            result.put("desc", "StackUnion");
             result.put("type", dataType.getName());
         } else {
             result.put("desc", "Primitive");
             result.put("type", dataType.getName());
         }
-
         return result;
     }
-
-
 
     private void processStructure(Structure structure, ObjectNode structObj) {
         Logging.debug("GhidraScript","Structure: " + structure.getName());
@@ -279,73 +261,28 @@ public class GroundTruth extends GhidraScript {
             var dataType = component.getDataType();
 
             if (dataType instanceof TypeDef typeDef) {
-                Logging.debug("GhidraScript", String.format("TypeDef detected at offset 0x%x", offset));
-                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
-                dataType = typeDef.getBaseDataType();
-                finalComponentMap.put(offset, dataType);
+                var baseType = getTypeDefBaseDataType(typeDef);
+                finalComponentMap.put(offset, baseType);
             } else {
                 finalComponentMap.put(offset, dataType);
             }
         }
 
         var layoutObj = objMapper.createObjectNode();
-        var PtrRelationObj = objMapper.createObjectNode();
-        var NestRelationObj = objMapper.createObjectNode();
 
         /* Post Process */
+        // Now component map has no typedef
         for (var component: finalComponentMap.entrySet()) {
             var fieldObj = objMapper.createObjectNode();
             var offset = component.getKey();
             var dataType = component.getValue();
 
             /* Handle Layout */
-            if (dataType instanceof Structure) {
-                fieldObj.put("desc", "Nested");
-            } else if (dataType instanceof Union) {
-                fieldObj.put("desc", "Union");
-            } else if (dataType instanceof Array) {
-                fieldObj.put("desc", "Array");
-            } else if (dataType instanceof Pointer) {
-                fieldObj.put("desc", "Pointer");
-            } else {
-                fieldObj.put("desc", "Primitive");
-            }
-            fieldObj.put("size", dataType.getLength());
-            fieldObj.put("type", dataType.getName());
+            processMember(dataType, fieldObj);
             layoutObj.set("0x" + Integer.toHexString(offset), fieldObj);
-
-            /* Handle Relation */
-            if (dataType instanceof Pointer) {
-                int ptrLevel = 0;
-                var ptrEE = dataType;
-                while (ptrEE instanceof Pointer ptrDT) {
-                    ptrEE = ptrDT.getDataType();
-                    ptrLevel ++;
-                }
-
-                if (ptrEE instanceof TypeDef typeDef) {
-                    ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
-                    ptrEE = ((TypeDef) ptrEE).getBaseDataType();
-                }
-                if (ptrEE instanceof Structure || ptrEE instanceof Union) {
-                    var entry = objMapper.createObjectNode();
-                    entry.put("refType", ptrEE.getName());
-                    entry.put("ptrLevel", ptrLevel);
-                    PtrRelationObj.set("0x" + Integer.toHexString(offset), entry);
-                }
-            } else {
-                /* Handle Nest Relation */
-                if (dataType instanceof Structure) {
-                    var entry = objMapper.createObjectNode();
-                    entry.put("nestingType", dataType.getName());
-                    NestRelationObj.set("0x" + Integer.toHexString(offset), entry);
-                }
-            }
         }
 
         structNode.set("layout", layoutObj);
-        structNode.set("ptrRelation", PtrRelationObj);
-        structNode.set("nestRelation", NestRelationObj);
         structObj.set(structure.getName(), structNode);
     }
 
@@ -355,21 +292,59 @@ public class GroundTruth extends GhidraScript {
 
         for (var component: union.getComponents()) {
             var memberNode = objMapper.createObjectNode();
-            var dataType = component.getDataType();
-
-            if (dataType instanceof TypeDef typeDef) {
-                Logging.debug("GhidraScript", "TypeDef detected");
-                ((ObjectNode) typeLibJsonRoot.get("TypeDef")).put(typeDef.getName(), typeDef.getBaseDataType().getName());
-                dataType = typeDef.getBaseDataType();
-            }
-
-            memberNode.put("Size", dataType.getLength());
-            memberNode.put("Type", dataType.getName());
-            memberNode.put("Name", component.getFieldName());
+            processMember(component.getDataType(), memberNode);
             unionNode.add(memberNode);
         }
 
         unionObj.set(union.getName(), unionNode);
+    }
+
+    private void processMember(DataType memberType, ObjectNode memberNode) {
+        memberType = getTypeDefBaseDataType(memberType);
+        if (memberType instanceof Structure) {
+            memberNode.put("desc", "NestedStruct");
+            memberNode.put("type", memberType.getName());
+            memberNode.put("size", memberType.getLength());
+        } else if (memberType instanceof Union) {
+            memberNode.put("desc", "NestedUnion");
+            memberNode.put("type", memberType.getName());
+            memberNode.put("size", memberType.getLength());
+        } else if (memberType instanceof Array arr) {
+            var elementType = getTypeDefBaseDataType(arr.getDataType());
+            if (elementType instanceof Structure) {
+                memberNode.put("desc", "ArrayOfStruct");
+            } else if (arr.getDataType() instanceof Union) {
+                memberNode.put("desc", "ArrayOfUnion");
+            } else {
+                memberNode.put("desc", "ArrayOfPrimitive");
+            }
+            memberNode.put("type", arr.getName());
+            memberNode.put("size", arr.getLength());
+            memberNode.put("element", elementType.getName());
+            memberNode.put("elementSize", elementType.getLength());
+        } else if (memberType instanceof Pointer ptr) {
+            var ptrEE = getTypeDefBaseDataType(ptr.getDataType());
+            if (ptrEE instanceof Structure) {
+                memberNode.put("desc", "PointerToStruct");
+            } else if (ptrEE instanceof Union) {
+                memberNode.put("desc", "PointerToUnion");
+            } else {
+                memberNode.put("desc", "PointerToPrimitive");
+            }
+            memberNode.put("type", ptr.getName());
+            memberNode.put("size", ptr.getLength());
+            int ptrLevel = 1;
+            while (ptrEE instanceof Pointer p) {
+                ptrEE = getTypeDefBaseDataType(p.getDataType());
+                ptrLevel++;
+            }
+            memberNode.put("refType", ptrEE.getName());
+            memberNode.put("ptrLevel", ptrLevel);
+        } else {
+            memberNode.put("desc", "Primitive");
+            memberNode.put("size", memberType.getLength());
+            memberNode.put("type", memberType.getName());
+        }
     }
 
 
@@ -416,7 +391,7 @@ public class GroundTruth extends GhidraScript {
 
     protected void prepareOutputDirectory() {
         if (Global.outputDirectory == null) {
-            Logging.error("GhidraScript","Output directory not specified");
+            Logging.error("TypeForge","Output directory not specified");
             System.exit(1);
         }
 
@@ -424,8 +399,14 @@ public class GroundTruth extends GhidraScript {
         // If the output directory does not exist, create it
         if (!outputDir.exists()) {
             if (!outputDir.mkdirs()) {
-                Logging.error("GhidraScript", "Failed to create output directory");
+                Logging.error("TypeForge", "Failed to create output directory");
                 System.exit(1);
+            }
+        } else {
+            try {
+                FileUtils.cleanDirectory(outputDir);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
             }
         }
     }
