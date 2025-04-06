@@ -38,9 +38,9 @@ public class TypeHintCollector {
         handleMayPrimitiveConstraints();
         handleTypeAlias();
 
-        handlePtrReference();
-//        handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
-//        handleMemberConflict();
+        handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
+        // handlePtrReference();
+        // handleMemberConflict();
     }
 
     public void buildTypeConstraintsBySkeletons() {
@@ -179,6 +179,98 @@ public class TypeHintCollector {
         }
     }
 
+
+    /**
+     * Handle May Nesting Relationships between Skeletons
+     * @param exprsAsArgument SymbolExpr that used as arguments in callSite.
+     */
+    public void handleNesting(Set<NMAE> exprsAsArgument) {
+        /* Add MayNestedSkeleton */
+        for (var expr: exprsAsArgument) {
+            if (!exprToConstraintMap.containsKey(expr)) continue;
+            /* If expr is a SymbolExpr like `base + offset`, we seem it as a may nested expr */
+            if (expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
+                var base = expr.getBase();
+                var offset = expr.getOffset().getConstant();
+
+                if (Global.currentProgram.getDefaultPointerSize() > 0
+                        && offset % Global.currentProgram.getDefaultPointerSize() != 0) {
+                    Logging.debug("TypeHintCollector",
+                            String.format("Offset 0x%x is not aligned (Nested) with pointer size, skip it.", offset));
+                    continue;
+                }
+
+                if (exprToConstraintMap.containsKey(base)) {
+                    Logging.debug("TypeHintCollector",
+                            String.format("Offset 0x%x is aligned (Nested) with pointer size.", offset));
+                    var nester = exprToConstraintMap.get(base);
+                    var nestee = exprToConstraintMap.get(expr);
+                    if (nestee.mayPointerToPrimitive) {
+                        Logging.debug("TypeHintCollector", String.format("Nestee may be a pointer to primitive type: %s", nestee));
+                        continue;
+                    }
+                    // TODO: do not do that, just try to create a new offset resized nestee.
+                    if (TypeConstraint.checkNestConflict(nester, nestee, offset, false)) {
+                        nester.mayNestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
+                                .add(nestee);
+                        Logging.debug("TypeHintCollector", String.format("No conflicts when nest %s and %s", nester, nestee));
+                    } else {
+                        Logging.debug("TypeHintCollector", String.format("Can not nest %s and %s", nester, nestee));
+                    }
+                }
+            }
+        }
+
+        /* Remove skeletons that should not be nested */
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            if (!constraint.hasNestedConstraint()) continue;
+        }
+
+        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
+            if (constraint.hasNestedConstraint()) {
+                var iterator = constraint.mayNestedConstraint.keySet().iterator();
+                while (iterator.hasNext()) {
+                    var offset = iterator.next();
+                    var removeCandidates = new HashSet<TypeConstraint>();
+                    for (var s: constraint.mayNestedConstraint.get(offset)) {
+                        if (s.isMultiLevelMidPtr || s.mayPointerToPrimitive || constraint == s) {
+                            removeCandidates.add(s);
+                        }
+                    }
+                    if (!removeCandidates.isEmpty()) {
+                        constraint.mayNestedConstraint.get(offset).removeAll(removeCandidates);
+                        if (constraint.mayNestedConstraint.get(offset).isEmpty()) {
+                            iterator.remove();
+                        }
+                        Logging.debug("TypeHintCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
+                    }
+                }
+            }
+        }
+
+        /* Handling mayNested Skeleton and build the finalNestedSkeleton */
+        for (var nester: new HashSet<>(exprToConstraintMap.values())) {
+            for (var entry: nester.mayNestedConstraint.entrySet()) {
+                // TODO: consider try merging constraints of nestedConstraints ?
+                var offset = entry.getKey();
+                var nestedConstraints = entry.getValue();
+                TypeConstraint finalNestedCandidate = null;
+                for (var nestee: nestedConstraints) {
+                    tryPopulateNester(nester, offset, nestee);
+                    if (finalNestedCandidate == null) {
+                        finalNestedCandidate = nestee;
+                    } else {
+                        if (nestee.variables.size() >= finalNestedCandidate.variables.size()) {
+                            finalNestedCandidate = nestee;
+                        }
+                    }
+                }
+                nester.finalNestedConstraint.put(offset, finalNestedCandidate);
+                // nester.updateNestedRange(offset, offset + finalNestedCandidate.setMaxSize());
+            }
+        }
+    }
+
     /**
      * For Skeletons with multiple constraints, we choose the most visited one as the final constraint.
      */
@@ -311,83 +403,6 @@ public class TypeHintCollector {
 
             for (var offset: removeCandidate) {
                 constraint.innerSkeleton.fieldAccess.remove(offset);
-            }
-        }
-    }
-
-    /**
-     * Handle May Nesting Relationships between Skeletons
-     * @param exprsAsArgument SymbolExpr that used as arguments in callSite.
-     */
-    // TODO: avoid nesting of chars, these primitive types should be further identified ...
-    public void handleNesting(Set<NMAE> exprsAsArgument) {
-        /* Add MayNestedSkeleton */
-        for (var expr: exprsAsArgument) {
-            if (!exprToConstraintMap.containsKey(expr)) continue;
-            /* If expr is a SymbolExpr like `base + offset`, we seem it as a may nested expr */
-            if (expr.hasBase() && expr.hasOffset() && expr.getOffset().isNoZeroConst()) {
-                var base = expr.getBase();
-                var offset = expr.getOffset().getConstant();
-                if (exprToConstraintMap.containsKey(base)) {
-                    var nester = exprToConstraintMap.get(base);
-                    var nestee = exprToConstraintMap.get(expr);
-                    if (TypeConstraint.checkNestConflict(nester, nestee, offset, false)) {
-                        nester.mayNestedConstraint.computeIfAbsent(offset, k -> new HashSet<>())
-                                .add(nestee);
-                        Logging.debug("TypeHintCollector", String.format("No conflicts when nest %s and %s", nester, nestee));
-                    } else {
-                        Logging.debug("TypeHintCollector", String.format("Can not nest %s and %s", nester, nestee));
-                    }
-                }
-            }
-        }
-
-        /* Remove skeletons that should not be nested */
-        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (!constraint.hasNestedConstraint()) continue;
-        }
-
-        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (constraint.hasNestedConstraint()) {
-                var iterator = constraint.mayNestedConstraint.keySet().iterator();
-                while (iterator.hasNext()) {
-                    var offset = iterator.next();
-                    var removeCandidates = new HashSet<TypeConstraint>();
-                    for (var s: constraint.mayNestedConstraint.get(offset)) {
-                        if (s.isMultiLevelMidPtr || s.mayPointerToPrimitive || constraint == s) {
-                            removeCandidates.add(s);
-                        }
-                    }
-                    if (!removeCandidates.isEmpty()) {
-                        constraint.mayNestedConstraint.get(offset).removeAll(removeCandidates);
-                        if (constraint.mayNestedConstraint.get(offset).isEmpty()) {
-                            iterator.remove();
-                        }
-                        Logging.debug("TypeHintCollector", String.format("Remove Unreasonable nested skeleton: %s", removeCandidates));
-                    }
-                }
-            }
-        }
-
-        /* Handling mayNested Skeleton and build the finalNestedSkeleton */
-        for (var nester: new HashSet<>(exprToConstraintMap.values())) {
-            for (var entry: nester.mayNestedConstraint.entrySet()) {
-                // TODO: consider try merging constraints of nestedConstraints ?
-                var offset = entry.getKey();
-                var nestedConstraints = entry.getValue();
-                TypeConstraint finalNestedCandidate = null;
-                for (var nestee: nestedConstraints) {
-                    tryPopulateNester(nester, offset, nestee);
-                    if (finalNestedCandidate == null) {
-                        finalNestedCandidate = nestee;
-                    } else {
-                        if (nestee.variables.size() >= finalNestedCandidate.variables.size()) {
-                            finalNestedCandidate = nestee;
-                        }
-                    }
-                }
-                nester.finalNestedConstraint.put(offset, finalNestedCandidate);
-                // nester.updateNestedRange(offset, offset + finalNestedCandidate.setMaxSize());
             }
         }
     }
