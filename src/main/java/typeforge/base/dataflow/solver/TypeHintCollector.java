@@ -20,10 +20,8 @@ public class TypeHintCollector {
 
     /* Map[SymbolExpr, Skeleton]: this is final data structure, very important */
     public final Map<NMAE, TypeConstraint> exprToConstraintMap;
-    private final Set<TypeConstraint> typeConstraints;
 
     public TypeHintCollector(InterSolver interSolver) {
-        this.typeConstraints = new HashSet<>();
         this.exprToConstraintMap = new HashMap<>();
 
         this.interSolver = interSolver;
@@ -76,8 +74,7 @@ public class TypeHintCollector {
             }
 
             var constraint = new TypeConstraint(finalSkeleton, graph.getNodes());
-            typeConstraints.add(constraint);
-            for (var expr: graph.getNodes()) {
+            for (var expr: constraint.exprs) {
                 exprToConstraintMap.put(expr, constraint);
             }
 
@@ -155,18 +152,16 @@ public class TypeHintCollector {
             for (var alias: queryAliases) {
                 // Mark sure alias and query are all in union find
                 if (shareSameType.contains(alias) && shareSameType.contains(query)) {
-                    // If already in the same cluster, skip it.
-                    if (shareSameType.connected(alias, query)) continue;
-
                     var aliasConstraint = exprToConstraintMap.get(alias);
                     var queryConstraint = exprToConstraintMap.get(query);
 
-                    if (aliasConstraint.equals(queryConstraint)) continue;
                     // If alias or query is a pointer to primitive type, we do not merged them.
                     if (aliasConstraint.mayPointerToPrimitive || queryConstraint.mayPointerToPrimitive) {
                         Logging.debug("TypeHintCollector", String.format("Detected Pointer to Primitive Type Alias: %s <--> %s", alias, query));
                         continue;
                     }
+                    // If already in the same cluster, skip it.
+                    if (aliasConstraint.equals(queryConstraint)) continue;
 
                     var result = TypeConstraint.mergeConstraint(aliasConstraint, queryConstraint, false);
                     if (result.isEmpty()) {
@@ -178,9 +173,6 @@ public class TypeHintCollector {
                         for (var e: mergedConstraint.exprs) {
                             exprToConstraintMap.put(e, mergedConstraint);
                         }
-                        typeConstraints.remove(aliasConstraint);
-                        typeConstraints.remove(queryConstraint);
-                        typeConstraints.add(mergedConstraint);
                     }
                 }
             }
