@@ -100,11 +100,11 @@ public class TypeHintCollector {
      * We Consider `*(a+0x8)` and `*(b+0x8)` has same TypeConstraint and merge them.
      */
     public void handleTypeAlias() {
-        /* initialize shareSameType using Skeleton's expressions */
-        var shareSameType = new UnionFind<NMAE>();
+        /* initialize unionFind using Skeleton's expressions */
+        var unionFind = new UnionFind<NMAE>();
         for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
             // In theory, nodes from the same TFG should be connected in the same cluster in UnionFind.
-            shareSameType.initializeWithCluster(constraint.exprs);
+            unionFind.initializeWithCluster(constraint.exprs);
         }
 
         // The purpose of handling type alias is to merge composite type layouts.
@@ -112,70 +112,70 @@ public class TypeHintCollector {
         // For example, the composite type corresponding to `*(a+0x8)` is the pointer reference at the 0x8 offset of `a`.
         // It is worth mentioning that the offset of such pointer references is aligned with the default pointer size.
         // Therefore, for other fields such as `*(a+0x1)`, they are primitive types and do not require Alias calculation.
-        for (var expr: exprToConstraintMap.keySet()) {
-            if (expr.isDereference()) {
-                parseAndSetTypeAlias(expr, shareSameType);
+        for (var query: exprToConstraintMap.keySet()) {
+            if (query.isDereference()) {
+                var queryConstraint = exprToConstraintMap.get(query);
+                parseAndSetTypeAlias(query, queryConstraint, unionFind);
             }
         }
     }
 
-    private void parseAndSetTypeAlias(NMAE query, UnionFind<NMAE> shareSameType) {
-        // IMPORTANT: this algorithm is not perfect, it didn't run until a fixed point is reached.
-        // So UnionFind may cause some inconsistency problem.
+    private void parseAndSetTypeAlias(NMAE query, TypeConstraint queryConstraint, UnionFind<NMAE> unionFind) {
+        /* No need to handle pointer to primitive type or primitive array */
+        if (queryConstraint.isPointerToPrimitive || queryConstraint.mayPointerToPrimitiveArray || queryConstraint.noFieldAccess()) {
+            return;
+        }
+
         var parsed = ParsedExpr.parseFieldAccessExpr(query);
         if (parsed.isEmpty()) { return; }
         var parsedExpr = parsed.get();
         var base = parsedExpr.base;
         var offset = parsedExpr.offsetValue;
         // IMPORTANT ...
-        if (Global.currentProgram.getDefaultPointerSize() > 0) {
-            if (offset % Global.currentProgram.getDefaultPointerSize() != 0) {
-                return;
-            }
+        if (Global.currentProgram.getDefaultPointerSize() > 0 && offset % Global.currentProgram.getDefaultPointerSize() != 0) {
+            return;
         }
         if (base == null) { return; }
 
-        if (parsedExpr.base.isDereference()) {
-            parseAndSetTypeAlias(parsedExpr.base, shareSameType);
+        if (base.isDereference()) {
+            var baseConstraint = exprToConstraintMap.get(base);
+            if (baseConstraint != null) {
+                parseAndSetTypeAlias(base, baseConstraint, unionFind);
+            }
         }
 
-        if (!shareSameType.contains(base)) {
-            return;
-        }
+        if (!unionFind.contains(base)) { return; }
 
-        // IMPORTANT: be careful, now new built shareSameType can not ensure that
+        // IMPORTANT: be careful, now new built unionFind can not ensure that
         // all alias expr has no conflict, so we need to check it.
         // For example: if we are finding alias of *(a + 0x4),
-        //  shareSameType.getCluster(base) can get all exprs that share the same type with `a` (like b, c),
+        //  unionFind.getCluster(base) can get all exprs that share the same type with `a` (like b, c),
         //  then we further use `exprManager.getFieldExprsByOffset(alias, offset)` to find *(b + 0x4) and *(c + 0x4) ...
         //  If these expr exists, they can be considered as alias of *(a + 0x4).
-        for (var node: shareSameType.getCluster(base)) {
+        for (var node: unionFind.getCluster(base)) {
             var res = exprManager.getFieldExprsByOffset(node, offset);
             if (res.isEmpty()) { continue; }
-            var queryAliases = res.get();
-            for (var alias: queryAliases) {
+            var foundAliases = res.get();
+            for (var alias: foundAliases) {
                 // Mark sure alias and query are all in union find
-                if (shareSameType.contains(alias) && shareSameType.contains(query)) {
+                if (unionFind.contains(alias) && unionFind.contains(query)) {
                     var aliasConstraint = exprToConstraintMap.get(alias);
-                    var queryConstraint = exprToConstraintMap.get(query);
-
-                    if (aliasConstraint.isPointerToPrimitive || queryConstraint.isPointerToPrimitive
-                        || aliasConstraint.mayPointerToPrimitiveArray || queryConstraint.mayPointerToPrimitiveArray) {
-                        continue;
-                    }
-                    if (aliasConstraint.noFieldAccess() || queryConstraint.noFieldAccess()) {
-                        continue;
-                    }
-
                     // If already in the same cluster, skip it.
                     if (aliasConstraint.equals(queryConstraint)) continue;
+                    // If alias is a pointer to primitive type or primitive array, skip it.
+                    if (aliasConstraint.isPointerToPrimitive
+                        || aliasConstraint.mayPointerToPrimitiveArray
+                        || aliasConstraint.noFieldAccess()) {
+                        continue;
+                    }
 
+                    // Try to merge the two constraints
                     var result = TypeConstraint.mergeConstraint(aliasConstraint, queryConstraint, false);
                     if (result.isEmpty()) {
                         Logging.debug("TypeHintCollector", String.format("Detected Conflict Type Alias: %s <--> %s", alias, query));
                     } else {
                         Logging.debug("TypeHintCollector", String.format("Detect Regular Type Alias: %s <--> %s", alias, query));
-                        shareSameType.union(alias, query);
+                        unionFind.union(alias, query);
                         var mergedConstraint = result.get();
                         for (var e: mergedConstraint.exprs) {
                             exprToConstraintMap.put(e, mergedConstraint);
@@ -185,7 +185,6 @@ public class TypeHintCollector {
             }
         }
     }
-
 
     /**
      * Handle May Nesting Relationships between Skeletons
@@ -442,7 +441,7 @@ public class TypeHintCollector {
                 continue;
             }
 
-            // If there are multiple stack allocated arrays and variables in the constraint,
+            // If there are only stack allocated arrays in the decompiler-inferred constraint,
             // still consider its may be a pointer to primitive type.
             if (c.hasDecompilerInferredCompositeType()) {
                 var inferredTypes = c.decompilerInferredCompositeTypes;
