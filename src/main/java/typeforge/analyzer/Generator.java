@@ -144,6 +144,7 @@ public class Generator {
 
     private void handleMayPrimitiveArray(TypeConstraint constraint) {
         var aps = constraint.innerSkeleton.fieldAccess.get(0L);
+        if (aps == null) { return; }
         var elementType = aps.mostAccessedDT;
 
         var componentMap = getComponentMapByMostAccessed(constraint);
