@@ -38,9 +38,8 @@ public class TypeHintCollector {
         buildTypeConstraintsBySkeletons();
         confirmFinalConstraint();
         handleMayPrimitiveConstraints();
+        handleTypeAlias();
 
-//
-//        handleTypeAlias();
 //        handlePtrReference();
 //        handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
 //        handleMemberConflict();
@@ -107,6 +106,11 @@ public class TypeHintCollector {
             shareSameType.initializeWithCluster(constraint.exprs);
         }
 
+        // The purpose of handling type alias is to merge composite type layouts.
+        // We need to note that if a member access expression is of composite types, it means it is a pointer reference to another composite type,
+        // For example, the composite type corresponding to `*(a+0x8)` is the pointer reference at the 0x8 offset of `a`.
+        // It is worth mentioning that the offset of such pointer references is aligned with the default pointer size.
+        // Therefore, for other fields such as `*(a+0x1)`, they are primitive types and do not require Alias calculation.
         for (var expr: exprToConstraintMap.keySet()) {
             if (expr.isDereference()) {
                 parseAndSetTypeAlias(expr, shareSameType);
@@ -122,6 +126,12 @@ public class TypeHintCollector {
         var parsedExpr = parsed.get();
         var base = parsedExpr.base;
         var offset = parsedExpr.offsetValue;
+        // IMPORTANT ...
+        if (Global.currentProgram.getDefaultPointerSize() > 0) {
+            if (offset % Global.currentProgram.getDefaultPointerSize() != 0) {
+                return;
+            }
+        }
         if (base == null) { return; }
 
         if (parsedExpr.base.isDereference()) {
@@ -152,31 +162,25 @@ public class TypeHintCollector {
                     var queryConstraint = exprToConstraintMap.get(query);
 
                     if (aliasConstraint.equals(queryConstraint)) continue;
-
-                    // TODO: also checking polyTypes.
-                    if (TypeConstraint.checkConstraintConflict(aliasConstraint, queryConstraint, false)) {
-                        Logging.debug("TypeHintCollector", String.format("Detected Conflict Type Alias: %s <--> %s", alias, query));
+                    // If alias or query is a pointer to primitive type, we do not merged them.
+                    if (aliasConstraint.mayPointerToPrimitive || queryConstraint.mayPointerToPrimitive) {
+                        Logging.debug("TypeHintCollector", String.format("Detected Pointer to Primitive Type Alias: %s <--> %s", alias, query));
                         continue;
                     }
 
-                    Logging.debug("TypeHintCollector", String.format("Detect Regular Type Alias: %s <--> %s", alias, query));
-                    shareSameType.union(alias, query);
-
-                    Optional<TypeConstraint> mergedRes;
-
-                    mergedRes = TypeConstraint.mergeConstraint(aliasConstraint, queryConstraint, false);
-
-                    if (mergedRes.isPresent()) {
-                        var mergedTypeConstraint = mergedRes.get();
-                        /* update exprToSkeletonMap */
-                        for (var e: mergedTypeConstraint.exprs) {
-                            exprToConstraintMap.put(e, mergedTypeConstraint);
+                    var result = TypeConstraint.mergeConstraint(aliasConstraint, queryConstraint, false);
+                    if (result.isEmpty()) {
+                        Logging.debug("TypeHintCollector", String.format("Detected Conflict Type Alias: %s <--> %s", alias, query));
+                    } else {
+                        Logging.debug("TypeHintCollector", String.format("Detect Regular Type Alias: %s <--> %s", alias, query));
+                        shareSameType.union(alias, query);
+                        var mergedConstraint = result.get();
+                        for (var e: mergedConstraint.exprs) {
+                            exprToConstraintMap.put(e, mergedConstraint);
                         }
                         typeConstraints.remove(aliasConstraint);
                         typeConstraints.remove(queryConstraint);
-                        typeConstraints.add(mergedTypeConstraint);
-                    } else {
-                        Logging.warn("TypeHintCollector", String.format("Failed to merge alias constraint of %s and %s", alias, query));
+                        typeConstraints.add(mergedConstraint);
                     }
                 }
             }

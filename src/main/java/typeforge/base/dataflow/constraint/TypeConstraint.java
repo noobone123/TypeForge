@@ -99,9 +99,6 @@ public class TypeConstraint {
         newTypeConstraint.finalNestedConstraint.putAll(tc1.finalNestedConstraint);
         newTypeConstraint.finalNestedConstraint.putAll(tc2.finalNestedConstraint);
 
-        newTypeConstraint.mayPointerToPrimitive = tc1.mayPointerToPrimitive || tc2.mayPointerToPrimitive;
-        newTypeConstraint.isMultiLevelMidPtr = tc1.isMultiLevelMidPtr || tc2.isMultiLevelMidPtr;
-
         return Optional.of(newTypeConstraint);
     }
 
@@ -110,7 +107,6 @@ public class TypeConstraint {
      */
     private void handleFieldAPSet() {
         for (var entry: innerSkeleton.fieldAccess.entrySet()) {
-            var offset = entry.getKey();
             var apSet = entry.getValue();
             if (apSet != null) {
                 apSet.postHandle();
