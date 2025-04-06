@@ -34,17 +34,16 @@ public class TypeHintCollector {
     public void run() {
         // Since EvilEdges has been removed during aforementioned const propagation and layout propagation,
         // Now we need to aggregate the type hints from connected components in the whole-program TFG.
+        // IMPORTANT: Following handlers' order should not be changed.
         buildTypeConstraintsBySkeletons();
-        handleTypeAlias();
         confirmFinalConstraint();
-        handleAPSets();
-        addDecompilerInferredTypes();
+        handleMayPrimitiveConstraints();
 
-        // Following handlers' order should not be changed.
-        handlePtrReference();
-        handleMustPrimitiveSkeleton();
-        handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
-        handleMemberConflict();
+//
+//        handleTypeAlias();
+//        handlePtrReference();
+//        handleNesting(exprManager.getExprsByAttribute(NMAE.Attribute.ARGUMENT));
+//        handleMemberConflict();
     }
 
     public void buildTypeConstraintsBySkeletons() {
@@ -77,7 +76,7 @@ public class TypeHintCollector {
                 continue;
             }
 
-            var constraint = new TypeConstraint(finalSkeleton, graph.getNodes(), true);
+            var constraint = new TypeConstraint(finalSkeleton, graph.getNodes());
             typeConstraints.add(constraint);
             for (var expr: graph.getNodes()) {
                 exprToConstraintMap.put(expr, constraint);
@@ -165,7 +164,7 @@ public class TypeHintCollector {
 
                     Optional<TypeConstraint> mergedRes;
 
-                    mergedRes = TypeConstraint.mergeConstraints(aliasConstraint, queryConstraint, true, false);
+                    mergedRes = TypeConstraint.mergeConstraint(aliasConstraint, queryConstraint, false);
 
                     if (mergedRes.isPresent()) {
                         var mergedTypeConstraint = mergedRes.get();
@@ -189,29 +188,8 @@ public class TypeHintCollector {
      */
     public void confirmFinalConstraint() {
         for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (constraint.finalSkeleton != null) {
-                continue;
-            } else if (!constraint.hasMultiSkeleton) {
-                Logging.warn("TypeHintCollector",
-                        String.format("TypeConstraint %s has no final skeleton, but it is not multi skeleton", constraint));
-                constraint.finalSkeleton = constraint.skeletons.iterator().next();
-            }
-
-            // Following Should not happen in theory
-            int maxVisit = 0;
-            Skeleton maxVisitConstraint = null;
-            for (var con: constraint.skeletons) {
-                var curVisit = con.getAllFieldsAccessCount();
-                if (curVisit > maxVisit) {
-                    maxVisit = curVisit;
-                    maxVisitConstraint = con;
-                }
-            }
-
-            if (maxVisitConstraint != null) {
-                constraint.hasMultiSkeleton = false;
-                constraint.finalSkeleton = maxVisitConstraint;
-                Logging.debug("TypeHintCollector", String.format("Choose the most visited constraint:\n%s", maxVisitConstraint));
+            if (constraint.innerSkeleton == null) {
+                Logging.error("TypeHintCollector", "Inner Skeleton is null, please check the code.");
             }
         }
     }
@@ -264,9 +242,9 @@ public class TypeHintCollector {
                     /* For debug */
                     Logging.debug("TypeHintCollector", String.format("Ptr Reference at 0x%s -> %s", Long.toHexString(offset), ptrEEConstraint));
                     Logging.debug("TypeHintCollector", constraint.exprs.toString());
-                    Logging.debug("TypeHintCollector", constraint.finalSkeleton.dumpLayout(0));
+                    Logging.debug("TypeHintCollector", constraint.innerSkeleton.dumpLayout(0));
                     Logging.debug("TypeHintCollector", ptrEEConstraint.exprs.toString());
-                    Logging.debug("TypeHintCollector", ptrEEConstraint.finalSkeleton.dumpLayout(0));
+                    Logging.debug("TypeHintCollector", ptrEEConstraint.innerSkeleton.dumpLayout(0));
                 } else {
                     Logging.debug("TypeHintCollector", "Ptr Level = 1");
                 }
@@ -294,13 +272,13 @@ public class TypeHintCollector {
     public void handleMemberConflict() {
         var ptrSize = Global.currentProgram.getDefaultPointerSize();
         for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            List<Long> offsets = new ArrayList<>(constraint.finalSkeleton.fieldAccess.keySet());
+            List<Long> offsets = new ArrayList<>(constraint.innerSkeleton.fieldAccess.keySet());
             Collections.sort(offsets);
             List<Long> removeCandidate = new ArrayList<>();
 
             for (int i = 0; i < offsets.size(); i++) {
                 var offset = offsets.get(i);
-                var aps = constraint.finalSkeleton.fieldAccess.get(offset);
+                var aps = constraint.innerSkeleton.fieldAccess.get(offset);
 
                 long nextOffset = -1;
                 if (i < offsets.size() - 1) {
@@ -328,7 +306,7 @@ public class TypeHintCollector {
             }
 
             for (var offset: removeCandidate) {
-                constraint.finalSkeleton.fieldAccess.remove(offset);
+                constraint.innerSkeleton.fieldAccess.remove(offset);
             }
         }
     }
@@ -372,7 +350,7 @@ public class TypeHintCollector {
                     var offset = iterator.next();
                     var removeCandidates = new HashSet<TypeConstraint>();
                     for (var s: constraint.mayNestedConstraint.get(offset)) {
-                        if (s.isMultiLevelMidPtr || s.isPointerToPrimitive || constraint == s) {
+                        if (s.isMultiLevelMidPtr || s.mayPointerToPrimitive || constraint == s) {
                             removeCandidates.add(s);
                         }
                     }
@@ -405,7 +383,7 @@ public class TypeHintCollector {
                     }
                 }
                 nester.finalNestedConstraint.put(offset, finalNestedCandidate);
-                nester.updateNestedRange(offset, offset + finalNestedCandidate.getMaxSize());
+                // nester.updateNestedRange(offset, offset + finalNestedCandidate.setMaxSize());
             }
         }
     }
@@ -438,51 +416,50 @@ public class TypeHintCollector {
         }
     }
 
-    public void addDecompilerInferredTypes() {
-        for (var constraint: exprToConstraintMap.values()) {
-            constraint.decompilerInferredTypes.addAll(
-                    constraint.finalSkeleton.getDecompilerInferredTypes()
-            );
-        }
-    }
-
     /**
-     * Mark MayPrimitiveType for TypeConstraints and handle reference and nested mayPrimitiveType skeletons.
+     * Some Type Constraint may correspond to a pointer to primitive type or primitive array.
+     * We should find and mark them.
      */
-    public void handleMustPrimitiveSkeleton() {
-        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            if (constraint.isMultiLevelMidPtr) continue;
-            if (!constraint.hasPtrReference() && constraint.hasOneField() &&
-                    !constraint.decompilerInferredTypesHasComposite() &&
-                    (constraint.finalSkeleton.fieldAccess.get(0L) != null)) {
-                /* These types are considered as pointers to primitive types and no need to assess and ranking */
-                Logging.debug("TypeHintCollector", "Pointer to Primitive Detected: " + constraint);
-                var aps = constraint.finalSkeleton.fieldAccess.get(0L);
-                constraint.setPointerToPrimitiveType(aps.mostAccessedDT);
+    public void handleMayPrimitiveConstraints() {
+        for (var c: exprToConstraintMap.values()) {
+            if (c.hasOneFirstField() && !c.hasDecompilerInferredCompositeType()) {
+                Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Detected: " + c);
+                c.dumpInfo();
+                c.mayPointerToPrimitive = true;
+                return;
             }
-        }
-    }
 
-    /**
-     * Update the member accesses and its data type information.
-     */
-    public void handleAPSets() {
-        for (var constraint: new HashSet<>(exprToConstraintMap.values())) {
-            for (var offset: constraint.finalSkeleton.fieldAccess.keySet()) {
-                var APSet = constraint.finalSkeleton.fieldAccess.get(offset);
-                APSet.postHandle();
+            // If there are multiple stack allocated arrays and variables in the constraint,
+            // still consider its may be a pointer to primitive type.
+            if (c.hasDecompilerInferredCompositeType()) {
+                var inferredTypes = c.decompilerInferredCompositeTypes;
+                if (inferredTypes.size() >= 2) {
+                    if (c.onlyArraysInDecompilerInferredCompositeTypes()) {
+                        Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to arrays) Detected: " + c);
+                        c.dumpInfo();
+                        c.mayPointerToPrimitive = true;
+                        return;
+                    }
+                }
+            }
+
+            // If there are multiple same size members in the constraint
+            if (c.hasMultipleNonPointerSameSizeMembers()) {
+                Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to duplicates) Detected: " + c);
+                c.dumpInfo();
+                c.mayPointerToPrimitive = true;
             }
         }
     }
 
     private void tryPopulateNester(TypeConstraint nester, Long nestStartOffset, TypeConstraint nestee) {
-        for (var offset: nestee.finalSkeleton.fieldAccess.keySet()) {
+        for (var offset: nestee.innerSkeleton.fieldAccess.keySet()) {
             var nesterOffset = nestStartOffset + offset;
-            var nesterAPS = nester.finalSkeleton.fieldAccess.get(nesterOffset);
-            var nesteeAPS = nestee.finalSkeleton.fieldAccess.get(offset);
+            var nesterAPS = nester.innerSkeleton.fieldAccess.get(nesterOffset);
+            var nesteeAPS = nestee.innerSkeleton.fieldAccess.get(offset);
 
             if (nesterAPS == null) {
-                nester.finalSkeleton.fieldAccess.put(nesterOffset, nesteeAPS);
+                nester.innerSkeleton.fieldAccess.put(nesterOffset, nesteeAPS);
             } else if (nesterAPS.maxDTSize >= nesteeAPS.maxDTSize) {
                 nesterAPS.update(nesteeAPS);
             }

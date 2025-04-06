@@ -51,7 +51,7 @@ public class ReTyper {
         for (var skt: sktSet) {
             String filePath;
             ObjectNode jsonRoot;
-            if (skt.decompilerInferredTypesHasComposite()) {
+            if (skt.hasDecompilerInferredCompositeType()) {
                 Logging.debug("ReTyper", "Skeleton has composite types inferred by decompiler");
                 filePath = Global.outputDirectory + "/" + skt.toString() + "_final_DI.json";
                 jsonRoot = generateSkeletonJson(skt, false, true);
@@ -360,10 +360,10 @@ public class ReTyper {
         inferred.set("array", array);
         inferred.set("primitive", primitive);
 
-        if (skt.decompilerInferredTypes == null) {
+        if (skt.decompilerInferredCompositeTypes == null) {
             return inferred;
         }
-        for (var dt: skt.decompilerInferredTypes) {
+        for (var dt: skt.decompilerInferredCompositeTypes) {
             if (DataTypeHelper.isPointerToCompositeDataType(dt)) {
                 var baseDT = ((Pointer) dt).getDataType();
                 composite.add(baseDT.getName());
@@ -414,9 +414,9 @@ public class ReTyper {
 
         /* If range morphing */
         if (!globalMorph) {
-            for (var offset : skt.finalSkeleton.fieldExprMap.keySet()) {
+            for (var offset : skt.innerSkeleton.fieldExprMap.keySet()) {
                 if (offset >= start && offset < end) {
-                    memberAccessExprs.addAll(skt.finalSkeleton.fieldExprMap.get(offset));
+                    memberAccessExprs.addAll(skt.innerSkeleton.fieldExprMap.get(offset));
                 }
             }
             Logging.debug("GhidraScript",
@@ -424,8 +424,8 @@ public class ReTyper {
         }
         /* If global morphing */
         else {
-            for (var offset: skt.finalSkeleton.fieldExprMap.keySet()) {
-                memberAccessExprs.addAll(skt.finalSkeleton.fieldExprMap.get(offset));
+            for (var offset: skt.innerSkeleton.fieldExprMap.keySet()) {
+                memberAccessExprs.addAll(skt.innerSkeleton.fieldExprMap.get(offset));
             }
         }
 

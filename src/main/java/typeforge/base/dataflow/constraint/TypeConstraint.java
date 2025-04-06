@@ -1,8 +1,8 @@
 package typeforge.base.dataflow.constraint;
 
+import ghidra.program.model.data.Array;
 import typeforge.base.dataflow.Range;
 import typeforge.base.dataflow.expression.NMAE;
-import typeforge.utils.DataTypeHelper;
 import typeforge.utils.Global;
 import typeforge.utils.Logging;
 import ghidra.program.model.data.DataType;
@@ -15,11 +15,10 @@ public class TypeConstraint {
     public final java.util.UUID uuid = java.util.UUID.randomUUID();
     public final String shortUUID = java.util.UUID.randomUUID().toString().substring(0, 8);
 
-    public Set<Skeleton> skeletons = new HashSet<>();
-    public Skeleton finalSkeleton;
+    public Skeleton innerSkeleton;
     public Set<NMAE> exprs = new HashSet<>();
     public Set<NMAE> variables = new HashSet<>();
-    public boolean hasMultiSkeleton = false;
+    public long size = -1;
 
     public Map<Long, Set<TypeConstraint>> ptrReference = new HashMap<>();
     public Map<Long, TypeConstraint> finalPtrReference = new HashMap<>();
@@ -27,14 +26,14 @@ public class TypeConstraint {
     public Map<Long, Set<TypeConstraint>> mayNestedConstraint = new HashMap<>();
     public Map<Long, TypeConstraint> finalNestedConstraint = new HashMap<>();
 
+    public Set<DataType> decompilerInferredCompositeTypes = new HashSet<>();
+
     public Set<Long> inConsistentOffsets = new HashSet<>();
 
-    public boolean isPointerToPrimitive = false;
+    public boolean mayPointerToPrimitive = false;
     public boolean isMultiLevelMidPtr = false;
-    public boolean mayPrimitiveArray = false;
-    public boolean singleDerivedType = false;
-
     /**
+     *  Following Fields should be updated after all TypeConstraints are merged, handled and confirmed
      *  If there are multiple fields in the Constraint need to generate and assessment (We call it MorphingPoint)
      *  In order to reduce time complexity, we try to assess each morphRange and choose the best one in each morphRange.
      *  And finally, we will synthesize the final result based on every best choice in each morphRange.
@@ -42,49 +41,81 @@ public class TypeConstraint {
     public Set<DataType> globalMorphingTypes = new HashSet<>();
     public Map<Range, Set<DataType>> rangeMorphingTypes = new HashMap<>();
     public Set<Range> nestedRange = new HashSet<>();
-    public Set<DataType> decompilerInferredTypes = new HashSet<>();
     public DataType finalType = null;
 
-    public long size = -1;
-
-    public TypeConstraint(Skeleton skeleton, Set<NMAE> exprs, boolean isFinal) {
-        this.skeletons.add(skeleton);
-        this.finalSkeleton = skeleton;
-        this.exprs.addAll(exprs);
-        getMaxSize();
-    }
-
+    /**
+     * Create a new TypeConstraint based on the given skeleton and associated expressions
+     */
     public TypeConstraint(Skeleton skeleton, Set<NMAE> exprs) {
-        this.skeletons.add(skeleton);
+        this.innerSkeleton = skeleton;
         this.exprs.addAll(exprs);
+        this.decompilerInferredCompositeTypes.addAll(innerSkeleton.getDecompilerInferredCompositeTypes());
+        setMaxSize();
+        setVariables();
+        handleFieldAPSet();
     }
 
-    public TypeConstraint(Set<Skeleton> skeletons, NMAE expr) {
-        this.skeletons.addAll(skeletons);
-        this.exprs.add(expr);
+    /**
+     * Merge two TypeConstraints into a new TypeConstraint.
+     * If successfully merged, return the new TypeConstraint.
+     * If failed, return an empty Optional.
+     */
+    public static Optional<TypeConstraint> mergeConstraint(TypeConstraint tc1, TypeConstraint tc2,
+                                                    boolean isRelax) {
+        // Step1: merge innerSkeleton first
+        var skt1 = tc1.innerSkeleton;
+        var skt2 = tc2.innerSkeleton;
+        var mergedSkt = new Skeleton(skt1);
+        boolean success = true;
+        if (isRelax) {
+            success = mergedSkt.tryMergeLayoutRelax(skt2);
+        } else {
+            success = mergedSkt.tryMergeLayoutStrict(skt2);
+        }
+
+        if (!success) {
+            Logging.warn("TypeConstraint",
+                    String.format("Failed to merge Skeletons %s and %s", skt1, skt2));
+            return Optional.empty();
+        }
+
+
+        // Step2: merge expressions
+        var newExprs = new HashSet<NMAE>();
+        newExprs.addAll(tc1.exprs);
+        newExprs.addAll(tc2.exprs);
+
+        var newTypeConstraint = new TypeConstraint(mergedSkt, newExprs);
+
+        // Step3: also merge other fields
+        newTypeConstraint.ptrReference.putAll(tc1.ptrReference);
+        newTypeConstraint.ptrReference.putAll(tc2.ptrReference);
+        newTypeConstraint.finalPtrReference.putAll(tc1.finalPtrReference);
+        newTypeConstraint.finalPtrReference.putAll(tc2.finalPtrReference);
+        newTypeConstraint.ptrLevel.putAll(tc1.ptrLevel);
+        newTypeConstraint.ptrLevel.putAll(tc2.ptrLevel);
+        newTypeConstraint.mayNestedConstraint.putAll(tc1.mayNestedConstraint);
+        newTypeConstraint.mayNestedConstraint.putAll(tc2.mayNestedConstraint);
+        newTypeConstraint.finalNestedConstraint.putAll(tc1.finalNestedConstraint);
+        newTypeConstraint.finalNestedConstraint.putAll(tc2.finalNestedConstraint);
+
+        newTypeConstraint.mayPointerToPrimitive = tc1.mayPointerToPrimitive || tc2.mayPointerToPrimitive;
+        newTypeConstraint.isMultiLevelMidPtr = tc1.isMultiLevelMidPtr || tc2.isMultiLevelMidPtr;
+
+        return Optional.of(newTypeConstraint);
     }
 
-    public TypeConstraint(Set<Skeleton> skeletons, Set<NMAE> exprs) {
-        this.skeletons.addAll(skeletons);
-        this.exprs.addAll(exprs);
-    }
-
-    public TypeConstraint(DataType dt) {
-        this.finalType = dt;
-    }
-
-    public void addExpr(NMAE expr) {
-        exprs.add(expr);
-    }
-
-    public void mergeConstraintFrom(TypeConstraint other) {
-        this.skeletons.addAll(other.skeletons);
-        this.exprs.addAll(other.exprs);
-        this.hasMultiSkeleton = this.hasMultiSkeleton || other.hasMultiSkeleton;
-    }
-
-    public int getSkeletonsHash() {
-        return skeletons.hashCode();
+    /**
+     * Find the member's datatype, min/max datatype size and most accessed datatype
+     */
+    private void handleFieldAPSet() {
+        for (var entry: innerSkeleton.fieldAccess.entrySet()) {
+            var offset = entry.getKey();
+            var apSet = entry.getValue();
+            if (apSet != null) {
+                apSet.postHandle();
+            }
+        }
     }
 
     public void addPtrReference(long ptr, TypeConstraint skt) {
@@ -92,8 +123,7 @@ public class TypeConstraint {
     }
 
     public boolean isMultiLevelMidPtr() {
-        if (skeletons.size() > 1) { return false; }
-        var skeleton = finalSkeleton;
+        var skeleton = innerSkeleton;
         if (skeleton.fieldAccess.size() != 1) { return false; }
         if (skeleton.fieldAccess.get(0L) == null) { return false; }
         for (var element: skeleton.fieldAccess.get(0L).getApSet()) {
@@ -105,24 +135,16 @@ public class TypeConstraint {
         return true;
     }
 
-    public Set<NMAE> getVariables() {
-        for (var expr: exprs) {
-            if (expr.isVariable()) {
-                variables.add(expr);
-            }
-        }
-        return variables;
-    }
+
 
     /**
      * Get the size of current skeleton, we consider the
      * max of (finalConstraint.fieldAccess.size(), finalConstraint.fieldAccess.size() + nestedSkeleton.size())
-     * @return the size of current skeleton
      */
-    public int getMaxSize() {
+    public void setMaxSize() {
         /* Get the last element of fieldAccess */
         var maxSize = 0L;
-        for (var entry: finalSkeleton.fieldAccess.entrySet()) {
+        for (var entry: innerSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var maxSizeAtOffset = entry.getValue().maxDTSize;
             if (offset + maxSizeAtOffset > maxSize) {
@@ -131,15 +153,29 @@ public class TypeConstraint {
         }
 
         /* Get the size from sizeSource */
-        var sizeFromSource = finalSkeleton.getMaxSizeFromSource();
+        var sizeFromSource = innerSkeleton.getMaxSizeFromSource();
         if (sizeFromSource.isPresent()) {
             var sizeSource = sizeFromSource.get();
             size = (sizeSource > maxSize ? sizeSource : maxSize);
         } else {
             size = maxSize;
         }
+    }
 
+    public int getMaxSize() {
         return (int) size;
+    }
+
+    public void setVariables() {
+        for (var expr: exprs) {
+            if (expr.isVariable()) {
+                variables.add(expr);
+            }
+        }
+    }
+
+    public Set<NMAE> getVariables() {
+        return variables;
     }
 
     /**
@@ -179,60 +215,60 @@ public class TypeConstraint {
         return !finalPtrReference.isEmpty();
     }
 
-    public boolean mayPrimitiveArray() {
-        var fieldAccess = finalSkeleton.fieldAccess;
-        var windowSize = 0;
-        var hitCount = 0;
-
-        for (var entry: fieldAccess.entrySet()) {
-            var offset = entry.getKey();
-            var apSet = entry.getValue();
-            if (!apSet.isSameSizeType) {
-                return false;
-            }
-            if (windowSize == 0) {
-                /* we expect that windowSize starts from offset 0x0 */
-                if (offset > 0) {
-                    return false;
-                }
-                windowSize = apSet.getApSet().iterator().next().dataType.getLength();
-                // TODO: this is a assumption, maybe need to remove in abandoned study.
-                if (windowSize >= Global.currentProgram.getDefaultPointerSize()) {
-                    return false;
-                }
-            }
-            if (windowSize != apSet.getApSet().iterator().next().dataType.getLength()) {
-                return false;
-            } else {
-                hitCount++;
-            }
-        }
-
-        return hitCount >= 2;
-    }
-
-    public boolean hasOneField() {
-        return finalSkeleton.fieldAccess.size() == 1;
-    }
-
-    public boolean decompilerInferredTypesHasComposite() {
-        for (var dt: decompilerInferredTypes) {
-            if (DataTypeHelper.isPointerToCompositeDataType(dt) || DataTypeHelper.isCompositeOrArray(dt)) {
-                return true;
-            }
+    public boolean hasOneFirstField() {
+        if (innerSkeleton.fieldAccess.size() == 1) {
+            var apSet = innerSkeleton.fieldAccess.get(0L);
+            return apSet != null && !apSet.apSet.isEmpty();
         }
         return false;
     }
 
-    public void setPointerToPrimitiveType(DataType dt) {
-        isPointerToPrimitive = true;
-        finalType = dt;
-        singleDerivedType = true;
+    public boolean hasOneField() {
+        return innerSkeleton.fieldAccess.size() == 1;
     }
 
-    public void setFinalType(DataType dt) {
-        finalType = dt;
-        singleDerivedType = true;
+    public boolean hasDecompilerInferredCompositeType() {
+        return !decompilerInferredCompositeTypes.isEmpty();
+    }
+
+    public boolean onlyArraysInDecompilerInferredCompositeTypes() {
+        for (var dt: decompilerInferredCompositeTypes) {
+            if (dt instanceof Array) {
+                continue;
+            } else {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public boolean hasMultipleNonPointerSameSizeMembers() {
+        var memberCount = innerSkeleton.fieldAccess.size();
+        if (memberCount <= 1) {
+            return false;
+        }
+
+        var firstMemberAPSet = innerSkeleton.fieldAccess.get(0L);
+        if (firstMemberAPSet == null || firstMemberAPSet.apSet.isEmpty()) {
+            return false;
+        }
+
+        var firstMemberSize = firstMemberAPSet.mostAccessedDT.getLength();
+        // We only consider char, shot, int, as other may be pointers
+        if (firstMemberSize >= Global.currentProgram.getDefaultPointerSize()) {
+            return false;
+        }
+
+        for (var offset: innerSkeleton.fieldAccess.keySet()) {
+            var apSet = innerSkeleton.fieldAccess.get(offset);
+            if (!apSet.isSameSizeType) { return false; }
+            var fieldSize = apSet.mostAccessedDT.getLength();
+            if (fieldSize != firstMemberSize) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     public void updateGlobalMorphingDataType(DataType dt) {
@@ -347,7 +383,7 @@ public class TypeConstraint {
     }
 
     public boolean mustPrimitiveTypeAtOffset(long offset) {
-        var aps = finalSkeleton.fieldAccess.get(offset);
+        var aps = innerSkeleton.fieldAccess.get(offset);
         if (ptrReference.containsKey(offset) || mayNestedConstraint.containsKey(offset) ||
                 !aps.isSameSizeType ||
                 (aps.mostAccessedDT.getLength() >= Global.currentProgram.getDefaultPointerSize()) ) {
@@ -420,18 +456,13 @@ public class TypeConstraint {
     public void dumpInfo() {
         Logging.debug("TypeConstraint", " ------------------------------- Start --------------------------------- ");
         Logging.debug("TypeConstraint", this.toString());
-        if (hasMultiSkeleton) {
-            Logging.debug("TypeConstraint", String.format("C > 1, = %d", skeletons.size()));
-        } else {
-            Logging.debug("TypeConstraint", "C = 1");
-        }
         Logging.debug("TypeConstraint", "Associated Exprs Count: " + exprs.size());
         Logging.debug("TypeConstraint", "All Exprs: " + exprs);
         Logging.debug("TypeConstraint", "Associated Variables Count: " + getVariables().size());
         Logging.debug("TypeConstraint", "All Variables: " + getVariables());
 
         /* dump Layout */
-        List<Long> sortedOffsets = Stream.of(finalSkeleton.fieldAccess.keySet(), finalPtrReference.keySet(), finalNestedConstraint.keySet())
+        List<Long> sortedOffsets = Stream.of(innerSkeleton.fieldAccess.keySet(), finalPtrReference.keySet(), finalNestedConstraint.keySet())
                 .flatMap(Collection::stream)
                 .distinct()
                 .sorted()
@@ -439,28 +470,28 @@ public class TypeConstraint {
         StringBuilder layout = new StringBuilder();
         for (var offset: sortedOffsets) {
             layout.append(String.format("0x%x: ", offset));
-            if (finalSkeleton.fieldAccess.containsKey(offset)) {
+            if (innerSkeleton.fieldAccess.containsKey(offset)) {
                 layout.append("\t");
-                finalSkeleton.fieldAccess.get(offset).getTypeFreq().forEach((dt, cnt) -> {
+                innerSkeleton.fieldAccess.get(offset).getTypeFreq().forEach((dt, cnt) -> {
                     layout.append(String.format("%s(%d) ", dt.getName(), cnt));
                 });
             }
             if (finalPtrReference.containsKey(offset)) {
                 layout.append("\t");
-                layout.append(String.format("Ptr Ref -> %s (%d)", finalPtrReference.get(offset), ptrLevel.get(offset)));
+                layout.append(String.format("PtrRef -> %s (%d)", finalPtrReference.get(offset), ptrLevel.get(offset)));
             }
             if (finalNestedConstraint.containsKey(offset)) {
                 layout.append("\t");
                 layout.append(String.format("Nested -> %s", finalNestedConstraint.get(offset)));
             }
             layout.append("\t");
-            layout.append(finalSkeleton.fieldExprMap.get(offset));
+            layout.append(innerSkeleton.fieldExprMap.get(offset));
             layout.append("\n");
         }
         Logging.debug("TypeConstraint", "Layout:\n" + layout);
         /* end */
 
-        Logging.debug("TypeConstraint", "All Decompiler Inferred Types:\n" + decompilerInferredTypes);
+        Logging.debug("TypeConstraint", "All Decompiler Inferred Types:\n" + decompilerInferredCompositeTypes);
         Logging.debug("TypeConstraint", "Final Type:\n" + finalType);
         Logging.debug("TypeConstraint", String.format("Global Morphing Types (%d):\n%s", globalMorphingTypes.size(), globalMorphingTypes));
         Logging.debug("TypeConstraint", "Range Morphing Types:");
@@ -476,63 +507,15 @@ public class TypeConstraint {
         Logging.debug("TypeConstraint", " ------------------------------- End --------------------------------- ");
     }
 
-    /**
-     * Merge two constraints into a new constraint
-     * @param tc1 merged constraint
-     * @param tc2 merged constraint
-     * @param isStrongMerge if true, merge all constraints in set into one constraint; otherwise just merge constraints set
-     * @param isRelax if true, merge with relax; otherwise merge with strict
-     * @return new merged constraint
-     */
-    public static Optional<TypeConstraint> mergeConstraints(TypeConstraint tc1, TypeConstraint tc2,
-                                                            boolean isStrongMerge, boolean isRelax) {
-        var newSkeletons = new HashSet<Skeleton>();
-        var newExprs = new HashSet<NMAE>();
-        newSkeletons.addAll(tc1.skeletons);
-        newSkeletons.addAll(tc2.skeletons);
-        newExprs.addAll(tc1.exprs);
-        newExprs.addAll(tc2.exprs);
-
-        if (isStrongMerge) {
-            var mergedSkeleton = new Skeleton();
-            var success = true;
-            for (var skt: newSkeletons) {
-                if (isRelax) {
-                    success = mergedSkeleton.tryMergeLayoutRelax(skt);
-                } else {
-                    success = mergedSkeleton.tryMergeLayoutStrict(skt);
-                }
-                if (!success) {
-                    break;
-                }
-            }
-
-            if (!success) {
-                Logging.warn("TypeConstraint", String.format("Failed to (%s) merge TypeConstraints %s and %s",
-                        isStrongMerge ? "strong" : "weak", tc1, tc2));
-                return Optional.empty();
-            }
-
-            var newTypeConstraint = new TypeConstraint(mergedSkeleton, newExprs, true);
-            newTypeConstraint.hasMultiSkeleton = false;
-            return Optional.of(newTypeConstraint);
-        }
-        else {
-            var newTypeConstraint = new TypeConstraint(newSkeletons, newExprs);
-            newTypeConstraint.hasMultiSkeleton = true;
-            return Optional.of(newTypeConstraint);
-        }
-    }
-
     public static boolean checkConstraintConflict(TypeConstraint constraint1,
                                                   TypeConstraint constraint2,
                                                   boolean isRelax) {
         // Only check if both skeletons have single constraint
-        if (constraint1.finalSkeleton != null && constraint2.finalSkeleton != null) {
+        if (constraint1.innerSkeleton != null && constraint2.innerSkeleton != null) {
             if (isRelax) {
-                return TCHelper.checkFieldOverlapRelax(constraint1.finalSkeleton, constraint2.finalSkeleton);
+                return TCHelper.checkFieldOverlapRelax(constraint1.innerSkeleton, constraint2.innerSkeleton);
             } else {
-                return TCHelper.checkFieldOverlapStrict(constraint1.finalSkeleton, constraint2.finalSkeleton);
+                return TCHelper.checkFieldOverlapStrict(constraint1.innerSkeleton, constraint2.innerSkeleton);
             }
         } else {
             // If one of the skeletons is null, we can not merge so return conflict
@@ -542,8 +525,8 @@ public class TypeConstraint {
 
     public static boolean checkNestConflict(TypeConstraint nester, TypeConstraint nestee,
                                             long offset, boolean isRelax) {
-        var nesterSkt = nester.finalSkeleton;
-        var nesteeSkt = nestee.finalSkeleton;
+        var nesterSkt = nester.innerSkeleton;
+        var nesteeSkt = nestee.innerSkeleton;
         var nestedSkt = new Skeleton();
         for (var f: nesteeSkt.fieldAccess.entrySet()) {
             var offsetInSkt = f.getKey();

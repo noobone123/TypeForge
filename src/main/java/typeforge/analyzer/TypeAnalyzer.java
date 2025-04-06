@@ -154,9 +154,9 @@ public class TypeAnalyzer {
         interSolver.buildWholeProgramTFG();
         interSolver.typeHintPropagation();
 
-        generator = new Generator(interSolver.typeHintCollector, interSolver.exprManager);
-        generator.run();
-        generator.explore();
+        // generator = new Generator(interSolver.typeHintCollector, interSolver.exprManager);
+        // generator.run();
+        // generator.explore();
     }
 
     /**

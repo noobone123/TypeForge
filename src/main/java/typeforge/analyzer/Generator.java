@@ -68,7 +68,7 @@ public class Generator {
 
         /* Post Processing: remove redundant type declaration in morph range */
         for (var skt: finalTypeConstraints) {
-            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
+            if (skt.mayPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
             }
             if (skt.noMorphingTypes() && skt.finalType != null) {
@@ -97,20 +97,20 @@ public class Generator {
         var exprToSkeletonMap = typeHintCollector.exprToConstraintMap;
 
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.isPointerToPrimitive) {
-                Logging.debug("Generator", "Pointer to Primitive Found");
-                continue;
-            }
+//            if (skt.isPointerToPrimitive) {
+//                Logging.debug("Generator", "Pointer to Primitive Found");
+//                continue;
+//            }
             if (skt.isMultiLevelMidPtr) {
                 Logging.debug("Generator", "Multi-Level Mid Pointer Found");
                 continue;
             }
 
-            if (!skt.hasPtrReference() && skt.mayPrimitiveArray()) {
-                Logging.debug("Generator", "May Primitive Array Found");
-                handleMayPrimitiveArray(skt);
-                continue;
-            }
+//            if (!skt.hasPtrReference() && skt.mayPrimitiveArray()) {
+//                Logging.debug("Generator", "May Primitive Array Found");
+//                handleMayPrimitiveArray(skt);
+//                continue;
+//            }
             if (!skt.hasNestedConstraint()) {
                 /* If No Nested Skeleton Found */
                 Logging.debug("Generator", "No Nested Skeleton: " + skt);
@@ -128,9 +128,9 @@ public class Generator {
 
         /* Handle Stable Skeletons */
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
-                continue;
-            }
+//            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
+//                continue;
+//            }
             /* These Stable Types have no nested skeletons and no Incosistency and Primitive Flatten */
             if (skt.noMorphingTypes() && skt.finalType == null) {
                 handleNormalSkeleton(skt);
@@ -156,12 +156,12 @@ public class Generator {
     private void handleNormalSkeleton(TypeConstraint skt) {
         var componentMap = getComponentMapByMostAccessed(skt);
         var structDT = DataTypeHelper.createUniqueStructure(skt, componentMap);
-        skt.setFinalType(structDT);
+        // skt.setFinalType(structDT);
     }
 
     private void handleMayPrimitiveArray(TypeConstraint skt) {
-        skt.mayPrimitiveArray = true;
-        var aps = skt.finalSkeleton.fieldAccess.get(0L);
+        skt.mayPointerToPrimitive = true;
+        var aps = skt.innerSkeleton.fieldAccess.get(0L);
         var elementType = aps.mostAccessedDT;
 
         var componentMap = getComponentMapByMostAccessed(skt);
@@ -171,7 +171,7 @@ public class Generator {
     }
 
     private void handleInconsistencyField(TypeConstraint skt) {
-        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
+        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
 
@@ -205,7 +205,7 @@ public class Generator {
     }
 
     private void handlePrimitiveFlatten(TypeConstraint skt) {
-        List<Long> offsets = new ArrayList<>(skt.finalSkeleton.fieldAccess.keySet());
+        List<Long> offsets = new ArrayList<>(skt.innerSkeleton.fieldAccess.keySet());
         SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 1);
 
         for (int i = 0; i < offsets.size() - 1; i++) {
@@ -237,7 +237,7 @@ public class Generator {
     }
 
     private void handleComplexFlatten(TypeConstraint skt) {
-        List<Long> offsets = new ArrayList<>(skt.finalSkeleton.fieldAccess.keySet());
+        List<Long> offsets = new ArrayList<>(skt.innerSkeleton.fieldAccess.keySet());
         SlidingWindowProcessor windowProcessor = new SlidingWindowProcessor(skt, offsets, 2);
 
         /* same window should not appear twice in the same range */
@@ -292,7 +292,7 @@ public class Generator {
      */
     private Map<Integer, DataType> getComponentMapByMostAccessed(TypeConstraint skt) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
+        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
             var mostAccessedDT = aps.mostAccessedDT;
@@ -309,7 +309,7 @@ public class Generator {
 
     private Map<Integer, DataType> getComponentMapBySpecifyDT(TypeConstraint skt, long specOffset, DataType specDT) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
+        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
             var offset = entry.getKey();
             var aps = entry.getValue();
 
@@ -336,7 +336,7 @@ public class Generator {
      */
     private Map<Integer, DataType> getComponentMapByUnionFields(TypeConstraint skt, long offset) {
         var componentMap = new TreeMap<Integer, DataType>();
-        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
+        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey().intValue();
 
             if (skt.finalPtrReference.containsKey((long) fieldOffset)) {
@@ -370,7 +370,7 @@ public class Generator {
         var componentMap = new TreeMap<Integer, DataType>();
         long flattenEndOffset = flattenStartOffset + (long) winDT.getLength() * flattenCnt;
 
-        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
+        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey();
             if (fieldOffset < flattenStartOffset || fieldOffset >= flattenEndOffset) {
                 DataType dt;
@@ -405,7 +405,7 @@ public class Generator {
         var componentMap = new TreeMap<Integer, DataType>();
         long flattenEndOffset = flattenStartOffset + (long) winDT.getLength() * flattenCnt;
 
-        for (var entry: skt.finalSkeleton.fieldAccess.entrySet()) {
+        for (var entry: skt.innerSkeleton.fieldAccess.entrySet()) {
             var fieldOffset = entry.getKey();
             if (fieldOffset < flattenStartOffset || fieldOffset >= flattenEndOffset) {
                 DataType dt;
@@ -431,7 +431,7 @@ public class Generator {
     private void createPtrRefMember(TypeConstraint skt, Map<Integer, DataType> componentMap, Long offset) {
         var ptrEE = skt.finalPtrReference.get(offset);
         DataType dt;
-        if (ptrEE.isPointerToPrimitive) {
+        if (ptrEE.mayPointerToPrimitive) {
             dt = DataTypeHelper.getPointerDT(ptrEE.finalType, skt.ptrLevel.get(offset) != null ? skt.ptrLevel.get(offset) : 1);
         } else {
             dt = DataTypeHelper.getPointerDT(DataTypeHelper.getDataTypeByName("void"),
@@ -444,7 +444,7 @@ public class Generator {
     public void explore() {
         var exprToSkeletonMap = typeHintCollector.exprToConstraintMap;
         for (var skt: new HashSet<>(exprToSkeletonMap.values())) {
-            if (skt.isPointerToPrimitive || skt.isMultiLevelMidPtr) {
+            if (skt.mayPointerToPrimitive || skt.isMultiLevelMidPtr) {
                 continue;
             }
             Logging.debug("Generator", String.format("Exploring Skeleton: %s", skt));

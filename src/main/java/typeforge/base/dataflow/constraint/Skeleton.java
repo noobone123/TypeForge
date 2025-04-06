@@ -48,7 +48,7 @@ public class Skeleton {
     /** Recording where this size information comes from */
     private final Set<SizeSource> sizeSources;
 
-    public final Set<DataType> decompilerInferredTypes;
+    public final Set<DataType> decompilerInferredCompositeTypes;
 
     public Set<Long> elementSize;
 
@@ -66,7 +66,7 @@ public class Skeleton {
         fieldAttrs = new TreeMap<>();
         globalAttrs = new HashSet<>();
         accessOffsets = new HashMap<>();
-        decompilerInferredTypes = new HashSet<>();
+        decompilerInferredCompositeTypes = new HashSet<>();
         elementSize = new HashSet<>();
         sizeSources = new HashSet<>();
     }
@@ -97,7 +97,7 @@ public class Skeleton {
             this.accessOffsets.put(entry.getKey(), new HashSet<>(entry.getValue()));
         }
 
-        this.decompilerInferredTypes = new HashSet<>(other.decompilerInferredTypes);
+        this.decompilerInferredCompositeTypes = new HashSet<>(other.decompilerInferredCompositeTypes);
 
         this.sizeSources = new HashSet<>(other.sizeSources);
         this.isComposite = other.isComposite;
@@ -283,8 +283,11 @@ public class Skeleton {
         this.sizeSources.addAll(other.sizeSources);
         this.elementSize.addAll(other.elementSize);
 
+        // Merging isComposite
+        this.isComposite = this.isComposite || other.isComposite;
+
         // Merging decompiler inferred types
-        this.decompilerInferredTypes.addAll(other.decompilerInferredTypes);
+        this.decompilerInferredCompositeTypes.addAll(other.decompilerInferredCompositeTypes);
     }
 
     public String getName() {
@@ -325,16 +328,16 @@ public class Skeleton {
 
     public boolean isEmpty() {
         return fieldAccess.isEmpty() && fieldAttrs.isEmpty() &&
-                decompilerInferredTypes.isEmpty() && sizeSources.isEmpty();
+                decompilerInferredCompositeTypes.isEmpty() && sizeSources.isEmpty();
     }
 
-    public void addDecompilerInferredType(DataType dataType) {
-        decompilerInferredTypes.add(dataType);
+    public void addDecompilerInferredCompositeType(DataType dataType) {
+        decompilerInferredCompositeTypes.add(dataType);
         Logging.debug("Skeleton", String.format("Skeleton_%s adding polymorphicType: %s", shortUUID, dataType.getName()));
     }
 
-    public Set<DataType> getDecompilerInferredTypes() {
-        return decompilerInferredTypes;
+    public Set<DataType> getDecompilerInferredCompositeTypes() {
+        return decompilerInferredCompositeTypes;
     }
 
     public int getAllFieldsAccessCount() {
@@ -350,7 +353,7 @@ public class Skeleton {
         StringBuilder sb = new StringBuilder();
         String prefixTab = "\t".repeat(prefixTabCnt);
         sb.append(prefixTab).append("Skeleton_").append(shortUUID).append(":\n");
-        sb.append(prefixTab).append("DecompilerInferred: ").append(decompilerInferredTypes).append("\n");
+        sb.append(prefixTab).append("DecompilerInferred: ").append(decompilerInferredCompositeTypes).append("\n");
         fieldAccess.forEach((offset, aps) -> {
             /* Group the aps into Map[dataType, accessCount] */
             sb.append(prefixTab).append("\t");

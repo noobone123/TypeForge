@@ -85,7 +85,7 @@ public class SlidingWindowProcessor {
 
         /* We don't consider windows with only one element if the element is a pointer */
         if (windowCapacity == 1 &&
-                (curSkt.finalSkeleton.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
+                (curSkt.innerSkeleton.fieldAccess.get(startOffset).mostAccessedDT.getLength() == Global.currentProgram.getDefaultPointerSize())) {
             return Optional.empty();
         }
 
@@ -106,7 +106,7 @@ public class SlidingWindowProcessor {
             if (curSkt.finalPtrReference.containsKey(currentOffset)) {
                 element = curSkt.finalPtrReference.get(currentOffset);
             } else {
-                element = curSkt.finalSkeleton.fieldAccess.get(currentOffset);
+                element = curSkt.innerSkeleton.fieldAccess.get(currentOffset);
             }
 
             var relativeOffset = currentOffset.intValue() - startOffset.intValue();

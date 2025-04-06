@@ -146,7 +146,7 @@ public class DataTypeHelper {
         var unionDT = new UnionDataType(new CategoryPath(DEFAULT_CATEGORY), unionName, dtM);
         int index = 0;
 
-        for (var dt: skt.finalSkeleton.fieldAccess.get(offset).allDTs) {
+        for (var dt: skt.innerSkeleton.fieldAccess.get(offset).allDTs) {
             var name = String.format("union_member_%d", index);
             unionDT.add(dt, dt.getLength(), name, null);
             index++;
