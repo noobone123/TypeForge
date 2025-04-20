@@ -7,3 +7,4 @@ bin/
 TypeForge_GroundTruth/
 TypeForge_Inference/
 .venv
+.env

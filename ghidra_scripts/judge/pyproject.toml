@@ -4,4 +4,7 @@ version = "0.1.0"
 description = "An LLM-assisted judging tool for decompiled code readability"
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "dotenv>=0.9.9",
+    "langchain[openai]>=0.3.23",
+]
