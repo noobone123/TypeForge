@@ -5,3 +5,4 @@ Inferred
 GhidraScriptLog/
 bin/
 GroundTruth/
+.venv
