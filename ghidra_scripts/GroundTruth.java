@@ -8,7 +8,6 @@ import ghidra.program.model.lang.Language;
 import ghidra.program.model.listing.Function;
 
 import org.apache.commons.io.FileUtils;
-import org.python.antlr.ast.Str;
 import typeforge.utils.*;
 import ghidra.program.model.pcode.HighFunction;
 import ghidra.program.model.pcode.HighSymbol;

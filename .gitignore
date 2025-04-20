@@ -4,5 +4,6 @@ build/
 Inferred
 GhidraScriptLog/
 bin/
-GroundTruth/
+TypeForge_GroundTruth/
+TypeForge_Inference/
 .venv
