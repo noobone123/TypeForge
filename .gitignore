@@ -1,5 +1,7 @@
 build/
 .gradle/
-.idea/*
+.idea
 Inferred
 GhidraScriptLog/
+bin/
+GroundTruth/
