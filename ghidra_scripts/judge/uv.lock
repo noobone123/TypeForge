@@ -228,12 +228,14 @@ source = { virtual = "." }
 dependencies = [
     { name = "dotenv" },
     { name = "langchain", extra = ["openai"] },
+    { name = "langchain-core" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "dotenv", specifier = ">=0.9.9" },
     { name = "langchain", extras = ["openai"], specifier = ">=0.3.23" },
+    { name = "langchain-core", specifier = ">=0.3.54" },
 ]
 
 [[package]]
