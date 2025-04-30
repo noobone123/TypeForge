@@ -5,6 +5,11 @@ import multiprocessing
 from multiprocessing import Pool
 import time
 from tqdm import tqdm
+from functools import partial
+
+def update_progress(result, pbar: tqdm):
+    pbar.update()
+    tqdm.write(result)
 
 def process_global_morph(morph_file):
     """
@@ -93,7 +98,6 @@ def dispatch(judge_candidates: list[pathlib.Path]) -> None:
     Dispatch the judge candidates into multiple processes for parallel processing.
     """
     global_morph = []
-    range_morph = []
     range_morph_single = []
     range_morph_multi = []
     
@@ -101,61 +105,67 @@ def dispatch(judge_candidates: list[pathlib.Path]) -> None:
         if "global" in candidate.name:
             global_morph.append(candidate)
         elif "range" in candidate.name:
-            range_morph.append(candidate)
-    
-    # Process range morphs
-    for candidate in range_morph:
-        with open(candidate, 'r') as f:
-            data = json.load(f)
-            morphs = data["rangeMorph"]
-            if len(morphs) == 1:
-                range_morph_single.append(candidate)
-            elif len(morphs) > 1:
-                range_morph_multi.append(candidate)
-            else:
-                print(f"Error: No range morph found in {candidate.name}")
+            with open(candidate, 'r') as f:
+                data = json.load(f)
+                morphs = data.get("rangeMorph", [])
+                if len(morphs) == 1:
+                    range_morph_single.append(candidate)
+                elif len(morphs) >= 1:
+                    range_morph_multi.append(candidate)
+                else:
+                    print(f"Error: No range morph found in {candidate.name}")
 
-    all_processes = []
+    pools_info = []
+    bar_location = 0
 
-    # Process global morphs
     if global_morph:
-        print(f"Processing {len(global_morph)} global morphs...")
-        global_pool = Pool(processes = min(len(global_morph), multiprocessing.cpu_count()))
-        global_results = global_pool.map_async(process_global_morph, global_morph)
-        all_processes.append((global_pool, global_results, "Global morphs", len(global_morph)))
-    
+        total = len(global_morph)
+        pbar = tqdm(total = total, desc = "[Global Morphs]", 
+                    position = bar_location, 
+                    dynamic_ncols = True)
+        pool = Pool(processes = min(total, multiprocessing.cpu_count()))
+        pools_info.append((pool, pbar))
+        bar_location += 1
+
+        for morph_file in global_morph:
+            pool.apply_async(
+                process_global_morph,
+                args = (morph_file,),
+                callback = partial(update_progress, pbar = pbar)
+            )
+
     if range_morph_single:
-        print(f"Processing {len(range_morph_single)} single-element range morphs...")
-        single_pool = Pool(processes = min(len(range_morph_single), multiprocessing.cpu_count()))
-        single_result = single_pool.map_async(process_range_morph_single, range_morph_single)
-        all_processes.append((single_pool, single_result, "Single range morphs", len(range_morph_single)))
-    
+        total = len(range_morph_single)
+        pbar = tqdm(total = total, desc = "[Single range morphs]", position = bar_location, dynamic_ncols = True)
+        pool = Pool(processes = min(total, multiprocessing.cpu_count()))
+        pools_info.append((pool, pbar))
+        bar_location += 1
+
+        for morph_file in range_morph_single:
+            pool.apply_async(
+                process_range_morph_single,
+                args = (morph_file,),
+                callback = partial(update_progress, pbar = pbar)
+            )
+
     if range_morph_multi:
-        print(f"Processing {len(range_morph_multi)} multi-element range morphs...")
-        multi_pool = Pool(processes = min(len(range_morph_multi), multiprocessing.cpu_count()))
-        multi_result = multi_pool.map_async(process_range_morph_multi, range_morph_multi)
-        all_processes.append((multi_pool, multi_result, "Multi range morphs", len(range_morph_multi)))
-    
-    # Show progress bar
-    with tqdm(total = sum(count for _, _, _, count in all_processes), desc = "Overall progress") as pbar:
-        remaining = len(all_processes)
-        while remaining > 0:
-            for i, (pool, result, desc, _) in enumerate(all_processes[:]):
-                if result.ready():
-                    print(f"\nResults for {desc}:")
-                    results = result.get()
-                    for res in results:
-                        print(res)
-                    
-                    pool.close()
-                    pool.join()
-                    
-                    pbar.update(all_processes[i][3])
-                    
-                    all_processes.remove((pool, result, desc, _))
-                    remaining -= 1
-            
-            time.sleep(0.1)
+        total = len(range_morph_multi)
+        pbar = tqdm(total = total, desc = "[Multi range morphs]", position = bar_location, dynamic_ncols = True)
+        pool = Pool(processes = min(total, multiprocessing.cpu_count()))
+        pools_info.append((pool, pbar))
+        bar_location += 1
+
+        for morph_file in range_morph_multi:
+            pool.apply_async(
+                process_range_morph_multi,
+                args = (morph_file,),
+                callback = partial(update_progress, pbar = pbar)
+            )
+
+    for pool, pbar in pools_info:
+        pool.close()
+        pool.join()
+        pbar.close()
     
 
 if __name__== "__main__":
