@@ -1,5 +1,9 @@
 import getpass
 import os
+from typing import Dict
+
+def judge(type_dict):
+    pass
 
 try:
     # load environment variables from .env file (requires `python-dotenv`)

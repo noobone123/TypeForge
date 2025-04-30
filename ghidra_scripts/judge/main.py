@@ -6,10 +6,10 @@ from multiprocessing import Pool
 import time
 from tqdm import tqdm
 from functools import partial
+# import llm
 
 def update_progress(result, pbar: tqdm):
     pbar.update()
-    tqdm.write(result)
 
 def process_global_morph(morph_file):
     """
@@ -21,7 +21,10 @@ def process_global_morph(morph_file):
     try:
         with open(morph_file, 'r') as f:
             data = json.load(f)
-                
+            type_dict = data["globalMorph"]
+            # llm.judge(type_dict)
+            # judge(type_dict)
+
         return f"Successfully processed global morph: {morph_file.name}"
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"

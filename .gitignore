@@ -8,3 +8,4 @@ TypeForge_GroundTruth/
 TypeForge_Inference/
 .venv
 .env
+__pycache__/
