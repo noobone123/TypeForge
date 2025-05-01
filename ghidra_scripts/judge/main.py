@@ -15,6 +15,7 @@ def update_progress(result, pbar: tqdm):
     if (result is not None):
         pbar.update()
 
+# TODO: using aiohttp and aiofiles to handle the file I/O and network requests asynchronously
 def process_global_morph(morph_file):
     """
     Process a global morph file.
@@ -25,7 +26,7 @@ def process_global_morph(morph_file):
     try:
         with open(morph_file, 'r') as f:
             data = json.load(f)
-            return double_elimination.judge(data)
+            return double_elimination.run(data)
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
 
@@ -56,23 +57,7 @@ def process_range_morph_multi(morph_file):
     try:
         with open(morph_file, 'r') as f:
             data = json.load(f)
-            # morphs = data["rangeMorph"]
-            
-            # # Create a list of tasks for parallel processing
-            # tasks = [(morph_file, idx, morph) for idx, morph in enumerate(morphs)]
-            
-            # # Process all elements in parallel
-            # with Pool(processes = min(len(morphs), multiprocessing.cpu_count())) as pool:
-            #     results = list(tqdm(pool.imap(process_range_morph_element, tasks), 
-            #                         total = len(tasks),
-            #                         desc = f"Processing {morph_file.name}"))
-            
-            # # Update the file with all processed elements
-            # for idx, processed_element, _ in results:
-            #     data["rangeMorph"][idx] = processed_element
-                
-            # with open(morph_file, 'w') as out_f:
-            #     json.dump(data, out_f, indent=2)
+            # using co-routines instead of threads
                 
         return f"Successfully processed multi-element range morph: {morph_file.name}"
     except Exception as e:
