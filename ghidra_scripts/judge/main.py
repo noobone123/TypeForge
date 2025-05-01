@@ -6,10 +6,14 @@ from multiprocessing import Pool
 import time
 from tqdm import tqdm
 from functools import partial
-# import llm
+import os
+import dotenv
+import getpass
+import double_elimination
 
 def update_progress(result, pbar: tqdm):
-    pbar.update()
+    if (result is not None):
+        pbar.update()
 
 def process_global_morph(morph_file):
     """
@@ -21,11 +25,7 @@ def process_global_morph(morph_file):
     try:
         with open(morph_file, 'r') as f:
             data = json.load(f)
-            type_dict = data["globalMorph"]
-            # llm.judge(type_dict)
-            # judge(type_dict)
-
-        return f"Successfully processed global morph: {morph_file.name}"
+            return double_elimination.judge(data)
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
 
@@ -172,6 +172,33 @@ def dispatch(judge_candidates: list[pathlib.Path]) -> None:
     
 
 if __name__== "__main__":
+
+    try:
+        # load environment variables from .env file (requires `python-dotenv`)
+        dotenv.load_dotenv()
+    except ImportError:
+        print("Error: `python-dotenv` is not installed. Please install it to load environment variables from .env file.")
+        exit(1)
+
+    if os.environ["LANGSMITH_TRACING"] == "true":
+        if "LANGSMITH_API_KEY" not in os.environ:
+            os.environ["LANGSMITH_API_KEY"] = getpass.getpass(
+                prompt="Enter your LangSmith API key (optional): "
+            )
+        if "LANGSMITH_PROJECT" not in os.environ:
+            os.environ["LANGSMITH_PROJECT"] = getpass.getpass(
+                prompt='Enter your LangSmith Project Name (default = "default"): '
+            )
+        if not os.environ.get("LANGSMITH_PROJECT"):
+            os.environ["LANGSMITH_PROJECT"] = "default"
+
+    if "OPENAI_API_KEY" not in os.environ:
+        os.environ["OPENAI_API_KEY"] = getpass.getpass(
+            prompt="Enter your OpenAI API key (required if using OpenAI): "
+        )
+    if not os.environ.get("OPENAI_API_KEY"):
+        os.environ["OPENAI_API_KEY"] = getpass.getpass("Enter API key for OpenAI: ")
+
     parser = argparse.ArgumentParser(description = "Selecting Best-fit composite data types by comparing the readability of decompiled code variants.")
     parser.add_argument("inference", type = str, help = "Path to the directory containing the inferred TypeConstraint json files.")
 
