@@ -5,6 +5,15 @@ class Player:
         self.type_name = type_name
         self.decompiled_code = decompiled_code
 
+    def __hash__(self):
+        return hash(self.type_name)
+
+    def __eq__(self, other):
+        return isinstance(other, Player) and self.type_name == other.type_name
+
+    def __repr__(self):
+        return f"Player({self.type_name})"
+
 class DoubleEliminationTournament:
 
     class Pair:
@@ -14,9 +23,9 @@ class DoubleEliminationTournament:
             self.winner = None
 
         def judge(self) -> Player:
-            # TODO: Implement the judging logic here
-            # For now, we will just return the first player as the winner
-            self.winner = self.player1
+            # Randomly select a winner instead of always picking player1
+            import random
+            self.winner = random.choice([self.player1, self.player2])
             return self.winner
         
         def get_winner(self) -> Player:
@@ -24,6 +33,23 @@ class DoubleEliminationTournament:
 
     def __init__(self, players: List[Player]):
         self.players = players
+        # 初始时所有选手都在胜者组
+        self.winners_bracket = players.copy()
+        self.losers_bracket = []
+        # 已经被淘汰的选手
+        self.eliminated = []
+        # 记录选手的失败次数
+        self.losses = {player: 0 for player in players}
+        # 本轮比赛的配对
+        self.current_pairs = []
+        # 当前是否在胜者组进行比赛
+        self.is_winners_bracket = True
+        # 是否已经产生了最终胜者
+        self.is_finished = False
+        # 最终胜者
+        self.champion = None
+        # 记录轮次
+        self.round = 0
 
     def get_next_round(self) -> List[Pair]:
         """
@@ -33,7 +59,162 @@ class DoubleEliminationTournament:
         If there is an odd number of players, one player will get a bye.
         If the tournament is over and the final winner is determined, return an empty list.
         """
-        pass
+        if self.is_finished:
+            return []
+
+        self.round += 1
+        self.current_pairs = []
+
+        # 处理胜者组
+        if self.is_winners_bracket and len(self.winners_bracket) > 1:
+            pairs = []
+            bye_player = None
+            if len(self.winners_bracket) % 2 != 0:
+                bye_player = self.winners_bracket.pop()  # 轮空选手本轮不参与配对
+            for i in range(0, len(self.winners_bracket), 2):
+                if i + 1 < len(self.winners_bracket):
+                    pair = self.Pair(self.winners_bracket[i], self.winners_bracket[i + 1])
+                    pairs.append(pair)
+            self.current_pairs = pairs
+            self.is_winners_bracket = False
+            # 赛后将轮空选手加入下一轮
+            if bye_player is not None:
+                self.winners_bracket = [p for p in self.winners_bracket if p not in [pair.player1 for pair in pairs] and p not in [pair.player2 for pair in pairs]]
+                self.winners_bracket.append(bye_player)
+            return pairs
+
+        # 处理败者组
+        elif not self.is_winners_bracket and len(self.losers_bracket) > 1:
+            pairs = []
+            bye_player = None
+            if len(self.losers_bracket) % 2 != 0:
+                bye_player = self.losers_bracket.pop()
+            for i in range(0, len(self.losers_bracket), 2):
+                if i + 1 < len(self.losers_bracket):
+                    pair = self.Pair(self.losers_bracket[i], self.losers_bracket[i + 1])
+                    pairs.append(pair)
+            self.current_pairs = pairs
+            self.is_winners_bracket = True
+            if bye_player is not None:
+                self.losers_bracket = [p for p in self.losers_bracket if p not in [pair.player1 for pair in pairs] and p not in [pair.player2 for pair in pairs]]
+                self.losers_bracket.append(bye_player)
+            return pairs
+            
+        # 新增：败者组只剩一人时，切回胜者组等待决赛
+        elif not self.is_winners_bracket and len(self.losers_bracket) == 1:
+            self.is_winners_bracket = True
+            return self.get_next_round()  # 立即触发下一轮
+            
+        # 处理决赛（胜者组最后一人 vs 败者组最后一人）
+        elif len(self.winners_bracket) == 1 and len(self.losers_bracket) == 1:
+            # 创建胜者组冠军与败者组冠军的对决
+            final_pair = self.Pair(self.winners_bracket[0], self.losers_bracket[0])
+            self.current_pairs = [final_pair]
+            self.is_finished = True  # 比赛将在此轮结束
+            return [final_pair]
+        
+        # 如果胜者组只剩一人且败者组为空，则该选手为冠军
+        elif len(self.winners_bracket) == 1 and len(self.losers_bracket) == 0:
+            self.champion = self.winners_bracket[0]
+            self.is_finished = True
+            return []
+        
+        # 如果只有败者组剩一人，则该选手为冠军
+        elif len(self.winners_bracket) == 0 and len(self.losers_bracket) == 1:
+            self.champion = self.losers_bracket[0]
+            self.is_finished = True
+            return []
+            
+        # 如果比赛已经结束但没有冠军，则选择剩余玩家中的一个作为冠军
+        elif self.is_finished and self.champion is None:
+            remaining_players = self.winners_bracket + self.losers_bracket
+            if remaining_players:
+                self.champion = remaining_players[0]
+            return []
+        
+        # 其他情况（理论上不应该发生）
+        else:
+            # 如果因某种原因没有玩家了，但比赛未结束，则标记为已结束
+            if len(self.winners_bracket) == 0 and len(self.losers_bracket) == 0 and not self.is_finished:
+                self.is_finished = True
+            return []
+    
+    def process_results(self):
+        """
+        处理当前轮次的比赛结果，更新选手状态
+        """
+        if not self.current_pairs:
+            return
+        
+        # 临时存储获胜者，用于更新胜者组
+        round_winners = []
+        
+        for pair in self.current_pairs:
+            winner = pair.get_winner()
+            if winner is None:
+                continue
+            
+            # 记录这一轮的获胜者
+            round_winners.append(winner)
+                
+            loser = pair.player2 if winner == pair.player1 else pair.player1
+            
+            # 更新失败计数
+            self.losses[loser] = self.losses.get(loser, 0) + 1
+            
+            # 如果是第一次失败，进入败者组
+            if self.losses[loser] == 1:
+                if loser in self.winners_bracket:
+                    self.winners_bracket.remove(loser)
+                if loser not in self.losers_bracket:
+                    self.losers_bracket.append(loser)
+            # 如果是第二次失败，彻底淘汰
+            elif self.losses[loser] >= 2:
+                if loser in self.losers_bracket:
+                    self.losers_bracket.remove(loser)
+                if loser in self.winners_bracket:
+                    self.winners_bracket.remove(loser)
+                if loser not in self.eliminated:
+                    self.eliminated.append(loser)
+        
+        # 处理胜者组的比赛结果
+        if self.is_winners_bracket == False:  # 刚刚进行了胜者组比赛
+            # 清除胜者组中参赛的选手（败者已在上面移除）
+            participants = [p.player1 for p in self.current_pairs] + [p.player2 for p in self.current_pairs]
+            self.winners_bracket = [p for p in self.winners_bracket if p not in participants]
+            # 将获胜者添加回胜者组
+            for winner in round_winners:
+                if winner not in self.winners_bracket:
+                    self.winners_bracket.append(winner)
+        
+        # 如果是最后一场比赛，确定冠军
+        if self.is_finished and len(self.current_pairs) == 1:
+            winner = self.current_pairs[0].get_winner()
+            self.champion = winner
+            
+            # 确保最终冠军不在任何分组中
+            if winner in self.winners_bracket:
+                self.winners_bracket.remove(winner)
+            if winner in self.losers_bracket:
+                self.losers_bracket.remove(winner)
+            
+            # 最后一场比赛的败者直接进入淘汰名单
+            loser = self.current_pairs[0].player1 if winner == self.current_pairs[0].player2 else self.current_pairs[0].player2
+            if loser in self.winners_bracket:
+                self.winners_bracket.remove(loser)
+            if loser in self.losers_bracket:
+                self.losers_bracket.remove(loser)
+            if loser not in self.eliminated:
+                self.eliminated.append(loser)
+                
+        # 清空当前比赛对
+        self.current_pairs = []
+    
+    def get_champion(self) -> Player:
+        """
+        返回最终冠军，如果比赛尚未结束返回None
+        """
+        return self.champion if self.is_finished else None
     
 
 def run(constraint: Dict) -> Dict:
@@ -99,4 +280,4 @@ def run(constraint: Dict) -> Dict:
         all_player.append(player)
 
     return constraint
-    
+
