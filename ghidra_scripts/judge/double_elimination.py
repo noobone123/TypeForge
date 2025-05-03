@@ -264,30 +264,34 @@ def make_players(n):
 
 
 if __name__ == "__main__":
-    players = make_players(6)
+    players = make_players(2)
     tournament = DoubleEliminationTournament(players)
     tournament.create_initial_matches()
     
     while True:
+        print(f"====================== Current Round ======================")
         ready_matches = tournament.get_ready_matches()
         if not ready_matches:
             break
         
         print(f"Ready Matches: {ready_matches}")
+        print(f"Judging .....................")
         for match in ready_matches:
             match.judge()
             winner = match.get_winner()
             loser = match.get_loser()
             print(f"Match Result: {match} - Winner: {winner.name}, Loser: {loser.name}")
         
+        print(f"---------------------- Updated Result ----------------------")
         tournament.process_results()
         winners_bracket = tournament.get_winners_bracket()
         losers_bracket = tournament.get_losers_bracket()
 
-        print(f"Winners Bracket: {winners_bracket}")
-        print(f"----------------------------------")
-        print(f"Losers Bracket: {losers_bracket}")
-        print(f"====================================")
+        print(f"Next Round Winners Bracket: {winners_bracket}")
+        print()
+        print(f"Next Round Losers Bracket: {losers_bracket}")
+        print(f"======================= Current Round end =======================")
+        
     
     print(f"Champion: {tournament.get_champion().name}")
     print(f"Eliminated Players: {[player.name for player in tournament.eliminated]}")
