@@ -1,31 +1,45 @@
 import getpass
-import os
-from typing import Dict
-
+import os, asyncio
+from typing import Tuple, List
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
+import random
 
-system_template = "Translate the following from English into {language}"
+async def judge_code_pair(code_pair: Tuple[str, str]):
+    await asyncio.sleep(1)  # Simulate some processing time
+    return random.choice([0, 1])
 
-prompt_template = ChatPromptTemplate.from_messages(
-    [("system", system_template), ("user", "{text}")]
-)
+async def judge_readability(decompiled_code_pairs: List[Tuple[str, str]]):
+    tasks = []
+    for code_pair in decompiled_code_pairs:
+        tasks.append(judge_code_pair(code_pair))
 
-prompt = prompt_template.invoke({"language": "Italian", "text": "hi!"})
+    results = await asyncio.gather(*tasks)
+    return results
 
-print(prompt)
+if __name__ == "__main__":
 
-model = init_chat_model(
-    model = "gpt-4.1-mini",
-    temperature = 0.4,
-    base_url = os.environ.get("BASE_URL"),
-)
+    system_template = "Translate the following from English into {language}"
 
-messages = [
-    SystemMessage("Translate the following from English into Italian"),
-    HumanMessage("hi!"),
-]
+    prompt_template = ChatPromptTemplate.from_messages(
+        [("system", system_template), ("user", "{text}")]
+    )
 
-response = model.invoke(prompt)
-print(response.content)
+    prompt = prompt_template.invoke({"language": "Italian", "text": "hi!"})
+
+    print(prompt)
+
+    model = init_chat_model(
+        model = "gpt-4.1-mini",
+        temperature = 0.4,
+        base_url = os.environ.get("BASE_URL"),
+    )
+
+    messages = [
+        SystemMessage("Translate the following from English into Italian"),
+        HumanMessage("hi!"),
+    ]
+
+    response = model.invoke(prompt)
+    print(response.content)

@@ -1,11 +1,14 @@
-from typing import List, Optional, Dict, Deque, Set
-from collections import deque
+from typing import List, Optional, Dict, Set, Tuple
 import random
+import asyncio
+from llm import judge_readability
 
 class Player:
-    def __init__(self, name: str):
+    def __init__(self, name: str, decompiled_code: Optional[Dict[str, str]] = None):
         self.name = name
         self.bracket = "winners"  # can be "winners", "losers", "eliminated" or "champion"
+        if decompiled_code:
+            self.decompiled_code = decompiled_code
 
     def __repr__(self):
         return f"Player({self.name}, bracket={self.bracket})"
@@ -29,11 +32,25 @@ class Match:
         self.loser = None
         self.level = level
 
-    def judge(self):
+    def judge_test(self):
         # Randomly select a winner instead of always picking player1
         self.winner = random.choice([self.player1, self.player2])
         self.loser = self.player1 if self.winner == self.player2 else self.player2
     
+    def judge(self):
+        """
+        Make Decompiled Code Pairs of Players, and run them using asyncio.
+        """
+        # TODO: If the number of code pairs is too large, we need to sample them.
+        decompiled_code_pairs: List[Tuple[str, str]]
+        assert self.player1.decompiled_code.keys() == self.player2.decompiled_code.keys(), "Decompiled code keys do not match"
+        decompiled_code_pairs = [(self.player1.decompiled_code[key], self.player2.decompiled_code[key]) for key in self.player1.decompiled_code.keys()]
+        
+        results = asyncio.run(judge_readability(decompiled_code_pairs))
+        
+        # Post handle the results
+        print(results)
+
     def get_winner(self) -> Player:
         return self.winner
     
@@ -192,84 +209,62 @@ class DoubleEliminationTournament:
 
     def get_champion(self) -> Player:
         return self.champion
-    
 
 def run(constraint: Dict) -> Dict:
     if "desc" in constraint and constraint["desc"] == "NoRetypeCandidates":
         return None
     
-    """
-        "ForgedStruct_123" : {
-        "desc" : "Structure",
-        "layout" : {
-            "0x0" : {
-            "desc" : "Primitive",
-            "size" : 4,
-            "type" : "int",
-            "name" : "field_0x0"
-            },
-            "0x4" : {
-            "desc" : "Primitive",
-            "size" : 4,
-            "type" : "uint",
-            "name" : "field_0x4"
-            },
-            "0x8" : {
-            "desc" : "Primitive",
-            "size" : 4,
-            "type" : "uint",
-            "name" : "field_0x8"
-            },
-            "0xc" : {
-            "desc" : "Primitive",
-            "size" : 4,
-            "type" : "uint",
-            "name" : "field_0xc"
-            }
-        },
-        "ptrRef" : { },
-        "nest" : { },
-        "anonTypes" : { },
-        "decompilerInferred" : {
-            "composite" : [ ],
-            "array" : [ ],
-            "primitive" : [ ]
-        },
-        "decompiledCode" : {
-            "0x12ec88" : "\nvoid fastcgi_get_packet_body(undefined8 param_1,long param_2,ForgedStruct_123 *param_3)\n\n{\n  undefined8 uVar1;\n  int iVar2;\n  int iVar3;\n  undefined8 uVar4;\n  \n  iVar2 = buffer_clen(param_1);\n  uVar1 = *(undefined8 *)(*(long *)(param_2 + 0x100) + 0x60);\n  iVar3 = param_3->field_0x0;\n  uVar4 = buffer_string_prepare_append(param_1,param_3->field_0x0);\n  iVar3 = chunkqueue_read_data(*(undefined8 *)(param_2 + 0x28),uVar4,iVar3,uVar1);\n  if (-1 < iVar3) {\n    buffer_truncate(param_1,(param_3->field_0x0 + iVar2) - param_3->field_0x8);\n  }\n  return;\n}\n\n",
-            "0x12ead4" : "\nundefined8 fastcgi_get_packet(long param_1,ForgedStruct_123 *param_2)\n\n{\n  int iVar1;\n  undefined8 uVar2;\n  long in_FS_OFFSET;\n  int local_2c;\n  undefined8 *local_28;\n  ulong local_20;\n  undefined8 local_18;\n  long local_10;\n  \n  local_10 = *(long *)(in_FS_OFFSET + 0x28);\n  local_20 = chunkqueue_length(*(undefined8 *)(param_1 + 0x28));\n  if ((long)local_20 < 8) {\n    if ((*(int *)(param_1 + 0xf8) != 0) && (local_20 != 0)) {\n      log_debug(*(undefined8 *)(*(long *)(param_1 + 0x100) + 0x60),\"mod_fastcgi.c\",0x136,\n                \"FastCGI: header too small: %lld bytes < %zu bytes, waiting for more data\",local_20,\n                8);\n    }\n    uVar2 = 0xffffffff;\n  }\n  else {\n    local_28 = &local_18;\n    local_2c = 8;\n    iVar1 = chunkqueue_peek_data\n                      (*(undefined8 *)(param_1 + 0x28),&local_28,&local_2c,\n                       *(undefined8 *)(*(long *)(param_1 + 0x100) + 0x60),0);\n    if (iVar1 < 0) {\n      uVar2 = 0xffffffff;\n    }\n    else if (local_2c == 8) {\n      if (local_28 != &local_18) {\n        local_18 = *local_28;\n      }\n      param_2->field_0x0 = (uint)local_18._6_1_ + (uint)CONCAT11(local_18._4_1_,local_18._5_1_);\n      param_2->field_0xc = (uint)CONCAT11(local_18._2_1_,local_18._3_1_);\n      param_2->field_0x4 = (uint)local_18._1_1_;\n      param_2->field_0x8 = (uint)local_18._6_1_;\n      if ((local_20 & 0xffffffff) - 8 < (ulong)(uint)param_2->field_0x0) {\n        uVar2 = 0xffffffff;\n      }\n      else {\n        chunkqueue_mark_written(*(undefined8 *)(param_1 + 0x28),8);\n        uVar2 = 0;\n      }\n    }\n    else {\n      uVar2 = 0xffffffff;\n    }\n  }\n  if (local_10 != *(long *)(in_FS_OFFSET + 0x28)) {\n                    /* WARNING: Subroutine does not return */\n    __stack_chk_fail();\n  }\n  return uVar2;\n}\n\n"
-        }
-        },
-        "int" : {
-        "desc" : "Primitive",
-        "type" : "int",
-        "decompiledCode" : {
-            "0x12ec88" : "\nvoid fastcgi_get_packet_body(undefined8 param_1,long param_2,int *param_3)\n\n{\n  undefined8 uVar1;\n  int iVar2;\n  int iVar3;\n  undefined8 uVar4;\n  \n  iVar2 = buffer_clen(param_1);\n  uVar1 = *(undefined8 *)(*(long *)(param_2 + 0x100) + 0x60);\n  iVar3 = *param_3;\n  uVar4 = buffer_string_prepare_append(param_1,*param_3);\n  iVar3 = chunkqueue_read_data(*(undefined8 *)(param_2 + 0x28),uVar4,iVar3,uVar1);\n  if (-1 < iVar3) {\n    buffer_truncate(param_1,(*param_3 + iVar2) - param_3[2]);\n  }\n  return;\n}\n\n",
-            "0x12ead4" : "\nundefined8 fastcgi_get_packet(long param_1,int *param_2)\n\n{\n  int iVar1;\n  undefined8 uVar2;\n  long in_FS_OFFSET;\n  int local_2c;\n  undefined8 *local_28;\n  ulong local_20;\n  undefined8 local_18;\n  long local_10;\n  \n  local_10 = *(long *)(in_FS_OFFSET + 0x28);\n  local_20 = chunkqueue_length(*(undefined8 *)(param_1 + 0x28));\n  if ((long)local_20 < 8) {\n    if ((*(int *)(param_1 + 0xf8) != 0) && (local_20 != 0)) {\n      log_debug(*(undefined8 *)(*(long *)(param_1 + 0x100) + 0x60),\"mod_fastcgi.c\",0x136,\n                \"FastCGI: header too small: %lld bytes < %zu bytes, waiting for more data\",local_20,\n                8);\n    }\n    uVar2 = 0xffffffff;\n  }\n  else {\n    local_28 = &local_18;\n    local_2c = 8;\n    iVar1 = chunkqueue_peek_data\n                      (*(undefined8 *)(param_1 + 0x28),&local_28,&local_2c,\n                       *(undefined8 *)(*(long *)(param_1 + 0x100) + 0x60),0);\n    if (iVar1 < 0) {\n      uVar2 = 0xffffffff;\n    }\n    else if (local_2c == 8) {\n      if (local_28 != &local_18) {\n        local_18 = *local_28;\n      }\n      *param_2 = (uint)local_18._6_1_ + (uint)CONCAT11(local_18._4_1_,local_18._5_1_);\n      param_2[3] = (uint)CONCAT11(local_18._2_1_,local_18._3_1_);\n      param_2[1] = (uint)local_18._1_1_;\n      param_2[2] = (uint)local_18._6_1_;\n      if ((local_20 & 0xffffffff) - 8 < (ulong)(uint)*param_2) {\n        uVar2 = 0xffffffff;\n      }\n      else {\n        chunkqueue_mark_written(*(undefined8 *)(param_1 + 0x28),8);\n        uVar2 = 0;\n      }\n    }\n    else {\n      uVar2 = 0xffffffff;\n    }\n  }\n  if (local_10 != *(long *)(in_FS_OFFSET + 0x28)) {\n                    /* WARNING: Subroutine does not return */\n    __stack_chk_fail();\n  }\n  return uVar2;\n}\n\n"
-        }
-        }
-    }
-    """
-    type_data = constraint["globalMorph"]
     all_player = []
-    for type_name, data in type_data.items():
-        player = Player(type_name, data["decompiledCode"])
-        all_player.append(player)
+    if "globalMorph" in constraint:
+        type_data = constraint["globalMorph"]
+        for type_name, data in type_data.items():
+            player = Player(type_name, data["decompiledCode"])
+            all_player.append(player)
 
+    # TODO: handle rangeMorph multi and rangeMorph single here.
+
+    tournament = DoubleEliminationTournament(all_player)
+    tournament.create_initial_matches()
+    
+    while True:
+        ready_matches = tournament.get_ready_matches()
+        if not ready_matches:
+            break
+        
+        for match in ready_matches:
+            match.judge()
+
+        tournament.process_results()        
+    
+    print(f"Champion: {tournament.get_champion().name}")
     return constraint
 
 ######################################### Following is for testing purposes #########################################
 def make_players(n):
     return [Player(f"player{i}") for i in range(n)]
 
+def print_bracket(bracket):
+    # sort the bracket by level
+    sorted_bracket = sorted(bracket.items(), key=lambda x: x[0])
+    for level, players in sorted_bracket:
+        print(f"Level {level}:")
+        print(players)
 
 if __name__ == "__main__":
-    players = make_players(2)
+    # Test the Double Elimination Tournament
+    players = make_players(8)
     tournament = DoubleEliminationTournament(players)
     tournament.create_initial_matches()
     
     while True:
         print(f"====================== Current Round ======================")
+        print(f" ** Winner Bracket: ** ")
+        print_bracket(tournament.winners_bracket)
+        print(f" !! Loser Bracket: !!")
+        print_bracket(tournament.losers_bracket)
+        print(f"Eliminated Players:")
+        print(tournament.eliminated)
+
         ready_matches = tournament.get_ready_matches()
         if not ready_matches:
             break
@@ -277,19 +272,12 @@ if __name__ == "__main__":
         print(f"Ready Matches: {ready_matches}")
         print(f"Judging .....................")
         for match in ready_matches:
-            match.judge()
+            match.judge_test()
             winner = match.get_winner()
             loser = match.get_loser()
             print(f"Match Result: {match} - Winner: {winner.name}, Loser: {loser.name}")
         
-        print(f"---------------------- Updated Result ----------------------")
         tournament.process_results()
-        winners_bracket = tournament.get_winners_bracket()
-        losers_bracket = tournament.get_losers_bracket()
-
-        print(f"Next Round Winners Bracket: {winners_bracket}")
-        print()
-        print(f"Next Round Losers Bracket: {losers_bracket}")
         print(f"======================= Current Round end =======================")
         
     
