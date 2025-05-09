@@ -50,6 +50,15 @@ class Match:
         
         # Post handle the results
         print(results)
+        print(results.count(0), results.count(1))
+        # results is a list of 0 or 1
+        # 0 means player1 is better, 1 means player2 is better
+        if results.count(0) > results.count(1):
+            self.winner = self.player1
+            self.loser = self.player2
+        else:
+            self.winner = self.player2
+            self.loser = self.player1
 
     def get_winner(self) -> Player:
         return self.winner
