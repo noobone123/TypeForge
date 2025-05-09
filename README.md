@@ -1,0 +1,1 @@
+# TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries
