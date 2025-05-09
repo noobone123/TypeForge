@@ -59,3 +59,6 @@ async def judge_readability(decompiled_code_pairs: List[Tuple[str, str]]):
 
     results = await asyncio.gather(*tasks)
     return results
+
+if __name__ == "__main__":
+    pass
