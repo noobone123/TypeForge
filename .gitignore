@@ -9,3 +9,5 @@ TypeForge_Inference/
 .venv
 .env
 __pycache__/
+main.py
+llm.py

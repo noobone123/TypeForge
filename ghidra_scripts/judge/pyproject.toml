@@ -8,4 +8,6 @@ dependencies = [
     "dotenv>=0.9.9",
     "langchain-core>=0.3.54",
     "langchain[openai]>=0.3.23",
+    "pydantic>=1.10.2",
+    "aiofiles>=0.8.0",
 ]
