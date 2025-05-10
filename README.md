@@ -88,11 +88,9 @@ After installing the TypeForge, for a single stripped binary, just run:
     -postScript TypeForge.java output=[Your-output-dir]
 ```
 
-After a while, you will see the Type Inference results (JSON files) saved in `[Your-output-dir]`. For details about these JSON files, please refer to the [demo](./demo/README.md).
+After a while, you will see the Type Inference results (JSON files) saved in `[Your-output-dir]`. For details about these JSON files, please refer to the [demo](./demo/README.md). These JSON files will then be fed into *Phase 2 for refinement*. For more information, please refer to [judge](./scripts/judge/README.md).
 
-These JSON files will then be fed into *Phase 2 for refinement*. For more information, please refer to [judge](./scripts/judge/README.md).
-
-For batch processing, please refer to [scripts](./scripts/README.md).
+For **batch processing**, please refer to [scripts](./scripts/README.md).
 
 > We are currently developing additional features to directly import Type Inference results into Ghidra projects.
 
@@ -106,8 +104,7 @@ For more details, please refer to [scripts](./scripts/README.md).
 In development ...
 
 ## Developing and Debugging
-TypeForge is developed 使用 [Intellij IDEA]() (version 2024.1.7) and [intellij-ghidra](https://github.com/garyttierney/intellij-ghidra), 请参考 [intellij-ghidra](https://github.com/garyttierney/intellij-ghidra) 安装 xxx 插件；
-2. 
+TypeForge is developed using [IntelliJ IDEA](https://www.jetbrains.com/idea/download/other.html) (version 2024.1.7) and the [intellij-ghidra](https://github.com/garyttierney/intellij-ghidra) plugin. For detailed development guidelines, please refer to [How To Develop](./DEVELOPING.md).
 
 ## Contributors
 TypeForge is written and maintained by:

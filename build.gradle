@@ -87,6 +87,10 @@ test {
 }
 
 // Exclude additional files from the built extension
-// Ex: buildExtension.exclude '.idea/**'
 buildExtension.exclude '.idea/**'
-
+buildExtension.exclude '.git/**'
+buildExtension.exclude 'GhidraScriptLog/**'
+buildExtension.exclude 'TypeForge_Inference/**'
+buildExtension.exclude 'demo/**'
+buildExtension.exclude 'scripts/**'
+buildExtension.exclude 'imgs/**'

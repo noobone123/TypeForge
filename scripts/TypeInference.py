@@ -163,3 +163,4 @@ if __name__ == "__main__":
     for proj in projects_to_inference:
         print(f"Projects to inference: {projects_to_inference}")
         run_ghidra_headless_on_project(pathlib.Path(dataset_root) / proj, infer = True)
+        # run_ghidra_headless_on_project(pathlib.Path(dataset_root) / proj, infer = False)
