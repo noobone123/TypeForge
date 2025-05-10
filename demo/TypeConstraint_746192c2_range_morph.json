@@ -1,0 +1,74 @@
+{
+  "rangeMorph" : [ {
+    "startOffset" : "0x8",
+    "endOffset" : "0x10",
+    "types" : {
+      "ForgedStruct_87" : {
+        "desc" : "Structure",
+        "layout" : {
+          "0x0" : {
+            "desc" : "Primitive",
+            "size" : 8,
+            "type" : "qword",
+            "name" : "field_0x0"
+          },
+          "0x8" : {
+            "desc" : "Pointer",
+            "size" : 8,
+            "type" : "void *",
+            "name" : "field_0x8"
+          }
+        },
+        "ptrRef" : { },
+        "nest" : { },
+        "anonTypes" : { },
+        "decompilerInferred" : {
+          "composite" : [ ],
+          "array" : [ ],
+          "primitive" : [ ]
+        },
+        "decompiledCode" : {
+          "0x1391bf" : "\nundefined4 chunk_buffer_prepare_append(void **param_1,ulong param_2)\n\n{\n  void *pvVar1;\n  void *__src;\n  void *pvVar2;\n  uint uVar3;\n  undefined4 uVar4;\n  ulong uVar5;\n  ForgedStruct_87 *ppvVar6;\n  undefined4 local_10;\n  \n  uVar3 = buffer_string_space(param_1);\n  if (uVar3 < param_2) {\n    if (*(int *)(param_1 + 1) == 0) {\n      uVar5 = 1;\n    }\n    else {\n      uVar5 = (ulong)*(uint *)(param_1 + 1);\n    }\n    ppvVar6 = (ForgedStruct_87 *)chunk_buffer_acquire_sz(param_2 + uVar5);\n    pvVar1 = param_1[1];\n    __src = *param_1;\n    pvVar2 = ppvVar6->field_0x8;\n    *param_1 = (void *)ppvVar6->field_0x0;\n    param_1[1] = pvVar2;\n    ppvVar6->field_0x0 = (qword)__src;\n    ppvVar6->field_0x8 = pvVar1;\n    local_10 = SUB84(pvVar1,0);\n    *(undefined4 *)(param_1 + 1) = local_10;\n    if (*(int *)(param_1 + 1) != 0) {\n      memcpy(*param_1,__src,(ulong)pvVar1 & 0xffffffff);\n    }\n    chunk_buffer_release(ppvVar6);\n  }\n  uVar4 = buffer_string_space(param_1);\n  return uVar4;\n}\n\n",
+          "0x1308c8" : "\nvoid buffer_clear(ForgedStruct_87 *param_1)\n\n{\n  *(undefined4 *)&param_1->field_0x8 = 0;\n  return;\n}\n\n",
+          "0x13876a" : "\nvoid buffer_append_buffer(undefined8 param_1,ForgedStruct_87 *param_2)\n\n{\n  undefined4 uVar1;\n  \n  uVar1 = buffer_clen(param_2);\n  buffer_append_string_len(param_1,param_2->field_0x0,uVar1);\n  return;\n}\n\n",
+          "0x13913a" : "\nvoid chunk_buffer_yield(qword *param_1)\n\n{\n  void *pvVar1;\n  qword qVar2;\n  void *pvVar3;\n  ForgedStruct_87 *puVar4;\n  \n  if ((ulong)*(uint *)((long)param_1 + 0xc) != (chunk_buf_sz | 1)) {\n    puVar4 = (ForgedStruct_87 *)chunk_buffer_acquire_sz(chunk_buf_sz);\n    pvVar1 = (void *)param_1[1];\n    qVar2 = *param_1;\n    pvVar3 = puVar4->field_0x8;\n    *param_1 = puVar4->field_0x0;\n    param_1[1] = (qword)pvVar3;\n    puVar4->field_0x0 = qVar2;\n    puVar4->field_0x8 = pvVar1;\n    chunk_buffer_release(puVar4);\n  }\n  return;\n}\n\n",
+          "0x1386b6" : "\nbool buffer_is_blank(ForgedStruct_87 *param_1)\n\n{\n  return *(uint *)&param_1->field_0x8 < 2;\n}\n\n",
+          "0x130996" : "\nvoid buffer_move(ForgedStruct_87 *param_1,undefined8 *param_2)\n\n{\n  void *pvVar1;\n  qword qVar2;\n  void *pvVar3;\n  \n  buffer_clear(param_1);\n  pvVar1 = (void *)param_2[1];\n  qVar2 = *param_2;\n  pvVar3 = param_1->field_0x8;\n  *param_2 = param_1->field_0x0;\n  param_2[1] = pvVar3;\n  param_1->field_0x0 = qVar2;\n  param_1->field_0x8 = pvVar1;\n  return;\n}\n\n"
+        }
+      },
+      "ForgedStruct_86" : {
+        "desc" : "Structure",
+        "layout" : {
+          "0x0" : {
+            "desc" : "Primitive",
+            "size" : 8,
+            "type" : "qword",
+            "name" : "field_0x0"
+          },
+          "0x8" : {
+            "desc" : "Primitive",
+            "size" : 4,
+            "type" : "dword",
+            "name" : "field_0x8"
+          }
+        },
+        "ptrRef" : { },
+        "nest" : { },
+        "anonTypes" : { },
+        "decompilerInferred" : {
+          "composite" : [ ],
+          "array" : [ ],
+          "primitive" : [ ]
+        },
+        "decompiledCode" : {
+          "0x1391bf" : "\nundefined4 chunk_buffer_prepare_append(void **param_1,ulong param_2)\n\n{\n  void *pvVar1;\n  void *__src;\n  void *pvVar2;\n  uint uVar3;\n  undefined4 uVar4;\n  ulong uVar5;\n  ForgedStruct_86 *ppvVar6;\n  undefined4 local_10;\n  \n  uVar3 = buffer_string_space(param_1);\n  if (uVar3 < param_2) {\n    if (*(int *)(param_1 + 1) == 0) {\n      uVar5 = 1;\n    }\n    else {\n      uVar5 = (ulong)*(uint *)(param_1 + 1);\n    }\n    ppvVar6 = (ForgedStruct_86 *)chunk_buffer_acquire_sz(param_2 + uVar5);\n    pvVar1 = param_1[1];\n    __src = *param_1;\n    pvVar2 = *(void **)&ppvVar6->field_0x8;\n    *param_1 = (void *)ppvVar6->field_0x0;\n    param_1[1] = pvVar2;\n    ppvVar6->field_0x0 = (qword)__src;\n    *(void **)&ppvVar6->field_0x8 = pvVar1;\n    local_10 = SUB84(pvVar1,0);\n    *(undefined4 *)(param_1 + 1) = local_10;\n    if (*(int *)(param_1 + 1) != 0) {\n      memcpy(*param_1,__src,(ulong)pvVar1 & 0xffffffff);\n    }\n    chunk_buffer_release(ppvVar6);\n  }\n  uVar4 = buffer_string_space(param_1);\n  return uVar4;\n}\n\n",
+          "0x1308c8" : "\nvoid buffer_clear(ForgedStruct_86 *param_1)\n\n{\n  param_1->field_0x8 = 0;\n  return;\n}\n\n",
+          "0x13876a" : "\nvoid buffer_append_buffer(undefined8 param_1,ForgedStruct_86 *param_2)\n\n{\n  undefined4 uVar1;\n  \n  uVar1 = buffer_clen(param_2);\n  buffer_append_string_len(param_1,param_2->field_0x0,uVar1);\n  return;\n}\n\n",
+          "0x13913a" : "\nvoid chunk_buffer_yield(qword *param_1)\n\n{\n  qword qVar1;\n  qword qVar2;\n  qword qVar3;\n  ForgedStruct_86 *puVar4;\n  \n  if ((ulong)*(uint *)((long)param_1 + 0xc) != (chunk_buf_sz | 1)) {\n    puVar4 = (ForgedStruct_86 *)chunk_buffer_acquire_sz(chunk_buf_sz);\n    qVar1 = param_1[1];\n    qVar2 = *param_1;\n    qVar3 = *(qword *)&puVar4->field_0x8;\n    *param_1 = puVar4->field_0x0;\n    param_1[1] = qVar3;\n    puVar4->field_0x0 = qVar2;\n    *(qword *)&puVar4->field_0x8 = qVar1;\n    chunk_buffer_release(puVar4);\n  }\n  return;\n}\n\n",
+          "0x1386b6" : "\nbool buffer_is_blank(ForgedStruct_86 *param_1)\n\n{\n  return param_1->field_0x8 < 2;\n}\n\n",
+          "0x130996" : "\nvoid buffer_move(ForgedStruct_86 *param_1,undefined8 *param_2)\n\n{\n  undefined8 uVar1;\n  qword qVar2;\n  undefined8 uVar3;\n  \n  buffer_clear(param_1);\n  uVar1 = param_2[1];\n  qVar2 = *param_2;\n  uVar3 = *(undefined8 *)&param_1->field_0x8;\n  *param_2 = param_1->field_0x0;\n  param_2[1] = uVar3;\n  param_1->field_0x0 = qVar2;\n  *(undefined8 *)&param_1->field_0x8 = uVar1;\n  return;\n}\n\n"
+        }
+      }
+    }
+  } ]
+}

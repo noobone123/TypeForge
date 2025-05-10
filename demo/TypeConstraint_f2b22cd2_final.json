@@ -1,0 +1,66 @@
+{
+  "ForgedStruct_213" : {
+    "desc" : "Structure",
+    "layout" : {
+      "0x4" : {
+        "desc" : "Primitive",
+        "size" : 4,
+        "type" : "int",
+        "name" : "field_0x4"
+      },
+      "0x8" : {
+        "desc" : "Pointer",
+        "size" : 8,
+        "type" : "void *",
+        "name" : "ref_0x8_TypeConstraint_4c5a3461"
+      },
+      "0x18" : {
+        "desc" : "Primitive",
+        "size" : 8,
+        "type" : "qword",
+        "name" : "field_0x18"
+      },
+      "0x20" : {
+        "desc" : "Primitive",
+        "size" : 8,
+        "type" : "qword",
+        "name" : "field_0x20"
+      },
+      "0x28" : {
+        "desc" : "Pointer",
+        "size" : 8,
+        "type" : "void *",
+        "name" : "ref_0x28_TypeConstraint_05d81b5b"
+      },
+      "0x30" : {
+        "desc" : "Pointer",
+        "size" : 8,
+        "type" : "void *",
+        "name" : "ref_0x30_TypeConstraint_05d81b5b"
+      }
+    },
+    "ptrRef" : {
+      "0x8" : {
+        "refSkt" : "TypeConstraint_4c5a3461",
+        "ptrLevel" : 1
+      },
+      "0x28" : {
+        "refSkt" : "TypeConstraint_05d81b5b",
+        "ptrLevel" : 1
+      },
+      "0x30" : {
+        "refSkt" : "TypeConstraint_05d81b5b",
+        "ptrLevel" : 1
+      }
+    },
+    "nest" : {
+      "0x28" : "TypeConstraint_b1d2b2a7"
+    },
+    "anonTypes" : { },
+    "decompilerInferred" : {
+      "composite" : [ ],
+      "array" : [ ],
+      "primitive" : [ ]
+    }
+  }
+}

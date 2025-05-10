@@ -1,0 +1,11 @@
+inference:
+  dataset: "./TypeForge_Dataset" # the input dataset directory
+  gt: "./TypeForge_GT"       # the extracted ground truth directory
+  infer: "./TypeForge_Infer" # the inference output directory
+  projects:             # the projects to be analyzed
+    - "lighttpd"
+
+ghidra:
+  headless: "/home/h1k0/tools/ghidra_11.0.3_PUBLIC/support/analyzeHeadless" # the path to the ghidra headless analyzer
+  project_dir: "/home/h1k0/tmp" # the directory where the ghidra projects are stored
+  project_name: "TypeForge_headless_project" # the name of the ghidra project

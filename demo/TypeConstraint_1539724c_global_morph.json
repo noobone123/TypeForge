@@ -1,0 +1,41 @@
+{
+  "globalMorph" : {
+    "dword" : {
+      "desc" : "Primitive",
+      "type" : "dword",
+      "decompiledCode" : {
+        "0x13dfe0" : "\nundefined8 fdevent_pipe_cloexec(dword *param_1,uint param_2)\n\n{\n  int iVar1;\n  undefined8 uVar2;\n  \n  iVar1 = pipe2((int *)param_1,0x80000);\n  if (iVar1 == 0) {\nLAB_0013e05f:\n    if (0x10000 < param_2) {\n      fcntl64(param_1[1],0x407,param_2);\n    }\n    uVar2 = 0;\n  }\n  else {\n    iVar1 = pipe((int *)param_1);\n    if (iVar1 == 0) {\n      iVar1 = fcntl64(*param_1,2,1);\n      if (iVar1 == 0) {\n        iVar1 = fcntl64(param_1[1],2,1);\n        if (iVar1 == 0) goto LAB_0013e05f;\n      }\n    }\n    uVar2 = 0xffffffff;\n  }\n  return uVar2;\n}\n\n",
+        "0x15dcf7" : "\nundefined8 fdlog_pipe_init(undefined8 param_1,dword *param_2,undefined4 param_3)\n\n{\n  undefined8 *puVar1;\n  undefined8 uVar2;\n  \n  if ((DAT_00179068 & 3) == 0) {\n    ck_realloc_u32(&fdlog_pipes,DAT_00179068,4,0x18);\n  }\n  puVar1 = (undefined8 *)((ulong)DAT_00179068 * 0x18 + fdlog_pipes);\n  DAT_00179068 = DAT_00179068 + 1;\n  *(dword *)((long)puVar1 + 0xc) = *param_2;\n  *(undefined4 *)(puVar1 + 1) = param_3;\n  puVar1[2] = log_monotonic_secs;\n  uVar2 = fdlog_init(param_1,param_2[1],3);\n  *puVar1 = uVar2;\n  return *puVar1;\n}\n\n"
+      }
+    },
+    "ForgedStruct_8" : {
+      "desc" : "Structure",
+      "layout" : {
+        "0x0" : {
+          "desc" : "Primitive",
+          "size" : 4,
+          "type" : "dword",
+          "name" : "field_0x0"
+        },
+        "0x4" : {
+          "desc" : "Primitive",
+          "size" : 4,
+          "type" : "int",
+          "name" : "field_0x4"
+        }
+      },
+      "ptrRef" : { },
+      "nest" : { },
+      "anonTypes" : { },
+      "decompilerInferred" : {
+        "composite" : [ ],
+        "array" : [ ],
+        "primitive" : [ ]
+      },
+      "decompiledCode" : {
+        "0x13dfe0" : "\nundefined8 fdevent_pipe_cloexec(ForgedStruct_8 *param_1,uint param_2)\n\n{\n  int iVar1;\n  undefined8 uVar2;\n  \n  iVar1 = pipe2((int *)param_1,0x80000);\n  if (iVar1 == 0) {\nLAB_0013e05f:\n    if (0x10000 < param_2) {\n      fcntl64(param_1->field_0x4,0x407,param_2);\n    }\n    uVar2 = 0;\n  }\n  else {\n    iVar1 = pipe((int *)param_1);\n    if (iVar1 == 0) {\n      iVar1 = fcntl64(param_1->field_0x0,2,1);\n      if (iVar1 == 0) {\n        iVar1 = fcntl64(param_1->field_0x4,2,1);\n        if (iVar1 == 0) goto LAB_0013e05f;\n      }\n    }\n    uVar2 = 0xffffffff;\n  }\n  return uVar2;\n}\n\n",
+        "0x15dcf7" : "\nundefined8 fdlog_pipe_init(undefined8 param_1,ForgedStruct_8 *param_2,undefined4 param_3)\n\n{\n  undefined8 *puVar1;\n  undefined8 uVar2;\n  \n  if ((DAT_00179068 & 3) == 0) {\n    ck_realloc_u32(&fdlog_pipes,DAT_00179068,4,0x18);\n  }\n  puVar1 = (undefined8 *)((ulong)DAT_00179068 * 0x18 + fdlog_pipes);\n  DAT_00179068 = DAT_00179068 + 1;\n  *(dword *)((long)puVar1 + 0xc) = param_2->field_0x0;\n  *(undefined4 *)(puVar1 + 1) = param_3;\n  puVar1[2] = log_monotonic_secs;\n  uVar2 = fdlog_init(param_1,param_2->field_0x4,3);\n  *puVar1 = uVar2;\n  return *puVar1;\n}\n\n"
+      }
+    }
+  }
+}

@@ -27,7 +27,6 @@ def load_graph(dot_file):
 
     return G
 
-
 def load_graphs(dot_dir):
     """
     Load all .dot files in the specified directory and return a big networkx Graph object.

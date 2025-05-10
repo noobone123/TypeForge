@@ -30,7 +30,7 @@
 // for the correction version of Gradle to use for the Ghidra installation you specify.
 
 //----------------------START "DO NOT MODIFY" SECTION------------------------------
-def ghidraInstallDir = "/home/h1k0/tools/ghidra_11.0.3_PUBLIC"
+def ghidraInstallDir = "/home/h1k0/tools/ghidra_11.0.3_PUBLIC" // Modify `ghidraInstallDir` to your Ghidra installation directory
 
 if (System.env.GHIDRA_INSTALL_DIR) {
 	ghidraInstallDir = System.env.GHIDRA_INSTALL_DIR
@@ -87,6 +87,10 @@ test {
 }
 
 // Exclude additional files from the built extension
-// Ex: buildExtension.exclude '.idea/**'
 buildExtension.exclude '.idea/**'
-
+buildExtension.exclude '.git/**'
+buildExtension.exclude 'GhidraScriptLog/**'
+buildExtension.exclude 'TypeForge_Inference/**'
+buildExtension.exclude 'demo/**'
+buildExtension.exclude 'scripts/**'
+buildExtension.exclude 'imgs/**'
