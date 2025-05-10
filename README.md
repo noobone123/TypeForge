@@ -80,16 +80,38 @@ unzip ghidra_11.0.3_PUBLIC_[your-build-time]_TypeForge.zip
 ## Getting Started
 ### Type Inference (Headless Mode)
 
+After installing the TypeForge, for a single stripped binary, just run:
+```bash
+[YOUR-Ghidra-Installation-Directory]/support/analyzeHeadless \
+    [YOUR-Ghidra-Project-Directory] [YOUR-Project-Name] \
+    -deleteProject -import [YOUR-Stripped-Binary] \
+    -postScript TypeForge.java output=[Your-output-dir]
+```
+
+After a while, you will see the Type Inference results (JSON files) saved in `[Your-output-dir]`. For details about these JSON files, please refer to the [demo](./demo/README.md).
+
+These JSON files will then be fed into *Phase 2 for refinement*. For more information, please refer to [judge](./scripts/judge/README.md).
+
+For batch processing, please refer to [scripts](./scripts/README.md).
+
+> We are currently developing additional features to directly import Type Inference results into Ghidra projects.
+
+> For more information about Ghidra Headless Mode, please refer to [this guide](https://static.grumpycoder.net/pixel/support/analyzeHeadlessREADME.html).
 
 ### Extract the Ground Truth
-Be careful ghidra only support dwarf-4,3,2
+You can also extract the ground truth of composite data types from a binary with debug information (Note that Ghidra currently does **NOT** support Dwarf-5 format debug information, so you need to specify `-gdwarf-4` during compilation).
+For more details, please refer to [scripts](./scripts/README.md).
 
 ### Run in Ghidra GUI Mode
 In development ...
 
-## Developing and Debugging 
+## Developing and Debugging
+TypeForge is developed 使用 [Intellij IDEA]() (version 2024.1.7) and [intellij-ghidra](https://github.com/garyttierney/intellij-ghidra), 请参考 [intellij-ghidra](https://github.com/garyttierney/intellij-ghidra) 安装 xxx 插件；
+2. 
 
 ## Contributors
+TypeForge is written and maintained by:
+- [h1k0](https://github.com/noobone123) h1k0naka@outlook.com
 
 ## Cite
 
