@@ -2,6 +2,7 @@
 
 [![IEEE DOI](https://img.shields.io/badge/IEEE%20S%26P%202025-10.1109%2FSP61157.2025.00193-00629A?logo=ieee&logoColor=00629A&labelColor=E6F2FF)](https://doi.ieeecomputersociety.org/10.1109/SP61157.2025.00193)
 [![CCF-A](https://img.shields.io/badge/CCF_A-Security_%26_Privacy-FFD700?logo=star&logoColor=003A5D)](https://www.ccf.org.cn/Academic_Evaluation/)
+
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/noobone123/TypeForge?style=social)](https://github.com/noobone123/TypeForge/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/noobone123/TypeForge/dev?color=blue&label=last-commit)](https://github.com/noobone123/TypeForge)
@@ -11,7 +12,11 @@
 This is the implementation of the paper titled "TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries". For more details about TypeForge, please refer to [our S&P 2025 paper](https://www.computer.org/csdl/proceedings-article/sp/2025/223600c847/26hiVajYJwY).
 
 ## What is TypeForge?
-- TypeForge aims to recover composite data types (such as structures, unions, etc.) in stripped binaries. Compared to existing methods, TypeForge provides higher efficiency and accuracy. 
+<div style="float: right; margin: 0 0 10px 20px;">
+    <img src="imgs/TypeForge_overview.png" alt="overview" width="400" />
+</div>
+
+TypeForge aims to recover composite data types (such as structures, unions, etc.) in stripped binaries. Compared to existing methods, TypeForge provides higher efficiency and accuracy. 
 - TypeForge is divided into **two phases**: a *Program Analysis phase* and an *LLM-assisted Refinement phase*. The first phase is sufficient for common reverse engineering tasks, while the second phase further improves the accuracy of phase one results.
 - TypeForge is currently implemented as a [Ghidra Extension](https://ghidra-sre.org/InstallationGuide.html#GhidraExtensionNotes). We welcome other developers to port it to platforms like [IDA Pro](https://hex-rays.com/ida-pro), [Binary Ninja](https://binary.ninja/), and [Angr](https://github.com/angr/angr).
 
