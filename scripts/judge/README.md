@@ -4,6 +4,7 @@
 
 ## Setup
 1. create `.env` file in current directory and fill as following:
+
     ```bash
     LANGSMITH_TRACING="false"
     LANGSMITH_API_KEY="[your_langsmith_apikey]"

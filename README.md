@@ -1,6 +1,6 @@
 # TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries
 
-[![IEEE DOI](https://img.shields.io/badge/IEEE%20S%26P%202025-10.1109%2FSP61157.2025.00193-00629A?logo=ieee&logoColor=00629A&labelColor=E6F2FF)](https://doi.ieeecomputersociety.org/10.1109/SP61157.2025.00193)
+[![IEEE DOI](https://img.shields.io/badge/S%26P%202025-10.1109%2FSP61157.2025.00193-00629A?logo=ieee&logoColor=00629A&labelColor=E6F2FF)](https://doi.ieeecomputersociety.org/10.1109/SP61157.2025.00193)
 [![CCF-A](https://img.shields.io/badge/CCF_A-Security_%26_Privacy-FFD700?logo=star&logoColor=003A5D)](https://www.ccf.org.cn/Academic_Evaluation/)
 
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](./LICENSE)
@@ -54,6 +54,7 @@ typeforge/                             # Project root
 ## Building and Installing
 ### Building as ghidra extension
 1. clone this repo
+
     ```bash
     git clone https://github.com/noobone123/TypeForge.git
     ```
@@ -61,6 +62,7 @@ typeforge/                             # Project root
 download ghidra from [here](https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.0.3_build/ghidra_11.0.3_PUBLIC_20240410.zip) and following the ghidra [install instructions](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_11.0.3_build/GhidraDocs/InstallationGuide.html).
 3. Modify `ghidraInstallDir` to **YOUR Ghidra installation directory** in the `build.gradle`.
 4. build the ghidra extension.
+
     ```bash
     cd TypeForge
     gradle buildExtension
@@ -70,6 +72,7 @@ download ghidra from [here](https://github.com/NationalSecurityAgency/ghidra/rel
 
 ### Installing
 Please refer to the following command to unzip and install the compiled Ghidra Extension.
+
 ```bash
 cp ./dist/ghidra_11.0.3_PUBLIC_[your-build-time]_TypeForge.zip \
     [YOUR-Ghidra-Installation-Directory]/Ghidra/Extensions
