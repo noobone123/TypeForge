@@ -1,0 +1,11 @@
+inference:
+  dataset: "./TypeForge_Dataset"
+  gt: "./TypeForge_GT"
+  infer: "./TypeForge_Infer"
+  projects: 
+    - "lighttpd"
+
+ghidra:
+  headless: "/home/h1k0/tools/ghidra_11.0.3_PUBLIC/support/analyzeHeadless"
+  project_dir: "/home/h1k0/tmp"
+  project_name: "TypeForge_headless_project"

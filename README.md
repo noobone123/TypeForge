@@ -41,16 +41,51 @@ typeforge/                             # Project root
 │   └── test/
 ├── ghidra_scripts/                    # Ghidra scripts
 │   ├── TypeForge.java                 # Main TypeForge script
-│   ├── GroundTruth.java               # Ground truth extractor
-│   ├── utils/                         # Utility scripts
-│   └── judge/                         # LLM-assisted selection scripts
+│   └── GroundTruth.java               # Ground truth extractor (from binaries with debug symbol)
+├── scripts/                           # Useful Python Scripts
+│   ├── judge/                         # LLM-assisted double elimination process
+│   ├── GraphExplorer.py               # (Debugging purpose) Explore dumped Type Flow Graph
+│   ├── GroundTruthExtractor.py        # Ground truth extractor (wrapper, actually call GroundTruth.java)
+│   └── TypeInference.py               # Type Inference (wrapper, actually call TypeForge.java)
 ├── lib/
 └── ...
 ```
 
 ## Building and Installing
+### Building as ghidra extension
+1. clone this repo
+    ```bash
+    git clone https://github.com/noobone123/TypeForge.git
+    ```
+2. Install JDK and Ghidra (ghidra version 11.0.3 is tested).   
+download ghidra from [here](https://github.com/NationalSecurityAgency/ghidra/releases/download/Ghidra_11.0.3_build/ghidra_11.0.3_PUBLIC_20240410.zip) and following the ghidra [install instructions](https://github.com/NationalSecurityAgency/ghidra/blob/Ghidra_11.0.3_build/GhidraDocs/InstallationGuide.html).
+3. Modify `ghidraInstallDir` to **YOUR Ghidra installation directory** in the `build.gradle`.
+4. build the ghidra extension.
+    ```bash
+    cd TypeForge
+    gradle buildExtension
+    # after building, you will find your extension zip file.
+    ls -alh ./dist/ghidra_11.0.3_PUBLIC_[your-build-time]_TypeForge.zip
+    ```
+
+### Installing
+Please refer to the following command to unzip and install the compiled Ghidra Extension.
+```bash
+cp ./dist/ghidra_11.0.3_PUBLIC_[your-build-time]_TypeForge.zip \
+    [YOUR-Ghidra-Installation-Directory]/Ghidra/Extensions
+cd [YOUR-Ghidra-Installation-Directory]/Ghidra/Extensions
+unzip ghidra_11.0.3_PUBLIC_[your-build-time]_TypeForge.zip
+```
 
 ## Getting Started
+### Type Inference (Headless Mode)
+
+
+### Extract the Ground Truth
+Be careful ghidra only support dwarf-4,3,2
+
+### Run in Ghidra GUI Mode
+In development ...
 
 ## Developing and Debugging 
 
