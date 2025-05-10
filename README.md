@@ -1,8 +1,7 @@
 # TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries
 
 [![IEEE DOI](https://img.shields.io/badge/S%26P%202025-10.1109%2FSP61157.2025.00193-00629A?logo=ieee&logoColor=00629A&labelColor=E6F2FF)](https://doi.ieeecomputersociety.org/10.1109/SP61157.2025.00193)
-[![CCF-A](https://img.shields.io/badge/CCF_A-Security_%26_Privacy-FFD700?logo=star&logoColor=003A5D)](https://www.ccf.org.cn/Academic_Evaluation/)
-
+[![CCF-A](https://img.shields.io/badge/CCF_A-Security_%26_Privacy-FFD700?logo=star&logoColor=003A5D)](https://www.ccf.org.cn/Academic_Evaluation/)  
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/noobone123/typeforge?style=social)](https://github.com/noobone123/typeforge/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/noobone123/typeforge/dev?color=blue&label=last-commit)](https://github.com/noobone123/typeforge)
