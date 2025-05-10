@@ -4,8 +4,8 @@
 [![CCF-A](https://img.shields.io/badge/CCF_A-Security_%26_Privacy-FFD700?logo=star&logoColor=003A5D)](https://www.ccf.org.cn/Academic_Evaluation/)
 
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](./LICENSE)
-[![GitHub Stars](https://img.shields.io/github/stars/noobone123/TypeForge?style=social)](https://github.com/noobone123/TypeForge/stargazers)
-[![Last Commit](https://img.shields.io/github/last-commit/noobone123/TypeForge/dev?color=blue&label=last-commit)](https://github.com/noobone123/TypeForge)
+[![GitHub Stars](https://img.shields.io/github/stars/noobone123/typeforge?style=social)](https://github.com/noobone123/typeforge/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/noobone123/typeforge/dev?color=blue&label=last-commit)](https://github.com/noobone123/typeforge)
 
 > We are continuously maintaining and updating this project, aiming to provide more user-friendly features and higher efficiency.
 
