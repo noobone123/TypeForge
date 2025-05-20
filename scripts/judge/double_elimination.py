@@ -72,16 +72,15 @@ class Match:
             
             # Direct async call without asyncio.run()
             results = await judge_readability(decompiled_code_pairs)
-            
-            # Post handle the results
-            print(results)
+                        
             if not results:  # If results is empty or None
                 print("No results returned, defaulting to player1 as winner")
                 self.winner = self.player1
                 self.loser = self.player2
                 return
-                
-            print(results.count(0), results.count(1))
+            
+            # print(results)
+            # print(results.count(0), results.count(1))
             # results is a list of 0 or 1
             # 0 means player1 is better, 1 means player2 is better
             if results.count(0) > results.count(1):
@@ -255,7 +254,7 @@ class DoubleEliminationTournament:
     def get_champion(self) -> Player:
         return self.champion
 
-async def run_async(constraint: Dict) -> Dict:
+async def run_async(constraint: Dict, morph_file_name: str) -> Dict:
     """
     Asynchronous version of the run function.
     
@@ -295,7 +294,9 @@ async def run_async(constraint: Dict) -> Dict:
         await asyncio.gather(*match_tasks)
         tournament.process_results()        
     
-    print(f"Champion: {tournament.get_champion().name}")
+    print(f"Champion of {morph_file_name}: {tournament.get_champion().name}")
+    print(f"\tAll players: {[player.name for player in tournament.players]}")
+    # Update the final champion in the constraint
     return constraint
 
 # Keep the synchronous version for backward compatibility

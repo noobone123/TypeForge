@@ -87,8 +87,11 @@ async def judge_readability(decompiled_code_pairs: List[Tuple[str, str]]) -> Lis
     if not decompiled_code_pairs:
         print("No code pairs to judge")
         return []
-    
-    # TODO: if len(decompiled_code_pairs) > 10, do random sample.
+
+    if len(decompiled_code_pairs) > 10:
+        decompiled_code_pairs = random.sample(decompiled_code_pairs, 10)
+        print(f"Randomly sample {len(decompiled_code_pairs)} code pairs")
+
     print(f"Judging {len(decompiled_code_pairs)} code pairs")
     
     tasks = []

@@ -25,7 +25,7 @@ async def process_global_morph(morph_file: pathlib.Path) -> str:
         async with aiofiles.open(morph_file, 'r') as f:
             content = await f.read()
             data = json.loads(content)
-            result = await double_elimination.run_async(data)
+            result = await double_elimination.run_async(data, morph_file.name)
             return f"Successfully processed global morph: {morph_file.name}"
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
@@ -118,7 +118,6 @@ class Task:
         """Update progress bar with the result."""
         if result is not None:
             self.pbar.update()
-            self.pbar.set_description_str(f"Last: {result[:30]}...")
 
 async def process_task(task_func, morph_file: pathlib.Path, pbar: tqdm) -> None:
     """
