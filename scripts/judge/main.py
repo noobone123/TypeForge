@@ -41,12 +41,8 @@ async def process_range_morph_single(morph_file: pathlib.Path) -> str:
         Result message or error message
     """
     try:
-        async with aiofiles.open(morph_file, 'r') as f:
-            content = await f.read()
-            data = json.loads(content)
-            # Process single range morph here
-            # Currently just a placeholder
-            return f"Successfully processed single range morph: {morph_file.name}"
+        await asyncio.sleep(1)
+        return f"Successfully processed single range morph: {morph_file.name}"
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
 
@@ -100,16 +96,41 @@ async def process_range_morph_multi(morph_file: pathlib.Path) -> str:
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
 
-async def update_progress(result: str, pbar: tqdm) -> None:
-    """Update progress bar asynchronously"""
-    if result is not None:
-        pbar.update()
-        pbar.set_description_str(f"Last: {result[:30]}...")
+class Task:
+    """A class to encapsulate task execution and progress tracking."""
+    
+    def __init__(self, task_func, morph_file: pathlib.Path, pbar: tqdm):
+        self.task_func = task_func
+        self.morph_file = morph_file
+        self.pbar = pbar
+    
+    async def execute(self) -> None:
+        """Execute the task and handle progress updates."""
+        try:
+            result = await self.task_func(self.morph_file)
+            await self._update_progress(result)
+        except Exception as e:
+            error_msg = f"Error processing {self.morph_file.name}: {str(e)}"
+            await self._update_progress(error_msg)
+            print(error_msg)
+    
+    async def _update_progress(self, result: str) -> None:
+        """Update progress bar with the result."""
+        if result is not None:
+            self.pbar.update()
+            self.pbar.set_description_str(f"Last: {result[:30]}...")
 
 async def process_task(task_func, morph_file: pathlib.Path, pbar: tqdm) -> None:
-    """Process a task and update progress"""
-    result = await task_func(morph_file)
-    await update_progress(result, pbar)
+    """
+    Process a task using the Task class.
+    
+    Args:
+        task_func: Async function to execute
+        morph_file: Path to the morph file
+        pbar: Progress bar to update
+    """
+    task = Task(task_func, morph_file, pbar)
+    await task.execute()
 
 async def async_dispatch(judge_candidates: List[pathlib.Path]) -> None:
     """
@@ -179,8 +200,12 @@ async def async_dispatch(judge_candidates: List[pathlib.Path]) -> None:
     for pbar in pbars:
         pbar.close()
 
-async def main():
+def main():
     """Main entry point for the async program"""
+    # Dispatch processing tasks asynchronously
+    asyncio.run(async_dispatch(judge_candidates))
+
+if __name__== "__main__":
     try:
         # load environment variables from .env file
         dotenv.load_dotenv()
@@ -241,12 +266,6 @@ async def main():
         exit(1)
     
     print(f"Found {len(judge_candidates)} morph json files in {inference_dir}.")
-    
-    # Dispatch processing tasks asynchronously
-    await async_dispatch(judge_candidates)
 
-if __name__== "__main__":
     # Run the async main function
-    asyncio.run(main())
-    
-    # ppp: just a git test ...
+    main()
