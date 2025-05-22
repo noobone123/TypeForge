@@ -254,7 +254,8 @@ class DoubleEliminationTournament:
     def get_champion(self) -> Player:
         return self.champion
 
-async def run_async(constraint: Dict, morph_file_name: str) -> Dict:
+async def run_async(morph_data: Dict, morph_file_name: str, 
+                    morph_type: str, range: Tuple[str, str] = None) -> Dict:
     """
     Asynchronous version of the run function.
     
@@ -264,17 +265,21 @@ async def run_async(constraint: Dict, morph_file_name: str) -> Dict:
     Returns:
         The processed constraint dictionary
     """
-    if "desc" in constraint and constraint["desc"] == "NoRetypeCandidates":
+    if "desc" in morph_data and morph_data["desc"] == "NoRetypeCandidates":
         return None
     
     all_player = []
-    if "globalMorph" in constraint:
-        type_data = constraint["globalMorph"]
-        for type_name, data in type_data.items():
+
+    if morph_type == "global":
+        if "globalMorph" in morph_data:
+            type_data = morph_data["globalMorph"]
+            for type_name, data in type_data.items():
+                player = Player(type_name, data["decompiledCode"])
+                all_player.append(player)
+    elif morph_type == "range":
+        for type_name, data in morph_data["types"].items():
             player = Player(type_name, data["decompiledCode"])
             all_player.append(player)
-
-    # TODO: handle rangeMorph multi and rangeMorph single here.
 
     tournament = DoubleEliminationTournament(all_player)
     tournament.create_initial_matches()
@@ -294,10 +299,17 @@ async def run_async(constraint: Dict, morph_file_name: str) -> Dict:
         await asyncio.gather(*match_tasks)
         tournament.process_results()        
     
-    print(f"Champion of {morph_file_name}: {tournament.get_champion().name}")
-    print(f"\tAll players: {[player.name for player in tournament.players]}")
-    # Update the final champion in the constraint
-    return constraint
+    #TODO: Update the final champion in the constraint
+    if morph_type == "global":
+        print(f"[Global] Champion of {morph_file_name}: {tournament.get_champion().name}")
+        print(f"\tAll players: {[player.name for player in tournament.players]}")
+        return morph_data
+    elif morph_type == "range":
+        print(f"[Range] ({range[0]} - {range[1]}) Champion of {morph_file_name}: {tournament.get_champion().name}")
+        print(f"\tAll players: {[player.name for player in tournament.players]}")
+        return morph_data
+    else:
+        raise ValueError(f"Invalid morph type: {morph_type}")
 
 # Keep the synchronous version for backward compatibility
 def run(constraint: Dict) -> Dict:

@@ -1,6 +1,4 @@
-import asyncio.selector_events
-import getpass
-import os, asyncio, logging
+import os, asyncio
 from typing import Tuple, List, Literal, Optional, Any
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -30,12 +28,14 @@ class ReadabilityJudgment(BaseModel):
         description = "0 if decompiled_code_0 has better readability, 1 if decompiled_code_1 has better readability."
     )
 
-async def judge_code_pair(code_pair: Tuple[str, str]) -> int:
+async def judge_code_pair(code_pair: Tuple[str, str], max_retries: int = 3, timeout: float = 5.0) -> int:
     """
     Judge a pair of code snippets for readability.
     
     Args:
         code_pair: A tuple of two code snippets to compare
+        max_retries: Maximum number of retries when timeout occurs
+        timeout: Timeout in seconds for each attempt
         
     Returns:
         0 if the first code is more readable, 1 if the second is more readable
@@ -46,33 +46,46 @@ async def judge_code_pair(code_pair: Tuple[str, str]) -> int:
         "code2": code_pair[1]
     })
     
-    try:
-        # Use try/except to handle potential import errors
+    retries = 0
+    while retries < max_retries:
         try:
-            llm = init_chat_model(
-                model=os.environ.get("MODEL"),
-                temperature=0.4,
-                base_url=os.environ.get("BASE_URL"),
-            )
-        except (ImportError, AttributeError) as e:
-            print(f"Failed to initialize chat model: {e}")
-            return random.choice([0, 1])
-            
-        structured_llm = llm.with_structured_output(ReadabilityJudgment)
-        result = await structured_llm.ainvoke(prompt)
-        print(f"Judge result: {result.choice}")
-        return result.choice
-    except Exception as e:
-        print(f"Exception occurred in judge_code_pair: {e}")
-        # Return a random choice in case of error instead of crashing the entire process
-        return random.choice([0, 1])
-    finally:
-        # Ensure resources are cleaned up
-        if llm and hasattr(llm, 'aclose') and callable(llm.aclose):
+            # Use try/except to handle potential import errors
             try:
-                await llm.aclose()
-            except Exception as e:
-                print(f"Error closing LLM: {e}")
+                if llm is None:  # Only initialize if not already initialized
+                    llm = init_chat_model(
+                        model=os.environ.get("MODEL"),
+                        temperature=0.4,
+                        base_url=os.environ.get("BASE_URL"),
+                    )
+            except (ImportError, AttributeError) as e:
+                print(f"Failed to initialize chat model: {e}")
+                return random.choice([0, 1])
+                
+            structured_llm = llm.with_structured_output(ReadabilityJudgment)
+            try:
+                result = await asyncio.wait_for(structured_llm.ainvoke(prompt), timeout=timeout)
+                print(f"Judge result: {result.choice}")
+                return result.choice
+            except asyncio.TimeoutError:
+                retries += 1
+                print(f"Timeout occurred, attempt {retries}/{max_retries}")
+                if retries == max_retries:
+                    print("Max retries reached, returning random choice")
+                    return random.choice([0, 1])
+                continue
+                
+        except Exception as e:
+            print(f"Exception occurred in judge_code_pair: {e}")
+            # Return a random choice in case of error instead of crashing the entire process
+            return random.choice([0, 1])
+        finally:
+            # Ensure resources are cleaned up
+            if llm and hasattr(llm, 'aclose') and callable(llm.aclose):
+                try:
+                    await llm.aclose()
+                except Exception as e:
+                    print(f"Error closing LLM: {e}")
+            llm = None  # Reset llm for next retry
 
 async def judge_readability(decompiled_code_pairs: List[Tuple[str, str]]) -> List[int]:
     """

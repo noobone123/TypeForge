@@ -24,8 +24,8 @@ async def process_global_morph(morph_file: pathlib.Path) -> str:
     try:
         async with aiofiles.open(morph_file, 'r') as f:
             content = await f.read()
-            data = json.loads(content)
-            result = await double_elimination.run_async(data, morph_file.name)
+            morph_data = json.loads(content)
+            result = await double_elimination.run_async(morph_data, morph_file.name, "global")
             return f"Successfully processed global morph: {morph_file.name}"
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
@@ -41,29 +41,17 @@ async def process_range_morph_single(morph_file: pathlib.Path) -> str:
         Result message or error message
     """
     try:
-        await asyncio.sleep(1)
-        return f"Successfully processed single range morph: {morph_file.name}"
+        async with aiofiles.open(morph_file, 'r') as f:
+            content = await f.read()
+            data = json.loads(content)
+            assert len(data["rangeMorph"]) == 1, f"Error: {morph_file.name} should have exactly one range morph."
+            morph_data = data["rangeMorph"][0]
+            start_offset = morph_data["startOffset"]
+            end_offset = morph_data["endOffset"]
+            result = await double_elimination.run_async(morph_data, morph_file.name, "range", (start_offset, end_offset))
+            return f"Successfully processed single range morph: {morph_file.name}"
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
-
-async def process_range_morph_element(morph_file: pathlib.Path, element_index: int, element_data: Dict[str, Any]) -> Tuple[int, Dict[str, Any], str]:
-    """
-    Process a single element in a range morph asynchronously.
-    
-    Args:
-        morph_file: Path to the range morph file
-        element_index: Index of the element in the range morph
-        element_data: Data of the element
-        
-    Returns:
-        Tuple of (element_index, element_data, result_message)
-    """
-    try:
-        # Process the element here - placeholder for actual processing
-        await asyncio.sleep(1)  # Simulate processing time
-        return (element_index, element_data, f"Successfully processed element {element_index}")
-    except Exception as e:
-        return (element_index, element_data, f"Error processing element {element_index}: {str(e)}")
 
 async def process_range_morph_multi(morph_file: pathlib.Path) -> str:
     """
@@ -83,18 +71,40 @@ async def process_range_morph_multi(morph_file: pathlib.Path) -> str:
             # Process elements in parallel using asyncio
             morph_elements = data.get("rangeMorph", [])
             tasks = []
+            assert len(morph_elements) > 1, f"Error: {morph_file.name} should have at least two range morphs."
             for i, element in enumerate(morph_elements):
                 tasks.append(process_range_morph_element(morph_file, i, element))
             
             # Wait for all tasks to complete
             results = await asyncio.gather(*tasks)
             
-            # Process results if needed
+            # TODO: Process the final results and merge them into a final type declaration.
             # ...
                 
             return f"Successfully processed multi-element range morph: {morph_file.name}"
     except Exception as e:
         return f"Error processing {morph_file.name}: {str(e)}"
+
+async def process_range_morph_element(morph_file: pathlib.Path, element_index: int, element_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Process a single element in a range morph asynchronously.
+    
+    Args:
+        morph_file: Path to the range morph file
+        element_index: Index of the element in the range morph
+        element_data: Data of the element
+        
+    Returns:
+        Tuple of (element_index, element_data, result_message)
+    """
+    try:
+        # Process the element here - placeholder for actual processing
+        start_offset = element_data["startOffset"]
+        end_offset = element_data["endOffset"]
+        result = await double_elimination.run_async(element_data, morph_file.name, "range", (start_offset, end_offset))
+        return result
+    except Exception as e:
+        return element_data
 
 class Task:
     """A class to encapsulate task execution and progress tracking."""
@@ -201,8 +211,11 @@ async def async_dispatch(judge_candidates: List[pathlib.Path]) -> None:
 
 def main():
     """Main entry point for the async program"""
+    start_time = time.time()
     # Dispatch processing tasks asynchronously
     asyncio.run(async_dispatch(judge_candidates))
+    end_time = time.time()
+    print(f"Total time taken: {end_time - start_time} seconds")
 
 if __name__== "__main__":
     try:
