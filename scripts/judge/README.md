@@ -1,9 +1,7 @@
 # LLM-Assisted Double Elimination
 
-**(Warning)** We are currently refactoring this module using `asyncio` to achieve higher execution efficiency. The refactoring is still in progress, so this module is temporarily unavailable.
-
 ## Setup
-1. create `.env` file in current directory and fill as following:
+1. Create `.env` file in current directory and fill as following:
 
     ```bash
     LANGSMITH_TRACING="false"
@@ -13,3 +11,8 @@
     BASE_URL="[your_url]"
     MODEL="gpt-4.1-mini"
     ```
+2. The directory containing inferred type constraints (including a series of JSON files)
+
+## Judge
+1. Run `uv run main.py [inferred_dir]` to refinement the inferred results.
+2. The JSON file with the suffix `_morph_final.json` contains the final inferred type.

@@ -3,15 +3,17 @@ import json
 import argparse
 import asyncio
 import time
+from pydantic import constr
 from tqdm import tqdm
 import os
 import dotenv
 import getpass
 import aiofiles
 import double_elimination
-from typing import List, Dict, Any, Tuple
+import copy
+from typing import List, Dict, Any, Tuple, final
 
-async def process_global_morph(morph_file: pathlib.Path) -> str:
+async def process_global_morph(morph_file: pathlib.Path):
     """
     Process a global morph file asynchronously.
     
@@ -26,11 +28,11 @@ async def process_global_morph(morph_file: pathlib.Path) -> str:
             content = await f.read()
             morph_data = json.loads(content)
             result = await double_elimination.run_async(morph_data, morph_file.name, "global")
-            return f"Successfully processed global morph: {morph_file.name}"
+            return ("Global", morph_file, result)
     except Exception as e:
-        return f"Error processing {morph_file.name}: {str(e)}"
+        return ("Global", morph_file, f"Error processing {morph_file.name}: {str(e)}")
 
-async def process_range_morph_single(morph_file: pathlib.Path) -> str:
+async def process_range_morph_single(morph_file: pathlib.Path):
     """
     Process a range morph file with a single morph asynchronously.
     
@@ -49,11 +51,11 @@ async def process_range_morph_single(morph_file: pathlib.Path) -> str:
             start_offset = morph_data["startOffset"]
             end_offset = morph_data["endOffset"]
             result = await double_elimination.run_async(morph_data, morph_file.name, "range", (start_offset, end_offset))
-            return f"Successfully processed single range morph: {morph_file.name}"
+            return ("Range-single", morph_file, result)
     except Exception as e:
-        return f"Error processing {morph_file.name}: {str(e)}"
+        return ("Range-single", morph_file, f"Error processing {morph_file.name}: {str(e)}")
 
-async def process_range_morph_multi(morph_file: pathlib.Path) -> str:
+async def process_range_morph_multi(morph_file: pathlib.Path):
     """
     Process a range morph file with multiple morphs asynchronously.
     
@@ -73,19 +75,15 @@ async def process_range_morph_multi(morph_file: pathlib.Path) -> str:
             tasks = []
             assert len(morph_elements) > 1, f"Error: {morph_file.name} should have at least two range morphs."
             for i, element in enumerate(morph_elements):
-                tasks.append(process_range_morph_element(morph_file, i, element))
+                tasks.append(process_range_morph_element(morph_file, element))
             
             # Wait for all tasks to complete
             results = await asyncio.gather(*tasks)
-            
-            # TODO: Process the final results and merge them into a final type declaration.
-            # ...
-                
-            return f"Successfully processed multi-element range morph: {morph_file.name}"
+            return ("Range-multi", morph_file, results)
     except Exception as e:
-        return f"Error processing {morph_file.name}: {str(e)}"
+        return ("Range-multi", morph_file, f"Error processing {morph_file.name}: {str(e)}")
 
-async def process_range_morph_element(morph_file: pathlib.Path, element_index: int, element_data: Dict[str, Any]) -> Dict[str, Any]:
+async def process_range_morph_element(morph_file: pathlib.Path, element_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     Process a single element in a range morph asynchronously.
     
@@ -104,7 +102,7 @@ async def process_range_morph_element(morph_file: pathlib.Path, element_index: i
         result = await double_elimination.run_async(element_data, morph_file.name, "range", (start_offset, end_offset))
         return result
     except Exception as e:
-        return element_data
+        return f"Error processing {morph_file.name}: {str(e)}"
 
 class Task:
     """A class to encapsulate task execution and progress tracking."""
@@ -124,10 +122,91 @@ class Task:
             await self._update_progress(error_msg)
             print(error_msg)
     
-    async def _update_progress(self, result: str) -> None:
+    async def _update_progress(self, result: Tuple[str, pathlib.Path, Any]) -> None:
         """Update progress bar with the result."""
-        if result is not None:
-            self.pbar.update()
+        self.pbar.update()
+        type = result[0]
+        if type == "Global":
+            champion = result[2]
+            if isinstance(champion, str) and "Error" in champion:
+                return
+            else:
+                self.pbar.update()
+                file = result[1]
+                # `global_morph.json` -> `global_morph_final.json`
+                new_file = file.with_name(f"{file.stem}_final{file.suffix}")
+                async with aiofiles.open(new_file, 'w') as f:
+                    await f.write(json.dumps(champion, indent=4))
+
+        elif type == "Range-single":
+            champion = result[2]
+            if isinstance(champion, str) and "Error" in champion:
+                return
+            else:
+                self.pbar.update()
+                file = result[1]
+                # `range_morph_single.json` -> `range_morph_single_final.json`
+                new_file = file.with_name(f"{file.stem}_final{file.suffix}")
+                final_info = self._merge_constraints([champion])
+                async with aiofiles.open(new_file, 'w') as f:
+                    await f.write(json.dumps(final_info, indent=4))
+
+        elif type == "Range-multi":
+            champion = result[2]
+            if isinstance(champion, str) and "Error" in champion:
+                return
+            else:
+                self.pbar.update()
+                file = result[1]
+                # `range_morph_multi.json` -> `range_morph_multi_final.json`
+                new_file = file.with_name(f"{file.stem}_final{file.suffix}")
+                final_info = self._merge_constraints(champion)
+                async with aiofiles.open(new_file, 'w') as f:
+                    await f.write(json.dumps(final_info, indent=4))
+
+    def _merge_constraints(self, constraints: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Merge constraints from multiple range morphs."""
+        if len(constraints) == 1:
+            final_type = constraints[0]["finalType"]
+            final_type_info = constraints[0]["types"][final_type]
+            return {
+                final_type: final_type_info
+            }
+        else:
+            # Need to merge multiple ranges' final layouts.
+            final_type_name = None
+            final_type_info = None
+            correct_member = {}
+            for c in constraints:
+                final_type = c["finalType"]
+                if final_type_name is None and final_type_info is None:
+                    final_type_name = final_type
+                    final_type_info = copy.deepcopy(c["types"][final_type])
+
+                start_offset = c["startOffset"]
+                end_offset = c["endOffset"]
+                start_int = int(start_offset, 16)
+                end_int = int(end_offset, 16)
+                # Removing some member info
+                for offset in final_type_info["layout"].copy():
+                    offset_int = int(offset, 16)
+                    if start_int <= offset_int < end_int:
+                        del final_type_info["layout"][offset]
+
+                for offset, field_data in c["types"][final_type]["layout"].items():
+                    offset_int = int(offset, 16)
+                    if start_int <= offset_int < end_int:
+                        correct_member[offset] = field_data
+            
+            for offset, member_info in correct_member.items():
+                final_type_info["layout"][offset] = member_info
+            
+            # Sort final_type_info["layout"] by offset
+            final_type_info["layout"] = dict(sorted(final_type_info["layout"].items(), key=lambda x: int(x[0], 16)))
+
+            return {
+                final_type_name: final_type_info
+            }
 
 async def process_task(task_func, morph_file: pathlib.Path, pbar: tqdm) -> None:
     """
@@ -258,9 +337,14 @@ if __name__== "__main__":
         print(f"Error: {inference_dir} does not exist.")
         exit(1)
 
+    # If there are `_morph_final.json` suffix in the filename, delete that file
+    for json_file in list(inference_dir.glob("*.json")):
+        if "_morph_final.json" in json_file.name:
+            print(f"Deleting {json_file.name} ...")
+            json_file.unlink()
+
     # List the dir, filter all json files
     json_files = list(inference_dir.glob("*.json"))
-
     if not json_files:
         print(f"Error: No json files found in {inference_dir}.")
         exit(1)
