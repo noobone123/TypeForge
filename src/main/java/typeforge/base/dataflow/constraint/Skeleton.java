@@ -350,9 +350,22 @@ public class Skeleton {
         }
     }
 
+
+    /**
+     * If the skeleton is empty, meaning we should not consider it as a valid composite data type.
+     * @return true if the skeleton is empty, false otherwise
+     */
     public boolean isEmpty() {
-        return fieldAccess.isEmpty() && fieldAttrs.isEmpty() &&
-                decompilerInferredCompositeTypes.isEmpty() && sizeSources.isEmpty();
+        if (!decompilerInferredCompositeTypes.isEmpty()) {
+            return false; // If there are decompiler inferred composite types, the skeleton should not empty
+        }
+        if (fieldAccess.isEmpty() && fieldAttrs.isEmpty()) {
+            return true; // If both fieldAccess and fieldAttrs are empty, the skeleton is empty
+        }
+        // SizeSource should not be considered, as some Skeletons may indicate an array and hold size information,
+        // if there are no fieldAccess and fieldAttrs, we should also consider it as an empty Skeleton. Anyway, this
+        // may cause little false positive.
+        return false;
     }
 
     public void addDecompilerInferredCompositeType(DataType dataType) {
@@ -387,6 +400,10 @@ public class Skeleton {
                 sb.append(String.format("%s(%d) ", dataType.getName(), count));
             });
             sb.append("\n");
+        });
+        sizeSources.forEach(sizeSource -> {
+            sb.append(prefixTab).append("\t");
+            sb.append(String.format("SizeSource: %s", sizeSource));
         });
         return sb.toString();
     }

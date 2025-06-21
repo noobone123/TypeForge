@@ -135,7 +135,7 @@ public class TypeAnalyzer {
         markVarArgFunctions();
 
         // Intra-procedural analysis, build TFG of each function
-        // TODO: intra-procedural analysis in parallel
+        // TODO: also put intra-procedural TFG construction in parallel
         var workListCopy = new LinkedList<>(interSolver.workList);
 
         while (!workListCopy.isEmpty()) {
