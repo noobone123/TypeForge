@@ -250,6 +250,17 @@ public class TypeConstraint {
         return true;
     }
 
+    public boolean hasMultipleDecompilerInferredSizes() {
+        var sizes = new HashSet<Integer>();
+        for (var dt: decompilerInferredCompositeTypes) {
+            var dtSize = dt.getLength();
+            if (dtSize > 0) {
+                sizes.add(dtSize);
+            }
+        }
+        return sizes.size() > 1;
+    }
+
     public boolean noFieldAccess() {
         return innerSkeleton.fieldAccess.isEmpty();
     }

@@ -452,6 +452,17 @@ public class TypeHintCollector {
                     c.finalType = ((Array) inferredTypes.iterator().next()).getDataType();
                     continue;
                 }
+
+                // If there are multiple different size decompiled-inferred composite types,
+                // For example: (char[4], char[8], char[1024], ...), which may caused by the arrays or imprecision in previous analysis,
+                // we consider it as a pointer to primitive type.
+                if (c.hasMultipleDecompilerInferredSizes()) {
+                    Logging.debug("TypeHintCollector", "Maybe Pointer to Primitive Array (due to multiple sizes) Detected: " + c);
+                    c.dumpInfo();
+                    c.isPointerToPrimitive = true;
+                    c.finalType = null;
+                    continue;
+                }
             }
 
             // If there are multiple same size members in the constraint
