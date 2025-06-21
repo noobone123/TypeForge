@@ -283,10 +283,14 @@ public class ConstPropagator {
         for (var expr: exprManager.getExprToSkeletonBeforeMerge().keySet()) {
             var skt = exprManager.getSkeleton(expr);
             if (skt.hasSizeSource()) {
+                Logging.debug("ConstPropagator",
+                        String.format("Found expr %s with size source: %s", expr, skt.getSizeSources()));
                 sktWithSizeCount++;
             }
 
             if (skt.hasMultiSizeSource()) {
+                Logging.debug("ConstPropagator",
+                        String.format("Found expr %s with multiple size sources: %s", expr, skt.getSizeSources()));
                 var sizeSources = skt.getSizeSources();
                 var sizeSourceFromExprs = new HashSet<SizeSource>();
                 var sizeSourceFromCallSites = new HashSet<SizeSource>();

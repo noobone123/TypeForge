@@ -380,7 +380,6 @@ public class ReTyper {
         return inferred;
     }
 
-
     private ObjectNode writeFieldInfo(DataType fieldType, String fieldName) {
         var fieldObj = mapper.createObjectNode();
 

@@ -17,3 +17,9 @@ Ghidra officially supports **Eclipse** for Extension development. However, since
     ![install-plugin](./imgs/figure_develop-3.png)
 
     ![install-plugin](./imgs/figure_develop-2.png)
+5. Fill in the following arguments for debugging:
+   ```text
+   <PATH_TO_PROJECT> <PROJECT_NAME> --deleteProject 
+   --import <PATH_TO_BINARY> -scriptPath <PATH_TO_GHIDRA_SCRIPT_DIR>
+   -postScript TypeForge.java output=<OUTPUT_DIR>
+   ```
