@@ -6,16 +6,10 @@
 [![GitHub Stars](https://img.shields.io/github/stars/noobone123/typeforge?style=social)](https://github.com/noobone123/typeforge/stargazers)
 [![Last Commit](https://img.shields.io/github/last-commit/noobone123/typeforge/dev?color=blue&label=last-commit)](https://github.com/noobone123/typeforge)
 
-> We are continuously maintaining and updating this project, aiming to provide more user-friendly features and higher efficiency.
-
-## Recent Updates
-
-**Latest Version - [06/21/2025]:**
-- **Bug Fixes**: Fixed a bug in determining whether the TypeConstraint is empty.
-- **Accuracy Improvements**: Enhanced type inference precision, particularly for composite data type identification.
----
 
 This is the implementation of the paper titled "TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries". For more details about TypeForge, please refer to [our S&P 2025 paper](https://www.computer.org/csdl/proceedings-article/sp/2025/223600c847/26hiVajYJwY).
+
+> We are continuously maintaining and updating this project, aiming to provide more user-friendly features and higher efficiency.
 
 ## What is TypeForge?
 <div style="float: right; margin: 0 0 10px 20px;">
@@ -26,6 +20,12 @@ TypeForge aims to recover composite data types (such as structures, unions, etc.
 - TypeForge is divided into **two phases**: a *Program Analysis phase* and an *LLM-assisted Refinement phase*. The first phase is sufficient for common reverse engineering tasks, while the second phase further improves the accuracy of phase one results.
 - TypeForge is currently implemented as a [Ghidra Extension](https://ghidra-sre.org/InstallationGuide.html#GhidraExtensionNotes). We welcome other developers to port it to platforms like [IDA Pro](https://hex-rays.com/ida-pro), [Binary Ninja](https://binary.ninja/), and [Angr](https://github.com/angr/angr).
 
+## Recent Updates
+
+**Latest Version - [06/21/2025]:**
+- **Bug Fixes**: Fixed a bug in determining whether the TypeConstraint is empty.
+- **Accuracy Improvements**: Enhanced type inference precision, particularly for composite data type identification.
+---
 
 ## Project Structure
 
