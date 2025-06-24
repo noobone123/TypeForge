@@ -8,6 +8,13 @@
 
 > We are continuously maintaining and updating this project, aiming to provide more user-friendly features and higher efficiency.
 
+## Recent Updates
+
+**Latest Version - [06/21/2025]:**
+- **Bug Fixes**: Fixed a bug in determining whether the TypeConstraint is empty.
+- **Accuracy Improvements**: Enhanced type inference precision, particularly for composite data type identification.
+---
+
 This is the implementation of the paper titled "TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries". For more details about TypeForge, please refer to [our S&P 2025 paper](https://www.computer.org/csdl/proceedings-article/sp/2025/223600c847/26hiVajYJwY).
 
 ## What is TypeForge?
