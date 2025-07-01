@@ -20,7 +20,7 @@ TypeForge aims to recover composite data types (such as structures, unions, etc.
 - TypeForge is divided into **two phases**: a *Program Analysis phase* and an *LLM-assisted Refinement phase*. The first phase is sufficient for common reverse engineering tasks, while the second phase further improves the accuracy of phase one results.
 - TypeForge is currently implemented as a [Ghidra Extension](https://ghidra-sre.org/InstallationGuide.html#GhidraExtensionNotes). We welcome other developers to port it to platforms like [IDA Pro](https://hex-rays.com/ida-pro), [Binary Ninja](https://binary.ninja/), and [Angr](https://github.com/angr/angr).
 
-## Recent Updates
+## Recent Updates 🚀
 
 **Latest Version - [06/21/2025]:**
 - **Bug Fixes**: Fixed a bug in determining whether the TypeConstraint is empty.
