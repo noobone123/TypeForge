@@ -4,8 +4,9 @@
 [![CCF-A](https://img.shields.io/badge/CCF_A-Security_%26_Privacy-FFD700?logo=star&logoColor=003A5D)](https://www.ccf.org.cn/Academic_Evaluation/)  
 [![License](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](./LICENSE)
 [![GitHub Stars](https://img.shields.io/github/stars/noobone123/typeforge?style=social)](https://github.com/noobone123/typeforge/stargazers)
-[![Last Commit](https://img.shields.io/github/last-commit/noobone123/typeforge/dev?color=blue&label=last-commit)](https://github.com/noobone123/typeforge)
+[![Last Commit](https://img.shields.io/github/last-commit/noobone123/typeforge/dev?color=blue&label=last-commit)](https://github.com/noobone123/typeforge) 
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/noobone123/TypeForge)
 
 This is the implementation of the paper titled "TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries". For more details about TypeForge, please refer to [our S&P 2025 paper](https://www.computer.org/csdl/proceedings-article/sp/2025/223600c847/26hiVajYJwY).
 
