@@ -121,7 +121,7 @@ TypeForge is developed using [IntelliJ IDEA](https://www.jetbrains.com/idea/down
 
 ## Contributors
 TypeForge is written and maintained by:
-- [h1k0](https://github.com/noobone123) h1k0naka@outlook.com
+- [h1k0](https://github.com/noobone123) wangyanzhong@iie.ac.cn
 - [liyilin](https://github.com/li-yilin-30) liyilin2023@iie.ac.cn
 
 ## Cite
