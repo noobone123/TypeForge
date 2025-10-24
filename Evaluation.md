@@ -1,3 +1,5 @@
+# Evaluation of TypeForge
+
 We upload some evaluate data from an early version of TypeForge, which includes the Binary, Ground Truth and Inferred Results (specifically, the results before the LLM refinement stage).
 
 You can find these data here: 

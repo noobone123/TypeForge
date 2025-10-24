@@ -119,6 +119,9 @@ In development ...
 ## Developing and Debugging
 TypeForge is developed using [IntelliJ IDEA](https://www.jetbrains.com/idea/download/other.html) (version 2024.1.7) and the [intellij-ghidra](https://github.com/garyttierney/intellij-ghidra) plugin. For detailed development guidelines, please refer to [How To Develop](./DEVELOPING.md).
 
+## About Evaluation
+For details about the evaluation of TypeForge, please refer to [Evaluation](./Evaluation.md).
+
 ## Contributors
 TypeForge is written and maintained by:
 - [h1k0](https://github.com/noobone123) wangyanzhong@iie.ac.cn
