@@ -46,6 +46,9 @@ public class PCodeVisitor {
      */
     public void prepare() {
         // initialize the workList
+        if (funcNode == null || funcNode.hFunc == null)
+            return;
+        
         for (var bb: funcNode.hFunc.getBasicBlocks()) {
             var iter = bb.getIterator();
             while (iter.hasNext()) {
@@ -117,6 +120,11 @@ public class PCodeVisitor {
                 case PcodeOp.CALLIND -> {
                     Logging.trace("PCodeVisitor", getPCodeRepresentation(pcode));
                     handleINDCall(pcode);
+                }
+                default -> {
+                    Logging.warn("PCodeVisitor",
+                            String.format("Unhandled PCode OP: %s",
+                                    getPCodeRepresentation(pcode)));
                 }
             }
         }
@@ -536,6 +544,9 @@ public class PCodeVisitor {
 
     private void handleCall(PcodeOp pcodeOp) {
         var callSite = funcNode.callSites.get(pcodeOp);
+        if (callSite == null)
+            return;
+        
         var argToFacts = new HashMap<Varnode, KSet<NMAE>>();
 
         for (int argIdx = 0; argIdx < callSite.arguments.size(); argIdx++) {
