@@ -433,11 +433,16 @@ public class NMAEManager {
                         isNormalConst, isArgConst);
             }
 
+            NMAE expr = new NMAE(this);
             if (builderCache.containsKey(hash)) {
-                return builderCache.get(hash);
+                var cachedExpr = builderCache.get(hash);
+                if (expr.equals(cachedExpr)) {
+                    return cachedExpr;
+                } else {
+                    Logging.warn("NMAEManager", String.format("Hash collision on NMAE: %s", expr));
+                }
             }
 
-            NMAE expr = new NMAE(this);
             builderCache.put(hash, expr);
             exprStringToExpr.put(expr.toString(), expr);
             return expr;
