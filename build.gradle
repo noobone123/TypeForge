@@ -29,6 +29,10 @@
 // application.gradle.version property in <GHIDRA_INSTALL_DIR>/Ghidra/application.properties
 // for the correction version of Gradle to use for the Ghidra installation you specify.
 
+plugins {
+	id 'java'
+}
+
 //----------------------START "DO NOT MODIFY" SECTION------------------------------
 def ghidraInstallDir = "/home/h1k0/sectools/ghidra_11.0.3_PUBLIC" // Modify `ghidraInstallDir` to your Ghidra installation directory
 
@@ -46,6 +50,12 @@ else {
 	throw new GradleException("GHIDRA_INSTALL_DIR is not defined!")
 }
 //----------------------END "DO NOT MODIFY" SECTION-------------------------------
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
 
 sourceSets {
 	main {
@@ -70,8 +80,8 @@ dependencies {
 	// Any external dependencies added here will automatically be copied to the lib/ directory when
 	// this extension is built.
 
-	implementation 'com.fasterxml.jackson.core:jackson-core:2.13.0'
-	implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.0'
+	implementation 'com.fasterxml.jackson.core:jackson-core:2.15.0'
+	implementation 'com.fasterxml.jackson.core:jackson-databind:2.13.4.2'
 	implementation 'com.fasterxml.jackson.core:jackson-annotations:2.13.0'
 	implementation 'org.jgrapht:jgrapht-core:1.5.1'
 
