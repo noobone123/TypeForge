@@ -11,6 +11,8 @@
 This is the implementation of the paper titled "TypeForge: Synthesizing and Selecting Best-Fit Composite Data Types for Stripped Binaries". For more details about TypeForge, please refer to [our S&P 2025 paper](https://noobone123.github.io/papers/typeforge-sp25.pdf).
 
 > We are continuously maintaining and updating this project, aiming to provide more user-friendly features and higher efficiency.
+> 
+> **For the latest features and ongoing development, please switch to the [`dev`](https://github.com/noobone123/TypeForge/tree/dev) branch.**
 
 ## What is TypeForge?
 <div style="float: right; margin: 0 0 10px 20px;">
@@ -125,6 +127,7 @@ For details about the evaluation of TypeForge, please refer to [Evaluation](./Ev
 ## Contributors
 TypeForge is written and maintained by:
 - [h1k0](https://github.com/noobone123) wangyanzhong@iie.ac.cn
+- [Jean-Claude Paquin](https://github.com/JCRPaquin) jean-claude.paquin@cfa.harvard.edu
 - [liyilin](https://github.com/li-yilin-30) liyilin2023@iie.ac.cn
 
 ## Cite
