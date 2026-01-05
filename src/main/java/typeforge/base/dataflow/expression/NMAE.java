@@ -28,36 +28,38 @@ public class NMAE {
         CODE_PTR
     }
 
-    public NMAE baseExpr = null;
-    public NMAE indexExpr = null;
-    public NMAE scaleExpr = null;
-    public NMAE offsetExpr = null;
+    public final NMAE baseExpr;
+    public final NMAE indexExpr;
+    public final NMAE scaleExpr;
+    public final NMAE offsetExpr;
 
-    public HighSymbol rootSym = null;
+    public final HighSymbol rootSym;
 
-    public long constant = 0;
-    public CallSite callSite = null;
-    public int argIndex = -1;
+    public final long constant;
+    public final CallSite callSite;
+    public final int argIndex;
 
-    public boolean dereference = false;
-    public boolean reference = false;
-    public NMAE nestedExpr = null;
+    public final boolean dereference;
+    public final boolean reference;
+    public final NMAE nestedExpr;
 
-    public Function function = null;
-    public String prefix = null;
+    public Function function;
+    public final String prefix;
 
-    private boolean isNormalConst = false;
-    private boolean isArgConst = false;
-    public boolean isGlobal = false;
-    public Address globalAddr = null;
+    private final boolean isNormalConst;
+    private final boolean isArgConst;
+    public final boolean isGlobal;
+    public final Address globalAddr;
 
     public boolean isParameter = false;
     public boolean isReturnVal = false;
 
-    public boolean isTemp;
-    public Varnode varnode;
+    public final boolean isTemp;
+    public final Varnode varnode;
 
-    public Set<Attribute> attributes = new HashSet<>();
+    public final Set<Attribute> attributes = new HashSet<>();
+    
+    private final int hashCode;
 
     public NMAE(NMAEManager.Builder builder) {
         // Be careful, for global variables, the same global variable have different HighSymbol instances
@@ -102,6 +104,8 @@ public class NMAE {
             this.function = rootSymbol.getHighFunction().getFunction();
             this.prefix = String.format("[%s-%s]", this.function.getEntryPoint().toString(), this.function.getName());
         }
+        
+        this.hashCode = computeHashCode();
 
         Logging.trace("SymbolExpr","Created new SymbolExpr: " + this);
     }
@@ -291,6 +295,10 @@ public class NMAE {
     // IMPORTANT: modified the equals and hashCode should be careful the cache mechanism in Builder
     @Override
     public int hashCode() {
+        return hashCode;
+    }
+    
+    private int computeHashCode() {
         if (isGlobal) {
             return Objects.hash(globalAddr, indexExpr, scaleExpr,
                     offsetExpr, constant, dereference, reference, nestedExpr);
@@ -310,7 +318,50 @@ public class NMAE {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (!(o instanceof NMAE that)) return false;
-        return this.hashCode() == that.hashCode();
+        if (isGlobal != that.isGlobal) return false;
+        if (isTemp != that.isTemp) return false;
+
+        if (isGlobal) {
+            return compareFieldValues(globalAddr, that.globalAddr) &&
+                    compareFieldValues(indexExpr, that.indexExpr) &&
+                    compareFieldValues(scaleExpr, that.scaleExpr) &&
+                    compareFieldValues(offsetExpr, that.offsetExpr) &&
+                    constant == that.constant &&
+                    dereference == that.dereference &&
+                    reference == that.reference &&
+                    compareFieldValues(nestedExpr, that.nestedExpr);
+        } else if (isTemp) {
+            return compareFieldValues(varnode, that.varnode);
+        } else {
+            return compareFieldValues(baseExpr, that.baseExpr) &&
+                    compareFieldValues(indexExpr, that.indexExpr) &&
+                    compareFieldValues(scaleExpr, that.scaleExpr) &&
+                    compareFieldValues(offsetExpr, that.offsetExpr) &&
+                    compareFieldValues(rootSym, that.rootSym) &&
+                    constant == that.constant &&
+                    compareFieldValues(callSite, that.callSite) &&
+                    argIndex == that.argIndex &&
+                    dereference == that.dereference &&
+                    reference == that.reference &&
+                    compareFieldValues(nestedExpr, that.nestedExpr) &&
+                    isNormalConst == that.isNormalConst &&
+                    isArgConst == that.isArgConst;
+        }
+    }
+    
+    private boolean compareFieldValues(Object a, Object b) {
+        if (a == null && b == null) {
+            return true;
+        }
+        if (a == null || b == null) {
+            return false;
+        }
+        
+        if (a instanceof NMAE && b instanceof NMAE) {
+            return a.hashCode() == b.hashCode();
+        }
+        
+        return a.equals(b);
     }
 
     @Override
