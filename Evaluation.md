@@ -17,8 +17,13 @@ and [commit-2](https://github.com/noobone123/TypeForge/commit/a027cc197dca339bcf
 2. **Pre-LLM Stage**: The results are before the LLM refinement stage. You can run the [judge script](https://github.com/noobone123/TypeForge/tree/main/scripts/judge) to get the LLM-refined results yourself,
 or, of course, apply any other heuristic refinement methods you prefer (see [demo](https://github.com/noobone123/TypeForge/tree/main/demo) for the input/output data format).
 
-3. **Evaluate Script**:  We are not providing a specific evaluation script at this time, as creating a perfectly accurate evaluator is also a challenging research problem in itself.
-The main difficulty lies in aligning variables across different compilers, optimization levels, and stripped vs. unstripped binaries.
+3. **Evaluate Script**: We are not releasing the full evaluation script at this time.
+A central challenge in this evaluation is aligning decompiler-recovered variables across different tools, compilers, optimization levels, and stripped vs. unstripped binaries.
+In particular, Ghidra often performs aggressive merging on register-based variables, making them difficult to align with debug information and with variables recovered by other decompilers (e.g., IDA).
+To address this, we designed a dedicated algorithm to split and align these aggressively merged Ghidra variables before comparison.
+Variables that still cannot be aligned by our algorithm are excluded from the evaluation.
+In addition, layout recovery is evaluated only on variables that are correctly identified as composite types.
+This algorithm incorporates several insights that are tied to our ongoing research, so we are not yet able to disclose the complete evaluation pipeline.
 To aid researchers in this evaluation, we have stored essential variable metadata (e.g., Location and First Used Address) in `varType.json` for each binary.
-This metadata is what we used internally for alignment and comparison. We believe this data will be valuable for developing and standardizing future evaluation methodologies.
+This metadata is what we used internally for alignment and comparison, and we believe it will be valuable for developing and standardizing future evaluation methodologies.
 There is also some discussion on this alignment challenge [here](https://github.com/noobone123/TypeForge/issues/18).
